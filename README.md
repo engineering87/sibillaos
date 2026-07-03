@@ -1,12 +1,10 @@
 <div align="center">
 
-<img src="branding/logo.png" alt="SibillaOS logo" width="140"/>
+<img src="branding/banner.png" alt="SibillaOS" width="820"/>
 
-# SibillaOS
+<br/>
 
-**The oracle on your hardware.**
-
-Install Linux, get a working LLM API. Nothing else to set up.
+**Install Linux, get a working LLM API. Nothing else to set up.**
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![Base](https://img.shields.io/badge/base-Ubuntu%2024.04%20LTS-e95420.svg)](https://ubuntu.com)
@@ -15,60 +13,61 @@ Install Linux, get a working LLM API. Nothing else to set up.
 
 </div>
 
----
+<br/>
 
 Running a local LLM still means picking an engine, matching a model to your VRAM, choosing a quantization and wiring up a service. SibillaOS does all of that in the installer. Boot the ISO, answer the usual questions, and the first thing your machine does is serve an OpenAI-compatible API.
 
-```
+```console
 $ curl https://myserver:8080/v1/chat/completions \
     -H "Authorization: Bearer $(cat /etc/llmd/apikey)" \
     -d '{"model": "default", "messages": [{"role": "user", "content": "hello"}]}'
 ```
 
-## What the installer does for you
+<br/>
 
-| Step | Tool | Result |
-|---|---|---|
-| Reads GPU vendor and VRAM | `llmd-hw-detect` | picks the engine: vLLM on datacenter GPUs (24 GB VRAM and up, OCI container), Ollama everywhere else, CPU included |
-| Sizes models to your machine | [llmfit](https://github.com/AlexsJones/llmfit) | suggests only models that actually fit, with the best quantization and a speed estimate |
-| Filters the catalog | curated list | permissively licensed (Apache-2.0/MIT), non-gated Hugging Face repos only |
-| Downloads the model | installer / first boot | pulled from Hugging Face, resumed at first boot if the network drops |
-| Serves one endpoint | `llmd-gateway` (Caddy) | OpenAI-compatible API on :8080, TLS, bearer token; engines stay on loopback |
+## How it works
+
+The installer detects your hardware and makes the decisions a human would otherwise have to research.
+
+| | |
+|---|---|
+| **Engine selection** | vLLM in an OCI container on datacenter GPUs (24 GB VRAM and up), Ollama everywhere else, CPU-only machines included. |
+| **Model sizing** | [llmfit](https://github.com/AlexsJones/llmfit) recommends only models that actually fit your VRAM and RAM, with the best quantization and a speed estimate. |
+| **Curated catalog** | Permissively licensed (Apache-2.0/MIT), non-gated Hugging Face repos only. Verified ids, signed list. |
+| **Resilient download** | The model is pulled from Hugging Face during install and resumed at first boot if the connection drops. |
+| **Single endpoint** | One OpenAI-compatible API on port 8080, TLS, bearer token. Engines stay on loopback. |
 
 Two variants: headless server and desktop (GNOME, optional Open WebUI).
 
-## Build the ISO
+## Getting started
 
-On an Ubuntu or Debian host with root and `debootstrap squashfs-tools xorriso mtools dosfstools grub-pc-bin grub-efi-amd64-bin grub-common`:
+The easiest path is a prebuilt ISO from [Releases](https://github.com/engineering87/sibillaos/releases), verified against its `SHA256SUMS`.
+
+To build from source, on an Ubuntu or Debian host with root:
 
 ```bash
+sudo apt-get install debootstrap squashfs-tools xorriso mtools dosfstools \
+                     grub-pc-bin grub-efi-amd64-bin grub-common
 ./packages/build-debs.sh       # build the llmd-* debs
 sudo ./iso/build.sh            # out/sibillaos-<version>-amd64.iso
 ```
 
-Or push to GitHub and let [the CI workflow](.github/workflows/build-iso.yml) build it for you: the ISO is attached to each run as an artifact.
+Every push to `main` also builds the ISO in CI, boots it in QEMU and runs the automated install end to end; the image is attached to each run as an artifact.
 
 ## Repository layout
 
 ```
-iso/                  ISO build (debootstrap + squashfs) and autoinstall config
-packages/             Debian packages: hardware detection, engines, gateway, first boot
-catalog/              curated model list (signed JSON)
-branding/             logo and wallpaper
-docs/                 architecture document
-.github/workflows/    ISO build CI
+iso/          ISO build (debootstrap + squashfs) and autoinstall config
+packages/     Debian packages: hardware detection, engines, gateway, first boot
+catalog/      curated model list (signed JSON)
+branding/     logo, banner and wallpaper
+docs/         architecture document
 ```
 
 ## Status
 
-Proof of concept, moving toward MVP. Known gaps before any real deployment:
-
-- catalog repo ids and licenses are verified; gating status is checked at install time, a gated repo falls back to the next candidate
-- the autoinstall user password is a placeholder, replace it
-- the ISO has not been boot-tested in a VM yet (the CI build itself passes)
-
-Design, decisions and roadmap live in [docs/architecture.md](docs/architecture.md).
+Proof of concept, moving toward MVP. Before any real deployment be aware that the autoinstall user password is a placeholder and must be replaced, and that engine versions are not yet pinned in the ISO build. The full design, decision log and roadmap live in [docs/architecture.md](docs/architecture.md).
 
 ## License
 
-Apache-2.0, see [LICENSE](LICENSE). Bundled components keep their own licenses: vLLM (Apache-2.0), Ollama (MIT), llmfit (MIT). NVIDIA drivers are not redistributed by this repository; the ISO ins
+Apache-2.0, see [LICENSE](LICENSE). Bundled components keep their own licenses: vLLM (Apache-2.0), Ollama (MIT), llmfit (MIT). NVIDIA drivers are not redistributed by this repository; the ISO installs them from the Ubuntu `restricted` component.
