@@ -37,10 +37,10 @@ EOF
   chroot "$CHROOT" apt-get update
   DEBIAN_FRONTEND=noninteractive chroot "$CHROOT" apt-get install -y \
     linux-generic casper ubuntu-standard \
-    network-manager curl jq gpg pciutils \
+    network-manager curl jq gpg pciutils caddy \
     subiquity 2>/dev/null || \
   DEBIAN_FRONTEND=noninteractive chroot "$CHROOT" apt-get install -y \
-    linux-generic casper ubuntu-standard network-manager curl jq gpg pciutils
+    linux-generic casper ubuntu-standard network-manager curl jq gpg pciutils caddy
 
   # llmd-* packages (built locally, see packages/)
   log "installing llmd-* packages"

@@ -31,5 +31,8 @@ autoinstall:
     - curtin in-target -- /usr/lib/llmd/llmd-model-select --auto --catalog /usr/share/llmd/models.json --out /etc/llmd/model
     # 3. Enable first boot: download or resume the model and start the services
     - curtin in-target -- systemctl enable llmd-firstboot.service
+    # 4. Keep a serial console on the installed system (headless servers, CI)
+    - curtin in-target -- sed -i 's/GRUB_CMDLINE_LINUX_DEFAULT="/&console=tty0 console=ttyS0,115200n8 /' /etc/default/grub
+    - curtin in-target -- update-grub
   user-data:
     disable_root: true

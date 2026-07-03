@@ -113,3 +113,74 @@ jobs:
           path: |
             serial.log
             screen-*.ppm
+
+  install-test:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    steps:
+      - name: Download ISO artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: sibillaos-iso
+          path: iso
+      - name: Install QEMU
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-system-x86 qemu-utils
+      - name: Run automated install
+        run: |
+          ISO=$(ls iso/*.iso | head -1)
+          KVM=""
+          if [ -e /dev/kvm ]; then
+            sudo chmod 666 /dev/kvm
+            KVM="-enable-kvm -cpu host"
+          fi
+          qemu-img create -f qcow2 disk.qcow2 20G
+          # -no-reboot: QEMU exits when the installer reboots, which marks
+          # the end of the install phase
+          # shellcheck disable=SC2086
+          timeout 2700 qemu-system-x86_64 -m 4096 -smp 2 $KVM \
+            -display none \
+            -serial file:install.log \
+            -drive file=disk.qcow2,format=qcow2,if=virtio \
+            -cdrom "$ISO" -boot d -no-reboot
+          echo "--- install log (tail) ---"
+          tail -100 install.log || true
+      - name: Boot installed system and probe the gateway
+        run: |
+          KVM=""
+          if [ -e /dev/kvm ]; then
+            KVM="-enable-kvm -cpu host"
+          fi
+          # shellcheck disable=SC2086
+          qemu-system-x86_64 -m 4096 -smp 2 $KVM \
+            -display none \
+            -serial file:firstboot.log \
+            -drive file=disk.qcow2,format=qcow2,if=virtio \
+            -netdev user,id=n0,hostfwd=tcp::8080-:8080 -device virtio-net,netdev=n0 &
+          QPID=$!
+          ok=0
+          # firstboot downloads the default model first, allow up to 30 min
+          for _ in $(seq 1 180); do
+            sleep 10
+            code=$(curl -ks -o /dev/null -w '%{http_code}' https://127.0.0.1:8080/v1/models || true)
+            # 401 means the gateway is up and enforcing the API key
+            if [ "$code" = "401" ] || [ "$code" = "200" ]; then
+              ok=1
+              break
+            fi
+          done
+          echo "--- firstboot log (tail) ---"
+          tail -100 firstboot.log || true
+          kill "$QPID" 2>/dev/null || true
+          grep -q "SibillaOS is ready" firstboot.log && echo "firstboot marker found" || echo "firstboot marker NOT found"
+          test "$ok" -eq 1
+      - name: Upload install debug artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: install-debug
+          path: |
+            install.log
+            firstboot.log

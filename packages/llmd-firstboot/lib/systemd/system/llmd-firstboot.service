@@ -9,6 +9,8 @@ Type=oneshot
 ExecStart=/usr/lib/llmd/llmd-firstboot
 RemainAfterExit=true
 TimeoutStartSec=infinity
+StandardOutput=journal+console
+StandardError=journal+console
 
 [Install]
 WantedBy=multi-user.target
