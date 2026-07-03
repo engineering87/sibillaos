@@ -170,12 +170,16 @@ jobs:
           # firstboot downloads the default model first, allow up to 30 min
           for _ in $(seq 1 180); do
             sleep 10
-            code=$(curl -ks -o /dev/null -w '%{http_code}' https://127.0.0.1:8080/v1/models || true)
-            # 401 means the gateway is up and enforcing the API key
-            if [ "$code" = "401" ] || [ "$code" = "200" ]; then
-              ok=1
-              break
-            fi
+            # 401 means the gateway is up and enforcing the API key.
+            # Probe both schemes: which one answers is diagnostic.
+            for scheme in https http; do
+              code=$(curl -ks -o /dev/null -w '%{http_code}' "$scheme://127.0.0.1:8080/v1/models" || true)
+              if [ "$code" = "401" ] || [ "$code" = "200" ]; then
+                echo "gateway answered $code over $scheme"
+                ok=1
+                break 2
+              fi
+            done
           done
           echo "--- firstboot log (tail) ---"
           tail -100 firstboot.log || true

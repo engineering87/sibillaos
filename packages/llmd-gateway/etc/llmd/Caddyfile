@@ -4,13 +4,12 @@
 # is templated at install/firstboot time by replacing {UPSTREAM}.
 #   ollama -> 127.0.0.1:11434
 #   vllm   -> 127.0.0.1:8000
+# The https:// scheme in the site address is required: a bare :8080 would
+# serve plain HTTP. tls internal uses Caddy's local CA (self-signed).
 
-{
-	# Self-signed TLS by default; replace with a real cert when exposed
-	local_certs
-}
+https://:8080 {
+	tls internal
 
-:8080 {
 	# API key required (generated at first boot, stored in /etc/llmd/apikey)
 	@unauthorized not header Authorization "Bearer {$LLMD_API_KEY}"
 	respond @unauthorized 401
