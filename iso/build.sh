@@ -101,8 +101,9 @@ terminal_output --append serial
 echo "SibillaOS: GRUB standalone image loaded"
 search --set=root --file /.disk/info
 echo "SibillaOS: ISO root found"
-set prefix=($root)/boot/grub
-configfile $prefix/grub.cfg
+# do NOT change $prefix: it must keep pointing at the memdisk inside the
+# standalone image, or module autoloading breaks; load the menu by path
+configfile ($root)/boot/grub/grub.cfg
 echo "SibillaOS: FAILED to load grub.cfg"
 sleep 10
 EMBCFG
