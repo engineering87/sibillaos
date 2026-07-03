@@ -110,11 +110,11 @@ EMBCFG
   mmd -i "$WORK/efiboot.img" ::/EFI ::/EFI/BOOT
   mcopy -i "$WORK/efiboot.img" "$WORK/bootx64.efi" ::/EFI/BOOT/BOOTX64.EFI
 
-  # BIOS: core image plus El Torito boot image
+  # BIOS: core image plus El Torito boot image.
+  # No module restrictions: the embedded config needs search_fs_file and
+  # the menu uses serial/echo; restricting the list broke the boot.
   grub-mkstandalone --format=i386-pc \
     --output="$WORK/core.img" \
-    --install-modules="linux16 linux normal iso9660 biosdisk memdisk search tar ls" \
-    --modules="linux16 linux normal iso9660 biosdisk search" \
     --locales="" --fonts="" \
     "boot/grub/grub.cfg=$WORK/embedded.cfg"
   cat /usr/lib/grub/i386-pc/cdboot.img "$WORK/core.img" \
