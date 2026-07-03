@@ -111,10 +111,14 @@ EMBCFG
   mcopy -i "$WORK/efiboot.img" "$WORK/bootx64.efi" ::/EFI/BOOT/BOOTX64.EFI
 
   # BIOS: core image plus El Torito boot image.
-  # No module restrictions: the embedded config needs search_fs_file and
-  # the menu uses serial/echo; restricting the list broke the boot.
+  # The i386-pc core image has a ~491 KB size cap, so modules must be
+  # listed explicitly. This list covers the embedded config (search with
+  # search_fs_file, configfile) and the menu (echo, serial, test);
+  # grub-mkstandalone resolves module dependencies itself.
   grub-mkstandalone --format=i386-pc \
     --output="$WORK/core.img" \
+    --install-modules="linux linux16 normal iso9660 biosdisk memdisk tar search search_fs_file configfile echo serial terminfo test sleep ls" \
+    --modules="linux16 linux normal iso9660 biosdisk search" \
     --locales="" --fonts="" \
     "boot/grub/grub.cfg=$WORK/embedded.cfg"
   cat /usr/lib/grub/i386-pc/cdboot.img "$WORK/core.img" \
