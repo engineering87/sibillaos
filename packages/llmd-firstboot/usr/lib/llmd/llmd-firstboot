@@ -6,6 +6,9 @@ set -euo pipefail
 STATE=/var/lib/llmd/firstboot.done
 [[ -e "$STATE" ]] && exit 0
 
+# systemd oneshot units have no HOME; the ollama CLI panics without it
+export HOME="${HOME:-/root}"
+
 engine=$(cat /etc/llmd/engine 2>/dev/null || echo ollama)
 model=$(cat /etc/llmd/model 2>/dev/null || true)
 mkdir -p /var/lib/llmd/models /etc/llmd
@@ -48,7 +51,11 @@ case "$engine" in
   vllm) systemctl start vllm.service ;;
   *)    systemctl enable --now ollama.service ;;
 esac
-systemctl enable --now caddy.service
+# caddy is already running with the stock config from the Ubuntu package,
+# so enable --now would be a no-op: an explicit restart loads our gateway
+# config and the API key environment
+systemctl enable caddy.service
+systemctl restart caddy.service
 
 touch "$STATE"
 echo "SibillaOS is ready: OpenAI-compatible API on :8080 (key in /etc/llmd/apikey)"
