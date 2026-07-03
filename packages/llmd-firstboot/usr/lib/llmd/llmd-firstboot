@@ -10,10 +10,11 @@ engine=$(cat /etc/llmd/engine 2>/dev/null || echo ollama)
 model=$(cat /etc/llmd/model 2>/dev/null || true)
 mkdir -p /var/lib/llmd/models /etc/llmd
 
-# 1. API key
+# 1. API key: stored for the admin and exported to Caddy via gateway.env
 if [[ ! -s /etc/llmd/apikey ]]; then
   (umask 077; head -c32 /dev/urandom | base64 | tr -d '=+/' | cut -c1-40 > /etc/llmd/apikey)
 fi
+(umask 077; printf 'LLMD_API_KEY=%s\n' "$(cat /etc/llmd/apikey)" > /etc/llmd/gateway.env)
 
 # 2. Model (retry with resume; both engines resume partial downloads)
 if [[ -n "$model" ]]; then
@@ -40,6 +41,7 @@ esac
 sed "s/{UPSTREAM}/$upstream/" /etc/llmd/Caddyfile > /etc/caddy/Caddyfile
 
 # 4. Services
+systemctl daemon-reload
 systemctl enable --now "${engine}.service" caddy.service
 
 touch "$STATE"

@@ -63,7 +63,7 @@ docs/                 architecture document
 
 Proof of concept, moving toward MVP. Known gaps before any real deployment:
 
-- catalog entries are marked `verified: false` until each Hugging Face repo id is confirmed
+- catalog repo ids and licenses are verified; gating status is checked at install time, a gated repo falls back to the next candidate
 - the autoinstall user password is a placeholder, replace it
 - the ISO has not been boot-tested in a VM yet (the CI build itself passes)
 

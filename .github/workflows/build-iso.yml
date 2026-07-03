@@ -22,6 +22,8 @@ jobs:
   build:
     needs: lint
     runs-on: ubuntu-24.04
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
       - name: Install build deps
@@ -38,3 +40,15 @@ jobs:
           name: sibillaos-iso
           path: out/*.iso
           retention-days: 14
+      - name: Generate checksums
+        run: |
+          cd out
+          sha256sum ./*.iso > SHA256SUMS
+      - name: Publish release (tags only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            out/*.iso
+            out/SHA256SUMS
+          generate_release_notes: true

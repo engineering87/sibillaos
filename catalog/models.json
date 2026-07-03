@@ -1,33 +1,33 @@
 {
   "schema": 1,
   "updated": "2026-07-03",
-  "note": "SibillaOS curated list. Permissively licensed (Apache-2.0/MIT), non-gated Hugging Face models only. Repo ids are INDICATIVE and must be confirmed before release (check existence, gating and available quantizations).",
+  "note": "SibillaOS curated list. Permissively licensed (Apache-2.0/MIT) Hugging Face models only. Repo existence and license verified via web search on 2026-07-03; gating status is not re-confirmed here and is handled at install time (a gated repo fails the pull and the installer falls back to the next candidate).",
   "models": [
     {
-      "id": "hf.co/bartowski/Qwen3-4B-GGUF",
+      "id": "hf.co/bartowski/Qwen_Qwen3-4B-GGUF",
       "family": "Qwen3 4B",
       "license": "Apache-2.0",
       "engines": ["ollama"],
       "tier": "cpu",
       "default": true,
-      "verified": false
+      "verified": true
     },
     {
-      "id": "hf.co/bartowski/Phi-4-mini-instruct-GGUF",
+      "id": "hf.co/bartowski/microsoft_Phi-4-mini-instruct-GGUF",
       "family": "Phi-4-mini",
       "license": "MIT",
       "engines": ["ollama"],
       "tier": "cpu",
-      "verified": false
+      "verified": true
     },
     {
-      "id": "hf.co/bartowski/Qwen3-14B-GGUF",
+      "id": "hf.co/bartowski/Qwen_Qwen3-14B-GGUF",
       "family": "Qwen3 14B",
       "license": "Apache-2.0",
       "engines": ["ollama"],
       "tier": "consumer-gpu",
       "default": true,
-      "verified": false
+      "verified": true
     },
     {
       "id": "hf.co/bartowski/phi-4-GGUF",
@@ -35,7 +35,7 @@
       "license": "MIT",
       "engines": ["ollama"],
       "tier": "consumer-gpu",
-      "verified": false
+      "verified": true
     },
     {
       "id": "hf.co/bartowski/DeepSeek-R1-Distill-Qwen-14B-GGUF",
@@ -43,7 +43,7 @@
       "license": "MIT",
       "engines": ["ollama"],
       "tier": "consumer-gpu",
-      "verified": false
+      "verified": true
     },
     {
       "id": "Qwen/Qwen3-32B",
@@ -52,15 +52,15 @@
       "engines": ["vllm"],
       "tier": "datacenter",
       "default": true,
-      "verified": false
+      "verified": true
     },
     {
-      "id": "mistralai/Mistral-Small-Instruct",
-      "family": "Mistral Small",
+      "id": "mistralai/Mistral-Small-3.1-24B-Instruct-2503",
+      "family": "Mistral Small 3.1 24B",
       "license": "Apache-2.0",
       "engines": ["vllm"],
       "tier": "datacenter",
-      "verified": false
+      "verified": true
     }
   ]
 }
