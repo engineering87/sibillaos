@@ -39,7 +39,7 @@ Two variants: headless server and desktop (GNOME, optional Open WebUI).
 
 ## Build the ISO
 
-On an Ubuntu or Debian host with root and `debootstrap squashfs-tools xorriso mtools`:
+On an Ubuntu or Debian host with root and `debootstrap squashfs-tools xorriso mtools dosfstools grub-pc-bin grub-efi-amd64-bin grub-common`:
 
 ```bash
 ./packages/build-debs.sh       # build the llmd-* debs
@@ -65,10 +65,10 @@ Proof of concept, moving toward MVP. Known gaps before any real deployment:
 
 - catalog entries are marked `verified: false` until each Hugging Face repo id is confirmed
 - the autoinstall user password is a placeholder, replace it
-- the build script has not yet gone through a full end-to-end run
+- the ISO has not been boot-tested in a VM yet (the CI build itself passes)
 
 Design, decisions and roadmap live in [docs/architecture.md](docs/architecture.md).
 
 ## License
 
-Apache-2.0, see [LICENSE](LICENSE). Bundled components keep their own licenses: vLLM (Apache-2.0), Ollama (MIT), llmfit (MIT). NVIDIA drivers are not redistributed by this repository; the ISO installs them from the Ubuntu `restricted` component.
+Apache-2.0, see [LICENSE](LICENSE). Bundled components keep their own licenses: vLLM (Apache-2.0), Ollama (MIT), llmfit (MIT). NVIDIA drivers are not redistributed by this repository; the ISO ins

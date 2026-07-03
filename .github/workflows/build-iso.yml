@@ -27,7 +27,7 @@ jobs:
       - name: Install build deps
         run: |
           sudo apt-get update
-          sudo apt-get install -y debootstrap squashfs-tools xorriso mtools
+          sudo apt-get install -y debootstrap squashfs-tools xorriso mtools dosfstools grub-pc-bin grub-efi-amd64-bin grub-common
       - name: Build llmd-* debs
         run: bash ./packages/build-debs.sh
       - name: Build ISO

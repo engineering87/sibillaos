@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # SibillaOS ISO builder (proof of concept)
-# Builds an installable ISO based on Ubuntu 24.04 (noble) with autoinstall.
-# Requires: debootstrap squashfs-tools xorriso mtools wget gpg (run as root)
+# Builds a BIOS+UEFI bootable ISO based on Ubuntu 24.04 (noble) with autoinstall.
+# Requires: debootstrap squashfs-tools xorriso mtools dosfstools
+#           grub-pc-bin grub-efi-amd64-bin grub-common (run as root)
 set -euo pipefail
 
 RELEASE="noble"
@@ -62,7 +63,57 @@ EOF
     "$CHROOT/usr/share/backgrounds/sibillaos/wallpaper.png" 2>/dev/null || true
 }
 
-# 3. squashfs + ISO layout
+# 3. Bootloader: GRUB images for UEFI and BIOS, hybrid layout
+build_boot() {
+  log "building GRUB boot images"
+  mkdir -p "$WORK/iso/boot/grub" "$WORK/iso/.disk"
+  echo "SibillaOS $VERSION" > "$WORK/iso/.disk/info"
+
+  # boot menu
+  cat > "$WORK/iso/boot/grub/grub.cfg" <<'GRUBCFG'
+set default=0
+set timeout=5
+
+menuentry "Install SibillaOS (automated)" {
+    linux /casper/vmlinuz boot=casper autoinstall ds=nocloud\;s=/cdrom/nocloud/ quiet ---
+    initrd /casper/initrd
+}
+
+menuentry "Try SibillaOS (live)" {
+    linux /casper/vmlinuz boot=casper quiet ---
+    initrd /casper/initrd
+}
+GRUBCFG
+
+  # embedded config: locate the ISO root by marker file, then load the menu
+  cat > "$WORK/embedded.cfg" <<'EMBCFG'
+search --set=root --file /.disk/info
+set prefix=($root)/boot/grub
+configfile $prefix/grub.cfg
+EMBCFG
+
+  # UEFI: standalone GRUB inside a FAT image (appended as a GPT partition)
+  grub-mkstandalone --format=x86_64-efi \
+    --output="$WORK/bootx64.efi" \
+    --locales="" --fonts="" \
+    "boot/grub/grub.cfg=$WORK/embedded.cfg"
+  dd if=/dev/zero of="$WORK/efiboot.img" bs=1M count=8
+  mkfs.vfat "$WORK/efiboot.img"
+  mmd -i "$WORK/efiboot.img" ::/EFI ::/EFI/BOOT
+  mcopy -i "$WORK/efiboot.img" "$WORK/bootx64.efi" ::/EFI/BOOT/BOOTX64.EFI
+
+  # BIOS: core image plus El Torito boot image
+  grub-mkstandalone --format=i386-pc \
+    --output="$WORK/core.img" \
+    --install-modules="linux16 linux normal iso9660 biosdisk memdisk search tar ls" \
+    --modules="linux16 linux normal iso9660 biosdisk search" \
+    --locales="" --fonts="" \
+    "boot/grub/grub.cfg=$WORK/embedded.cfg"
+  cat /usr/lib/grub/i386-pc/cdboot.img "$WORK/core.img" \
+    > "$WORK/iso/boot/grub/bios.img"
+}
+
+# 4. squashfs + hybrid ISO
 build_iso() {
   log "creating squashfs"
   mkdir -p "$WORK/iso/casper" "$WORK/iso/nocloud"
@@ -74,14 +125,27 @@ build_iso() {
   # Autoinstall (NoCloud datasource)
   cp "$SCRIPT_DIR/autoinstall/user-data" "$SCRIPT_DIR/autoinstall/meta-data" "$WORK/iso/nocloud/"
 
-  log "generating ISO"
+  log "generating hybrid ISO (BIOS + UEFI)"
   xorriso -as mkisofs -r -V "SibillaOS $VERSION" \
     -o "$OUT/sibillaos-$VERSION-$ARCH.iso" \
-    -J -l -iso-level 3 \
+    -J -joliet-long -l -iso-level 3 \
+    --grub2-mbr /usr/lib/grub/i386-pc/boot_hybrid.img \
+    -partition_offset 16 \
+    --mbr-force-bootable \
+    -append_partition 2 28732ac11ff8d211ba4b00a0c93ec93b "$WORK/efiboot.img" \
+    -appended_part_as_gpt \
+    -iso_mbr_part_type a2a0d0ebe5b9334487c068b6b72699c7 \
+    -c /boot.catalog \
+    -b /boot/grub/bios.img \
+    -no-emul-boot -boot-load-size 4 -boot-info-table --grub2-boot-info \
+    -eltorito-alt-boot \
+    -e '--interval:appended_partition_2:::' \
+    -no-emul-boot \
     "$WORK/iso"
   log "ISO ready: $OUT/sibillaos-$VERSION-$ARCH.iso"
 }
 
 bootstrap
 customize
+build_boot
 build_iso
