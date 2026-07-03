@@ -93,11 +93,18 @@ menuentry "Try SibillaOS (live)" {
 }
 GRUBCFG
 
-  # embedded config: locate the ISO root by marker file, then load the menu
+  # embedded config: bring up the serial console first so every stage is
+  # visible (CI debugging), locate the ISO root, then load the menu
   cat > "$WORK/embedded.cfg" <<'EMBCFG'
+serial --unit=0 --speed=115200
+terminal_output --append serial
+echo "SibillaOS: GRUB standalone image loaded"
 search --set=root --file /.disk/info
+echo "SibillaOS: ISO root found"
 set prefix=($root)/boot/grub
 configfile $prefix/grub.cfg
+echo "SibillaOS: FAILED to load grub.cfg"
+sleep 10
 EMBCFG
 
   # UEFI: standalone GRUB inside a FAT image (appended as a GPT partition)

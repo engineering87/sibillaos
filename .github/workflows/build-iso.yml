@@ -66,7 +66,11 @@ jobs:
       - name: Install QEMU
         run: |
           sudo apt-get update
-          sudo apt-get install -y qemu-system-x86
+          sudo apt-get install -y qemu-system-x86 socat xorriso
+      - name: Inspect ISO boot records
+        run: |
+          ISO=$(ls iso/*.iso | head -1)
+          xorriso -indev "$ISO" -report_el_torito plain -report_system_area plain || true
       - name: Boot smoke test (BIOS)
         run: |
           ISO=$(ls iso/*.iso | head -1)
@@ -74,27 +78,38 @@ jobs:
           if [ -e /dev/kvm ]; then
             sudo chmod 666 /dev/kvm
             KVM="-enable-kvm -cpu host"
+            echo "KVM available"
+          else
+            echo "KVM not available, using TCG"
           fi
           # shellcheck disable=SC2086
-          qemu-system-x86_64 -m 2048 $KVM -display none \
+          qemu-system-x86_64 -m 2048 $KVM -display none -vga std \
+            -monitor unix:mon.sock,server,nowait \
             -serial file:serial.log -cdrom "$ISO" -boot d &
           QPID=$!
           ok=0
-          for _ in $(seq 1 60); do
+          for i in $(seq 1 60); do
             sleep 5
+            if [ "$i" -eq 6 ]; then
+              echo screendump screen-30s.ppm | socat - unix-connect:mon.sock || true
+            fi
             if grep -q "Linux version" serial.log 2>/dev/null; then
               ok=1
               break
             fi
           done
+          echo screendump screen-final.ppm | socat - unix-connect:mon.sock || true
+          sleep 2
           kill "$QPID" 2>/dev/null || true
-          echo "--- serial log (tail) ---"
-          tail -50 serial.log || true
+          echo "--- serial log ---"
+          cat serial.log || true
           grep -q "Loading SibillaOS kernel" serial.log
           test "$ok" -eq 1
-      - name: Upload serial log
+      - name: Upload boot debug artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: boot-serial-log
-          path: serial.log
+          name: boot-debug
+          path: |
+            serial.log
+            screen-*.ppm
