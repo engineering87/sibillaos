@@ -20,8 +20,9 @@ if [[ -n "$model" ]]; then
   case "$engine" in
     ollama)
       systemctl start ollama.service
-      for i in 1 2 3; do
-        ollama pull "$model" && break || sleep 30
+      for _ in 1 2 3; do
+        if ollama pull "$model"; then break; fi
+        sleep 30
       done
       ;;
     vllm)

@@ -29,6 +29,12 @@ mapfile -t recommended < <(llmfit recommend --json --limit 10 \
 mapfile -t allowed < <(jq -r --arg e "$engine" \
   '.models[] | select(.engines[]? == $e) | .id' "$CATALOG")
 
+# without --auto, list the curated candidates for this engine and exit
+if [[ $AUTO -eq 0 ]]; then
+  printf '%s\n' "${allowed[@]}"
+  exit 0
+fi
+
 pick=""
 for r in "${recommended[@]}"; do
   for a in "${allowed[@]}"; do

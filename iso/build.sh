@@ -45,8 +45,10 @@ EOF
   log "installing llmd-* packages"
   for deb in "$SCRIPT_DIR"/../packages/dist/*.deb; do
     [[ -e "$deb" ]] || { log "WARNING: no .deb in packages/dist (run packages/build-debs.sh)"; break; }
-    cp "$deb" "$CHROOT/tmp/" && chroot "$CHROOT" dpkg -i "/tmp/$(basename "$deb")" || \
+    cp "$deb" "$CHROOT/tmp/"
+    if ! chroot "$CHROOT" dpkg -i "/tmp/$(basename "$deb")"; then
       chroot "$CHROOT" apt-get -f install -y
+    fi
   done
 
   # Ollama (official script, inside the chroot)
