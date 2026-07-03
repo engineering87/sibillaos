@@ -52,3 +52,48 @@ jobs:
             out/*.iso
             out/SHA256SUMS
           generate_release_notes: true
+
+  boot-test:
+    needs: build
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Download ISO artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: sibillaos-iso
+          path: iso
+      - name: Install QEMU
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-system-x86
+      - name: Boot smoke test (BIOS)
+        run: |
+          ISO=$(ls iso/*.iso | head -1)
+          KVM=""
+          if [ -e /dev/kvm ]; then
+            sudo chmod 666 /dev/kvm
+            KVM="-enable-kvm -cpu host"
+          fi
+          # shellcheck disable=SC2086
+          qemu-system-x86_64 -m 2048 $KVM -display none \
+            -serial file:serial.log -cdrom "$ISO" -boot d &
+          QPID=$!
+          ok=0
+          for _ in $(seq 1 60); do
+            sleep 5
+            if grep -q "Linux version" serial.log 2>/dev/null; then
+              ok=1
+              break
+            fi
+          done
+          kill "$QPID" 2>/dev/null || true
+          echo "--- serial log (tail) ---"
+          tail -50 serial.log || true
+          grep -q "Loading SibillaOS kernel" serial.log
+          test "$ok" -eq 1
+      - name: Upload serial log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: boot-serial-log
+          path: serial.log

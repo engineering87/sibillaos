@@ -74,12 +74,20 @@ build_boot() {
 set default=0
 set timeout=5
 
+# mirror the menu to a serial console when one exists (also used by CI)
+if serial --unit=0 --speed=115200; then
+  terminal_input --append serial
+  terminal_output --append serial
+fi
+
 menuentry "Install SibillaOS (automated)" {
-    linux /casper/vmlinuz boot=casper autoinstall ds=nocloud\;s=/cdrom/nocloud/ quiet ---
+    echo "Loading SibillaOS kernel..."
+    linux /casper/vmlinuz boot=casper autoinstall ds=nocloud\;s=/cdrom/nocloud/ console=tty0 console=ttyS0,115200n8 ---
     initrd /casper/initrd
 }
 
 menuentry "Try SibillaOS (live)" {
+    echo "Loading SibillaOS kernel..."
     linux /casper/vmlinuz boot=casper quiet ---
     initrd /casper/initrd
 }
