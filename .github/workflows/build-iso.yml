@@ -29,9 +29,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y debootstrap squashfs-tools xorriso mtools
       - name: Build llmd-* debs
-        run: ./packages/build-debs.sh
+        run: bash ./packages/build-debs.sh
       - name: Build ISO
-        run: sudo ./iso/build.sh
+        run: sudo bash ./iso/build.sh
       - name: Upload ISO artifact
         uses: actions/upload-artifact@v4
         with:
