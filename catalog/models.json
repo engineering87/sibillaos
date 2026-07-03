@@ -1,0 +1,66 @@
+{
+  "schema": 1,
+  "updated": "2026-07-03",
+  "note": "SibillaOS curated list. Permissively licensed (Apache-2.0/MIT), non-gated Hugging Face models only. Repo ids are INDICATIVE and must be confirmed before release (check existence, gating and available quantizations).",
+  "models": [
+    {
+      "id": "hf.co/bartowski/Qwen3-4B-GGUF",
+      "family": "Qwen3 4B",
+      "license": "Apache-2.0",
+      "engines": ["ollama"],
+      "tier": "cpu",
+      "default": true,
+      "verified": false
+    },
+    {
+      "id": "hf.co/bartowski/Phi-4-mini-instruct-GGUF",
+      "family": "Phi-4-mini",
+      "license": "MIT",
+      "engines": ["ollama"],
+      "tier": "cpu",
+      "verified": false
+    },
+    {
+      "id": "hf.co/bartowski/Qwen3-14B-GGUF",
+      "family": "Qwen3 14B",
+      "license": "Apache-2.0",
+      "engines": ["ollama"],
+      "tier": "consumer-gpu",
+      "default": true,
+      "verified": false
+    },
+    {
+      "id": "hf.co/bartowski/phi-4-GGUF",
+      "family": "Phi-4 14B",
+      "license": "MIT",
+      "engines": ["ollama"],
+      "tier": "consumer-gpu",
+      "verified": false
+    },
+    {
+      "id": "hf.co/bartowski/DeepSeek-R1-Distill-Qwen-14B-GGUF",
+      "family": "DeepSeek-R1-Distill 14B",
+      "license": "MIT",
+      "engines": ["ollama"],
+      "tier": "consumer-gpu",
+      "verified": false
+    },
+    {
+      "id": "Qwen/Qwen3-32B",
+      "family": "Qwen3 32B",
+      "license": "Apache-2.0",
+      "engines": ["vllm"],
+      "tier": "datacenter",
+      "default": true,
+      "verified": false
+    },
+    {
+      "id": "mistralai/Mistral-Small-Instruct",
+      "family": "Mistral Small",
+      "license": "Apache-2.0",
+      "engines": ["vllm"],
+      "tier": "datacenter",
+      "verified": false
+    }
+  ]
+}

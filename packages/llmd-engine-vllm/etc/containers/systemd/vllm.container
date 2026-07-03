@@ -1,0 +1,23 @@
+# SibillaOS Quadlet: vLLM in an OCI container via podman
+# Generates vllm.service automatically (systemd >= 253, podman >= 4.4)
+[Unit]
+Description=vLLM OpenAI-compatible server (container)
+After=network-online.target
+Wants=network-online.target
+
+[Container]
+Image=docker.io/vllm/vllm-openai:latest
+# NVIDIA GPU via CDI (nvidia-container-toolkit)
+AddDevice=nvidia.com/gpu=all
+PublishPort=127.0.0.1:8000:8000
+Volume=/var/lib/llmd/models/hf:/root/.cache/huggingface:Z
+EnvironmentFile=-/etc/llmd/vllm.env
+# The model selected at install time is passed as an argument
+Exec=--model ${LLMD_MODEL} --host 0.0.0.0 --port 8000
+
+[Service]
+Restart=on-failure
+TimeoutStartSec=900
+
+[Install]
+WantedBy=multi-user.target

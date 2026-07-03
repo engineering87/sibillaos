@@ -1,0 +1,19 @@
+# SibillaOS llmd-gateway
+# Single OpenAI-compatible endpoint on :8080, whatever engine is active.
+# The engine name is written to /etc/llmd/engine by llmd-hw-detect; this file
+# is templated at install/firstboot time by replacing {UPSTREAM}.
+#   ollama -> 127.0.0.1:11434
+#   vllm   -> 127.0.0.1:8000
+
+{
+	# Self-signed TLS by default; replace with a real cert when exposed
+	local_certs
+}
+
+:8080 {
+	# API key required (generated at first boot, stored in /etc/llmd/apikey)
+	@unauthorized not header Authorization "Bearer {$LLMD_API_KEY}"
+	respond @unauthorized 401
+
+	reverse_proxy {UPSTREAM}
+}

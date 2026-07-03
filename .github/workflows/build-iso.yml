@@ -1,0 +1,40 @@
+name: Build SibillaOS ISO
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Shellcheck
+        run: |
+          sudo apt-get update && sudo apt-get install -y shellcheck
+          shellcheck iso/build.sh packages/build-debs.sh \
+            packages/llmd-hw/usr/lib/llmd/* packages/llmd-firstboot/usr/lib/llmd/*
+      - name: Validate catalog JSON
+        run: jq empty catalog/models.json
+
+  build:
+    needs: lint
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y debootstrap squashfs-tools xorriso mtools
+      - name: Build llmd-* debs
+        run: ./packages/build-debs.sh
+      - name: Build ISO
+        run: sudo ./iso/build.sh
+      - name: Upload ISO artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sibillaos-iso
+          path: out/*.iso
+          retention-days: 14

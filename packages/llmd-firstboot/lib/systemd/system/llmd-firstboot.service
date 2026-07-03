@@ -1,0 +1,14 @@
+[Unit]
+Description=SibillaOS first boot: model download and service setup
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=!/var/lib/llmd/firstboot.done
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/llmd/llmd-firstboot
+RemainAfterExit=true
+TimeoutStartSec=infinity
+
+[Install]
+WantedBy=multi-user.target

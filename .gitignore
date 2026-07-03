@@ -1,0 +1,5 @@
+work/
+out/
+packages/dist/
+*.iso
+*.squashfs

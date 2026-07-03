@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# llmd-firstboot: at first boot, generate the API key, download or resume the
+# model, configure the gateway and start the services. Idempotent.
+set -euo pipefail
+
+STATE=/var/lib/llmd/firstboot.done
+[[ -e "$STATE" ]] && exit 0
+
+engine=$(cat /etc/llmd/engine 2>/dev/null || echo ollama)
+model=$(cat /etc/llmd/model 2>/dev/null || true)
+mkdir -p /var/lib/llmd/models /etc/llmd
+
+# 1. API key
+if [[ ! -s /etc/llmd/apikey ]]; then
+  (umask 077; head -c32 /dev/urandom | base64 | tr -d '=+/' | cut -c1-40 > /etc/llmd/apikey)
+fi
+
+# 2. Model (retry with resume; both engines resume partial downloads)
+if [[ -n "$model" ]]; then
+  case "$engine" in
+    ollama)
+      systemctl start ollama.service
+      for i in 1 2 3; do
+        ollama pull "$model" && break || sleep 30
+      done
+      ;;
+    vllm)
+      echo "LLMD_MODEL=$model" > /etc/llmd/vllm.env
+      # the HF download happens at the first container start (persistent cache)
+      ;;
+  esac
+fi
+
+# 3. Gateway: upstream depends on the engine
+case "$engine" in
+  vllm)   upstream="127.0.0.1:8000" ;;
+  *)      upstream="127.0.0.1:11434" ;;
+esac
+sed "s/{UPSTREAM}/$upstream/" /etc/llmd/Caddyfile > /etc/caddy/Caddyfile
+
+# 4. Services
+systemctl enable --now "${engine}.service" caddy.service
+
+touch "$STATE"
+echo "SibillaOS is ready: OpenAI-compatible API on :8080 (key in /etc/llmd/apikey)"

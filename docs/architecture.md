@@ -1,0 +1,162 @@
+# SibillaOS - Architecture v0.4
+
+Date: 2026-07-03. Status: consolidated draft.
+
+## 1. Goal
+
+A minimal Linux distribution with an integrated LLM inference engine (vLLM or Ollama, selected automatically from the detected hardware). The model is recommended, chosen and downloaded during installation. At first boot the system serves an OpenAI-compatible API.
+
+Targets: headless servers and desktop workstations.
+
+## 2. Decisions
+
+| Area | Decision |
+|---|---|
+| Name | SibillaOS (checked available on 2026-07-03; only namesake found: a Python ORM called "sibilla") |
+| Base | Ubuntu 24.04 LTS |
+| Engine | Automatic detection: vLLM or Ollama depending on hardware |
+| vLLM deployment | OCI container (official image, podman + systemd/Quadlet) |
+| Targets | Headless server and desktop |
+| Models | Downloaded from Hugging Face during install, recommended by llmfit |
+| Catalog | Curated, signed list (subset of the llmfit catalog) |
+| Project license | Apache-2.0 for the llmd-* components |
+
+## 3. Base distribution
+
+Ubuntu 24.04 LTS (server: minimal ISO; desktop: GNOME variant).
+
+Reasons: NVIDIA drivers and the CUDA runtime are available and well maintained in the official repositories, autoinstall (Subiquity) is mature for automated installs, and the release has five years of support. A valid alternative for a leaner, community-driven base is Debian 13 "trixie" (current stable, 6.12 LTS kernel, supported until 2028 plus LTS until 2030, see [debian.org/releases](https://www.debian.org/releases/stable/)); its drawback is older NVIDIA drivers. Ubuntu 26.04 LTS is newer but worth adopting only once the NVIDIA ecosystem catches up.
+
+## 4. Stack
+
+```
++---------------------------------------------+
+|  (optional) Open WebUI                      |
++---------------------------------------------+
+|  llmd-gateway: reverse proxy (Caddy)        |
+|  single OpenAI-compatible API on :8080      |
++----------------------+----------------------+
+|  Ollama (:11434)     |  vLLM (:8000)        |
+|  systemd service     |  container (Quadlet) |
++----------------------+----------------------+
+|  llmd-hw: hardware detection + llmfit       |
+|  (model recommendation), NVIDIA/CUDA or     |
+|  ROCm drivers, CPU fallback                 |
++---------------------------------------------+
+|  Ubuntu 24.04 LTS minimal (server)          |
+|  + optional desktop (GNOME minimal)         |
++---------------------------------------------+
+```
+
+Our components (Debian packages):
+
+- llmd-hw: GPU detection (VRAM, vendor, compute capability) for the engine choice; delegates model recommendation to llmfit.
+- llmfit (packaged by us as a .deb): existing Rust tool, MIT licensed, that detects the hardware and recommends models with the best quantization and a speed estimate. Scriptable JSON output (`llmfit recommend --json --limit 5`), hardware overrides (`--memory=24G --ram=64G`), use-case filter (`--use-case coding`). Supports multi-GPU, MoE models, and the Ollama, vLLM and llama.cpp runtimes. Sources: [GitHub](https://github.com/AlexsJones/llmfit), [llmfit.org](https://www.llmfit.org/).
+- llmd-engine-ollama / llmd-engine-vllm: packaged engines with hardened systemd units.
+- llmd-gateway: single OpenAI-compatible endpoint whatever the engine ([Ollama docs](https://docs.ollama.com/api/openai-compatibility), [vLLM docs](https://docs.vllm.ai/en/latest/)): routing, TLS, API key.
+- llmd-firstboot: completes or resumes the model download at first boot if it was interrupted during install.
+
+## 5. Engine selection (in the installer)
+
+| Detected hardware | Default |
+|---|---|
+| NVIDIA datacenter GPU / >= 24 GB VRAM | vLLM |
+| NVIDIA consumer GPU / AMD with limited VRAM | Ollama |
+| CPU only | Ollama (llama.cpp backend) |
+
+The user can always override the choice. Verified requirements: vLLM supports NVIDIA (primary), AMD MI200/MI300/MI350 and RX 7900/9000, x86/ARM CPUs ([vLLM GPU installation](https://docs.vllm.ai/en/stable/getting_started/installation/gpu/)); Ollama detects CUDA/ROCm automatically and scales layers to the available VRAM ([ollama.com/blog](https://ollama.com/blog)).
+
+## 6. Installer: engine plus model recommendation via llmfit
+
+Base: Ubuntu autoinstall (Subiquity) for the server ISO; the desktop variant uses the same backend. For full UI control: Calamares with a custom module.
+
+Extra flow on top of a standard install:
+
+1. Hardware detection (llmd-hw), engine proposal (table in section 5).
+2. Model recommendation: the installer runs `llmfit recommend --json` in the live environment and shows the top N models that run well on the detected hardware, with the suggested quantization, estimated memory footprint and expected speed (fit: GPU / GPU+CPU offload / CPU). Optional use-case filter (chat, coding). The user picks one or more models.
+3. Download into the target partition (`/var/lib/llmd/models`), with resume. If the network is missing or the download fails, the install still completes and llmd-firstboot resumes at first boot (re-running llmfit if needed).
+4. Configuration: API port, generated API key, Open WebUI (yes/no), LAN exposure (yes/no).
+
+### Model source: Hugging Face (single source)
+
+Hugging Face works as the single source for both engines:
+
+- Ollama: direct GGUF pull from HF without a Modelfile: `ollama run hf.co/{user}/{repo}:{quant}` (e.g. `hf.co/bartowski/Llama-3.2-3B-Instruct-GGUF:IQ3_M`), see the [HF documentation](https://huggingface.co/docs/hub/ollama). Known limit: sharded GGUF files are not supported directly and must be merged first with `llama-gguf-split --merge`; the curated list must only include single-file repos.
+- vLLM: loads HF repos in safetensors format natively.
+
+Gated repos (Llama, Gemma and similar require accepting terms and an HF token): by default the installer only offers non-gated models; gated support (HF token input) can land in v1.x.
+
+Note: llmfit is currently distributed via script/brew/scoop/cargo/pip, not as a .deb ([GitHub, Install section](https://github.com/AlexsJones/llmfit)); we package it ourselves (static Rust binary, straightforward). Its model catalog must also be validated and narrowed to a curated list for installer use.
+
+## 7. ISO build
+
+- Tooling: live-build or debootstrap + squashfs with a CI pipeline (GitLab/GitHub Actions).
+- Estimated ISO size: 3-4 GB (no models) including NVIDIA drivers and the CUDA runtime.
+- Own APT repository for the llmd-* packages and the engines. vLLM runs in an OCI container (official vllm/vllm-openai image) managed by podman with systemd units generated via Quadlet: CUDA dependencies isolated from the system, atomic updates, instant rollback. The image is not shipped in the ISO (several GB); it is downloaded at install time only when the hardware justifies vLLM.
+- Package and model-list signing (GPG). Secure Boot: Ubuntu signed kernel/shim, NVIDIA drivers with MOK.
+
+## 8. Security
+
+- systemd services with sandboxing (DynamicUser, ProtectSystem, NoNewPrivileges).
+- API not exposed on the LAN by default; when enabled, TLS plus a mandatory API key through the gateway.
+- unattended-upgrades for the base system; separate channel for engines and models.
+- No telemetry.
+
+## 9. Licensing
+
+(Technical analysis, not legal advice; a legal review is needed before the public release.)
+
+Project license (llmd-* components, installer, build scripts): Apache-2.0. Permissive, easy to adopt in enterprise contexts, includes an explicit patent grant (which MIT lacks, relevant in AI), and consistent with the ecosystem we integrate. Verified component compatibility:
+
+| Component | License | Source |
+|---|---|---|
+| vLLM | Apache-2.0 | [github.com/vllm-project/vllm/LICENSE](https://github.com/vllm-project/vllm/blob/main/LICENSE) |
+| Ollama | MIT | [github.com/ollama/ollama](https://github.com/ollama/ollama) |
+| llmfit | MIT | [github.com/AlexsJones/llmfit](https://github.com/AlexsJones/llmfit) |
+| Ubuntu base | various, redistribution handled by Canonical | - |
+
+All permissive and compatible with Apache-2.0: we can redistribute them in the ISO keeping the original license files.
+
+NVIDIA drivers: the legally delicate part. The [License For Customer Use of NVIDIA Software (Linux)](https://www.nvidia.com/en-us/drivers/nvidia-license/linux/) allows redistribution of unmodified Linux drivers, with conditions; distributions handle them in separate components (Ubuntu "restricted"). Lowest-risk strategy: do not redistribute NVIDIA files directly, ship the driver packages already packaged by Ubuntu (as the Ubuntu ISO itself does), or fetch them from the Ubuntu repos at install time. Modern NVIDIA kernel modules (the open series, default for Turing and later) are dual MIT/GPL-2.0 ([github.com/NVIDIA/open-gpu-kernel-modules](https://github.com/NVIDIA/open-gpu-kernel-modules)); the userspace/CUDA libraries remain proprietary. When in doubt: nvidia-compute-license-questions@nvidia.com.
+
+Models: the default curated list only includes permissively licensed, non-gated HF models. Models under community licenses (Llama, Gemma) are not redistributed by us: the user downloads them directly from HF accepting their terms (v1.x, with an HF token). llmfit already has a built-in license filter.
+
+### Curated list: launch candidates
+
+Selection based on mid-2026 sources (permissively licensed families available on HF/vLLM/Ollama, see the [HF blog](https://huggingface.co/blog/daya-shankar/open-source-llms) and [PocketLLM license-ranked](https://pocketllm.app/blog/best-open-source-llm-2026/)):
+
+| Hardware tier | Engine | Candidates (license) |
+|---|---|---|
+| CPU only / VRAM <= 8 GB | Ollama (quantized GGUF) | Qwen3 4B (Apache-2.0), Phi-4-mini (MIT) |
+| Consumer GPU 8-24 GB | Ollama (quantized GGUF) | Qwen3 14B / 30B-A3B (Apache-2.0), Phi-4 14B (MIT), Mistral Small (Apache-2.0), DeepSeek-R1-Distill (MIT) |
+| Datacenter GPU >= 24 GB | vLLM (safetensors, FP8 where available) | Qwen3.5-35B-A3B (Apache-2.0), Mistral Small 4 (Apache-2.0), Mistral Large 3 (Apache-2.0, multi-GPU) |
+
+To verify during implementation (not confirmed from primary sources): the exact HF repo ids, the absence of gating for each repo, and the current versions of each family (the sources also mention DeepSeek V4 and GLM-5, both MIT, but they are very large models, out of scope for launch). The optimal quantization per tier is computed by llmfit at runtime: the list pins the allowed families, not the files.
+
+## 10. Roadmap
+
+| Phase | Scope | Rough duration |
+|---|---|---|
+| PoC | Minimal Ubuntu 24.04 ISO + preinstalled Ollama + autoinstall with hardcoded model download | 2-3 weeks |
+| MVP | llmfit in the installer (recommend --json), llmd-hw, gateway, firstboot resume | 4-6 weeks |
+| v1.0 | vLLM as second option with auto-detect, desktop variant + Open WebUI, ISO build CI | 6-8 weeks |
+
+## 11. Decision status
+
+All design decisions are made (see the table in section 2). What remains is verification work, not design:
+
+1. Confirm HF repo ids and gating for the candidate models (section 9) during implementation.
+2. Legal review before the public release (NVIDIA drivers in particular).
+3. Branding: logo and domain for SibillaOS (name checked available, domain to register).
+
+## Verified sources (2026-07-03)
+
+- [llmfit on GitHub (MIT, CLI/TUI, recommend --json, Ollama/vLLM/llama.cpp providers)](https://github.com/AlexsJones/llmfit) and [llmfit.org](https://www.llmfit.org/)
+- [Debian 13 "trixie" release information](https://www.debian.org/releases/stable/)
+- [vLLM GPU installation and supported hardware](https://docs.vllm.ai/en/stable/getting_started/installation/gpu/) and [vLLM docs](https://docs.vllm.ai/en/latest/)
+- [Ollama OpenAI compatibility](https://docs.ollama.com/api/openai-compatibility) and [Ollama blog](https://ollama.com/blog)
+- [Hugging Face: use Ollama with any GGUF model](https://huggingface.co/docs/hub/ollama)
+- [vLLM LICENSE (Apache-2.0)](https://github.com/vllm-project/vllm/blob/main/LICENSE)
+- [NVIDIA License For Customer Use of NVIDIA Software (Linux)](https://www.nvidia.com/en-us/drivers/nvidia-license/linux/) and [NVIDIA open-gpu-kernel-modules (MIT/GPL-2.0)](https://github.com/NVIDIA/open-gpu-kernel-modules)
+- Permissive models 2026: [HF blog, best open-source LLMs 2026](https://huggingface.co/blog/daya-shankar/open-source-llms) and [PocketLLM license-ranked](https://pocketllm.app/blog/best-open-source-llm-2026/) (secondary sources: repo ids to confirm)
+- Name check (2026-07-03): no distribution named "SibillaOS"/"InferOS"/"LemmaOS" found; "GenioOS" discarded for collisions (MediaTek Genio, Quidgest Genio, Semvox geni:OS)

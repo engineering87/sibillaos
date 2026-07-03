@@ -1,0 +1,35 @@
+#cloud-config
+# SibillaOS autoinstall (Subiquity / NoCloud)
+# PoC: non-interactive install; engine and model chosen by llmd-hw + llmfit.
+autoinstall:
+  version: 1
+  locale: en_US.UTF-8
+  keyboard:
+    layout: us
+  identity:
+    hostname: sibillaos
+    username: sibilla
+    # password: "sibilla" (PoC ONLY, replace before release: mkpasswd -m sha-512)
+    password: "$6$rounds=4096$sibillaPoC$IEhQzKX8Ei5FTS6BQMjyUXWFGyxs0lFm4RRz4sXKW1hZTvE9Tep9dO0dQxK9uCJ7hVOMi6BiPEyMIYzuUxRPO/"
+  ssh:
+    install-server: true
+    allow-pw: true
+  storage:
+    layout:
+      name: lvm
+  packages:
+    - curl
+    - jq
+    - pciutils
+  drivers:
+    # Install NVIDIA drivers from the Ubuntu restricted component when detected
+    install: true
+  late-commands:
+    # 1. Detect hardware and write the engine choice to /etc/llmd/engine
+    - curtin in-target -- /usr/lib/llmd/llmd-hw-detect --write /etc/llmd/engine
+    # 2. Ask llmfit for recommendations and store the default pick (first curated match)
+    - curtin in-target -- /usr/lib/llmd/llmd-model-select --auto --catalog /usr/share/llmd/models.json --out /etc/llmd/model
+    # 3. Enable first boot: download or resume the model and start the services
+    - curtin in-target -- systemctl enable llmd-firstboot.service
+  user-data:
+    disable_root: true

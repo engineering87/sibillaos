@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# llmd-model-select: intersect llmfit recommendations with the curated catalog.
+# --auto: pick the first recommended model present in the catalog.
+set -euo pipefail
+
+CATALOG="/usr/share/llmd/models.json"
+OUT="/etc/llmd/model"
+AUTO=0
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --auto)    AUTO=1; shift ;;
+    --catalog) CATALOG="$2"; shift 2 ;;
+    --out)     OUT="$2"; shift 2 ;;
+    *) echo "usage: llmd-model-select [--auto] [--catalog FILE] [--out FILE]"; exit 1 ;;
+  esac
+done
+
+command -v llmfit >/dev/null 2>&1 || { echo "llmfit not found" >&2; exit 2; }
+[[ -r "$CATALOG" ]] || { echo "catalog not readable: $CATALOG" >&2; exit 2; }
+
+engine=$(cat /etc/llmd/engine 2>/dev/null || echo ollama)
+
+# llmfit recommendations (one model id per line)
+mapfile -t recommended < <(llmfit recommend --json --limit 10 \
+  | jq -r '.[].model // .[].id // empty' 2>/dev/null || true)
+
+# ids allowed by the curated catalog for the chosen engine
+mapfile -t allowed < <(jq -r --arg e "$engine" \
+  '.models[] | select(.engines[]? == $e) | .id' "$CATALOG")
+
+pick=""
+for r in "${recommended[@]}"; do
+  for a in "${allowed[@]}"; do
+    [[ "$r" == "$a" ]] && { pick="$r"; break 2; }
+  done
+done
+
+# fallback: first catalog model for the engine ("default": true entries first)
+if [[ -z "$pick" ]]; then
+  pick=$(jq -r --arg e "$engine" \
+    '[.models[] | select(.engines[]? == $e)] | (map(select(.default == true)) + .)[0].id' "$CATALOG")
+fi
+
+[[ -n "$pick" && "$pick" != "null" ]] || { echo "no selectable model" >&2; exit 3; }
+
+mkdir -p "$(dirname "$OUT")"
+echo "$pick" > "$OUT"
+echo "selected model: $pick"

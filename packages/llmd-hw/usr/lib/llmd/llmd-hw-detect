@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+# llmd-hw-detect: detect the GPU and pick the engine (vllm|ollama).
+# Rule (architecture.md, section 5): vLLM if an NVIDIA GPU has >= 24 GB VRAM,
+# Ollama otherwise.
+set -euo pipefail
+
+THRESHOLD_MB=24000
+OUT=""
+
+usage() { echo "usage: llmd-hw-detect [--write FILE] [--json]"; exit 1; }
+
+JSON=0
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --write) OUT="$2"; shift 2 ;;
+    --json)  JSON=1; shift ;;
+    *) usage ;;
+  esac
+done
+
+vendor="none"; vram_mb=0
+
+if command -v nvidia-smi >/dev/null 2>&1; then
+  vendor="nvidia"
+  # highest VRAM among the installed GPUs, in MiB
+  vram_mb=$(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits 2>/dev/null \
+            | sort -rn | head -1 || echo 0)
+elif lspci 2>/dev/null | grep -qi 'VGA.*AMD\|Display.*AMD'; then
+  vendor="amd"
+  # ROCm: use rocm-smi when available
+  if command -v rocm-smi >/dev/null 2>&1; then
+    vram_mb=$(rocm-smi --showmeminfo vram --csv 2>/dev/null \
+              | awk -F, 'NR>1 {print int($2/1048576)}' | sort -rn | head -1 || echo 0)
+  fi
+fi
+
+if [[ "$vendor" == "nvidia" && "$vram_mb" -ge "$THRESHOLD_MB" ]]; then
+  engine="vllm"
+else
+  engine="ollama"
+fi
+
+if [[ $JSON -eq 1 ]]; then
+  printf '{"vendor":"%s","vram_mb":%s,"engine":"%s"}\n' "$vendor" "$vram_mb" "$engine"
+else
+  echo "$engine"
+fi
+
+if [[ -n "$OUT" ]]; then
+  mkdir -p "$(dirname "$OUT")"
+  echo "$engine" > "$OUT"
+fi

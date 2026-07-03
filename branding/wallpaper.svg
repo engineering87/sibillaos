@@ -1,0 +1,85 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 3840 2160" width="3840" height="2160">
+  <defs>
+    <radialGradient id="sky" cx="0.62" cy="0.42" r="1.1">
+      <stop offset="0" stop-color="#2a2170"/>
+      <stop offset="0.45" stop-color="#1b1740"/>
+      <stop offset="1" stop-color="#0b081c"/>
+    </radialGradient>
+    <radialGradient id="halo" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#f5c542" stop-opacity="0.18"/>
+      <stop offset="0.7" stop-color="#8a63e8" stop-opacity="0.06"/>
+      <stop offset="1" stop-color="#f5c542" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="iris" cx="0.5" cy="0.45" r="0.65">
+      <stop offset="0" stop-color="#ffe9a8"/>
+      <stop offset="0.35" stop-color="#f5c542"/>
+      <stop offset="0.75" stop-color="#8a63e8"/>
+      <stop offset="1" stop-color="#3d2f8f"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="3840" height="2160" fill="url(#sky)"/>
+
+  <!-- costellazione: nodi e collegamenti sottili su tutto il campo -->
+  <g stroke="#8a63e8" stroke-width="2" opacity="0.28">
+    <path d="M320 380 L720 300 L1080 520" fill="none"/>
+    <path d="M520 1720 L900 1560 L1240 1780" fill="none"/>
+    <path d="M3100 360 L3420 520 L3660 400" fill="none"/>
+    <path d="M2900 1800 L3260 1680 L3560 1860" fill="none"/>
+    <path d="M180 1000 L480 1120" fill="none"/>
+    <path d="M3500 1100 L3760 980" fill="none"/>
+  </g>
+  <g fill="#cbb7ff" opacity="0.5">
+    <circle cx="320" cy="380" r="6"/><circle cx="720" cy="300" r="8"/><circle cx="1080" cy="520" r="5"/>
+    <circle cx="520" cy="1720" r="6"/><circle cx="900" cy="1560" r="8"/><circle cx="1240" cy="1780" r="5"/>
+    <circle cx="3100" cy="360" r="6"/><circle cx="3420" cy="520" r="8"/><circle cx="3660" cy="400" r="5"/>
+    <circle cx="2900" cy="1800" r="6"/><circle cx="3260" cy="1680" r="8"/><circle cx="3560" cy="1860" r="5"/>
+    <circle cx="180" cy="1000" r="5"/><circle cx="480" cy="1120" r="6"/>
+    <circle cx="3500" cy="1100" r="6"/><circle cx="3760" cy="980" r="5"/>
+    <circle cx="1500" cy="260" r="4"/><circle cx="2300" cy="200" r="5"/><circle cx="2700" cy="640" r="4"/>
+    <circle cx="1300" cy="1950" r="4"/><circle cx="2500" cy="2000" r="5"/><circle cx="750" cy="850" r="4"/>
+  </g>
+
+  <!-- alone -->
+  <circle cx="2380" cy="905" r="720" fill="url(#halo)"/>
+
+  <!-- anelli concentrici attorno all'occhio -->
+  <g fill="none" stroke="#8a63e8" stroke-opacity="0.25">
+    <circle cx="2380" cy="905" r="560" stroke-width="2"/>
+    <circle cx="2380" cy="905" r="640" stroke-width="1.5" stroke-dasharray="4 14"/>
+    <circle cx="2380" cy="905" r="470" stroke-width="1.5" stroke-dasharray="2 10"/>
+  </g>
+
+  <!-- tracce circuito dall'occhio -->
+  <g stroke="#8a63e8" stroke-width="5" fill="none" stroke-linecap="round" opacity="0.55">
+    <path d="M1980 905 H1640"/>
+    <path d="M2780 905 H3120"/>
+    <path d="M2100 705 L1930 535 V370"/>
+    <path d="M2660 705 L2830 535 V370"/>
+    <path d="M2100 1105 L1930 1275 V1440"/>
+    <path d="M2660 1105 L2830 1275 V1440"/>
+  </g>
+  <g fill="#f5c542" opacity="0.85">
+    <circle cx="1640" cy="905" r="9"/>
+    <circle cx="3120" cy="905" r="9"/>
+    <circle cx="1930" cy="370" r="9"/>
+    <circle cx="2830" cy="370" r="9"/>
+    <circle cx="1930" cy="1440" r="9"/>
+    <circle cx="2830" cy="1440" r="9"/>
+  </g>
+
+  <!-- occhio dell'oracolo -->
+  <path d="M1980 905 Q 2380 545 2780 905 Q 2380 1265 1980 905 Z"
+        fill="#0b081c" fill-opacity="0.6" stroke="#f5c542" stroke-width="10" stroke-linejoin="round"/>
+  <circle cx="2380" cy="905" r="220" fill="url(#iris)" opacity="0.95"/>
+  <circle cx="2380" cy="905" r="220" fill="none" stroke="#f5c542" stroke-width="5"/>
+  <circle cx="2380" cy="905" r="88" fill="#0b081c"/>
+  <circle cx="2380" cy="905" r="36" fill="#f5c542"/>
+  <circle cx="2295" cy="805" r="40" fill="#ffffff" opacity="0.4"/>
+
+  <!-- wordmark -->
+  <g font-family="Ubuntu, DejaVu Sans, sans-serif">
+    <text x="240" y="1975" font-size="120" font-weight="bold" fill="#f2ecff" letter-spacing="6">SibillaOS</text>
+    <text x="244" y="2040" font-size="44" fill="#8a63e8" letter-spacing="10">THE ORACLE ON YOUR HARDWARE</text>
+  </g>
+</svg>
