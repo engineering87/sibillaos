@@ -43,13 +43,12 @@ Two variants: headless server and desktop (GNOME, optional Open WebUI).
 
 The easiest path is a prebuilt ISO from [Releases](https://github.com/engineering87/sibillaos/releases), verified against its `SHA256SUMS`.
 
-To build from source, on an Ubuntu or Debian host with root:
+To build from source you only need `xorriso` and `curl` (no root). The build downloads the official Ubuntu 24.04 live-server ISO, verifies its checksum and repacks it with the SibillaOS autoinstall, packages and branding:
 
 ```bash
-sudo apt-get install debootstrap squashfs-tools xorriso mtools dosfstools \
-                     grub-pc-bin grub-efi-amd64-bin grub-common
+sudo apt-get install xorriso
 ./packages/build-debs.sh       # build the llmd-* debs
-sudo ./iso/build.sh            # out/sibillaos-<version>-amd64.iso
+./iso/build.sh                 # out/sibillaos-<version>-amd64.iso
 ```
 
 Every push to `main` also builds the ISO in CI, boots it in QEMU and runs the automated install end to end; the image is attached to each run as an artifact.
@@ -57,7 +56,7 @@ Every push to `main` also builds the ISO in CI, boots it in QEMU and runs the au
 ## Repository layout
 
 ```
-iso/          ISO build (debootstrap + squashfs) and autoinstall config
+iso/          ISO repack (official Ubuntu live-server + payload) and autoinstall
 packages/     Debian packages: hardware detection, engines, gateway, first boot
 catalog/      curated model list (signed JSON)
 branding/     logo, banner and wallpaper

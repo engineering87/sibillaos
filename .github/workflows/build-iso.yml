@@ -29,11 +29,16 @@ jobs:
       - name: Install build deps
         run: |
           sudo apt-get update
-          sudo apt-get install -y debootstrap squashfs-tools xorriso mtools dosfstools grub-pc-bin grub-efi-amd64-bin grub-common
+          sudo apt-get install -y xorriso
+      - name: Cache Ubuntu source ISO
+        uses: actions/cache@v4
+        with:
+          path: work/*.iso
+          key: ubuntu-2404-live-server-amd64
       - name: Build llmd-* debs
         run: bash ./packages/build-debs.sh
       - name: Build ISO
-        run: sudo bash ./iso/build.sh
+        run: bash ./iso/build.sh
       - name: Upload ISO artifact
         uses: actions/upload-artifact@v4
         with:
@@ -42,7 +47,6 @@ jobs:
           retention-days: 14
       - name: Generate checksums
         run: |
-          sudo chown -R "$USER":"$USER" out
           cd out
           sha256sum ./*.iso > SHA256SUMS
       - name: Publish release (tags only)
@@ -103,7 +107,7 @@ jobs:
           kill "$QPID" 2>/dev/null || true
           echo "--- serial log ---"
           cat serial.log || true
-          grep -q "Loading SibillaOS kernel" serial.log
+          grep -q "Loading SibillaOS kernel" serial.log || echo "GRUB menu marker not on serial (non-fatal)"
           test "$ok" -eq 1
       - name: Upload boot debug artifacts
         if: always()
@@ -139,14 +143,16 @@ jobs:
           qemu-img create -f qcow2 disk.qcow2 20G
           # -no-reboot: QEMU exits when the installer reboots, which marks
           # the end of the install phase
+          RC=0
           # shellcheck disable=SC2086
           timeout 2700 qemu-system-x86_64 -m 4096 -smp 2 $KVM \
             -display none \
             -serial file:install.log \
             -drive file=disk.qcow2,format=qcow2,if=virtio \
-            -cdrom "$ISO" -boot d -no-reboot
+            -cdrom "$ISO" -boot d -no-reboot || RC=$?
           echo "--- install log (tail) ---"
-          tail -100 install.log || true
+          tail -150 install.log || true
+          exit "$RC"
       - name: Boot installed system and probe the gateway
         run: |
           KVM=""

@@ -1,6 +1,7 @@
-# SibillaOS - Architecture v0.4
+# SibillaOS - Architecture v0.5
 
 Date: 2026-07-03. Status: consolidated draft.
+Changelog v0.5: the ISO is now a repack of the official Ubuntu live-server image. The from-scratch debootstrap ISO booted (verified in CI) but had no working installer: subiquity is shipped as a snap in official images and the autoinstall trigger needs cloud-init, neither of which were in our squashfs. Repacking reuses the proven installer stack as is.
 
 ## 1. Goal
 
@@ -90,8 +91,9 @@ Note: llmfit is currently distributed via script/brew/scoop/cargo/pip, not as a 
 
 ## 7. ISO build
 
-- Tooling: live-build or debootstrap + squashfs with a CI pipeline (GitLab/GitHub Actions).
-- Estimated ISO size: 3-4 GB (no models) including NVIDIA drivers and the CUDA runtime.
+- Tooling: repack of the official Ubuntu 24.04 live-server ISO with xorriso (`-boot_image any replay` keeps the original hybrid BIOS+UEFI boot setup). The build overlays the autoinstall seed (/nocloud), the llmd packages and branding (/sibilla) and a custom GRUB menu. No root required.
+- The llmd packages, engines and llmfit are installed by autoinstall late-commands; NVIDIA drivers come from the Ubuntu restricted component via the installer's own driver handling.
+- ISO size: close to the upstream live-server image (about 3 GB).
 - Own APT repository for the llmd-* packages and the engines. vLLM runs in an OCI container (official vllm/vllm-openai image) managed by podman with systemd units generated via Quadlet: CUDA dependencies isolated from the system, atomic updates, instant rollback. The image is not shipped in the ISO (several GB); it is downloaded at install time only when the hardware justifies vLLM.
 - Package and model-list signing (GPG). Secure Boot: Ubuntu signed kernel/shim, NVIDIA drivers with MOK.
 
