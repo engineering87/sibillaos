@@ -42,6 +42,7 @@ jobs:
           retention-days: 14
       - name: Generate checksums
         run: |
+          sudo chown -R "$USER":"$USER" out
           cd out
           sha256sum ./*.iso > SHA256SUMS
       - name: Publish release (tags only)
