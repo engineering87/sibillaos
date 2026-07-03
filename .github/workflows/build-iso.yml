@@ -140,7 +140,7 @@ jobs:
             sudo chmod 666 /dev/kvm
             KVM="-enable-kvm -cpu host"
           fi
-          qemu-img create -f qcow2 disk.qcow2 20G
+          qemu-img create -f qcow2 disk.qcow2 25G
           # -no-reboot: QEMU exits when the installer reboots, which marks
           # the end of the install phase
           RC=0

@@ -4,6 +4,11 @@
 Description=vLLM OpenAI-compatible server (container)
 After=network-online.target
 Wants=network-online.target
+# Only activate on machines where the installer selected vLLM:
+# /etc/llmd/vllm.env is written by llmd-firstboot in that case only.
+# Without this gate the unit would start (and pull a multi-GB image)
+# on every machine, Ollama ones included.
+ConditionPathExists=/etc/llmd/vllm.env
 
 [Container]
 Image=docker.io/vllm/vllm-openai:latest
