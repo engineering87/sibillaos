@@ -38,6 +38,10 @@ jobs:
       - name: Build llmd-* debs
         run: bash ./packages/build-debs.sh
       - name: Build ISO
+        # the small-model override keeps the install test fast; it is
+        # NOT applied on tag builds, so released ISOs stay clean
+        env:
+          SIBILLA_TEST_MODEL: ${{ startsWith(github.ref, 'refs/tags/') && '' || 'hf.co/bartowski/Qwen_Qwen3-0.6B-GGUF:Q4_K_M' }}
         run: bash ./iso/build.sh
       - name: Upload ISO artifact
         uses: actions/upload-artifact@v4
@@ -70,7 +74,7 @@ jobs:
       - name: Install QEMU
         run: |
           sudo apt-get update
-          sudo apt-get install -y qemu-system-x86 socat xorriso
+          sudo apt-get install -y qemu-system-x86 socat xorriso ovmf
       - name: Inspect ISO boot records
         run: |
           ISO=$(ls iso/*.iso | head -1)
@@ -109,6 +113,30 @@ jobs:
           cat serial.log || true
           grep -q "Loading SibillaOS kernel" serial.log || echo "GRUB menu marker not on serial (non-fatal)"
           test "$ok" -eq 1
+      - name: Boot smoke test (UEFI)
+        run: |
+          ISO=$(ls iso/*.iso | head -1)
+          KVM=""
+          if [ -e /dev/kvm ]; then
+            KVM="-enable-kvm -cpu host"
+          fi
+          # shellcheck disable=SC2086
+          qemu-system-x86_64 -m 2048 $KVM -display none \
+            -bios /usr/share/ovmf/OVMF.fd \
+            -serial file:uefi-serial.log -cdrom "$ISO" -boot d &
+          QPID=$!
+          ok=0
+          for _ in $(seq 1 60); do
+            sleep 5
+            if grep -q "Linux version" uefi-serial.log 2>/dev/null; then
+              ok=1
+              break
+            fi
+          done
+          kill "$QPID" 2>/dev/null || true
+          echo "--- UEFI serial log ---"
+          cat uefi-serial.log || true
+          test "$ok" -eq 1
       - name: Upload boot debug artifacts
         if: always()
         uses: actions/upload-artifact@v4
@@ -116,12 +144,13 @@ jobs:
           name: boot-debug
           path: |
             serial.log
+            uefi-serial.log
             screen-*.ppm
 
   install-test:
     needs: build
     runs-on: ubuntu-24.04
-    timeout-minutes: 75
+    timeout-minutes: 90
     steps:
       - name: Download ISO artifact
         uses: actions/download-artifact@v4
@@ -131,7 +160,7 @@ jobs:
       - name: Install QEMU
         run: |
           sudo apt-get update
-          sudo apt-get install -y qemu-system-x86 qemu-utils
+          sudo apt-get install -y qemu-system-x86 qemu-utils sshpass jq
       - name: Run automated install
         run: |
           ISO=$(ls iso/*.iso | head -1)
@@ -153,7 +182,7 @@ jobs:
           echo "--- install log (tail) ---"
           tail -150 install.log || true
           exit "$RC"
-      - name: Boot installed system and probe the gateway
+      - name: Boot installed system, probe the gateway, run inference
         run: |
           KVM=""
           if [ -e /dev/kvm ]; then
@@ -164,14 +193,14 @@ jobs:
             -display none \
             -serial file:firstboot.log \
             -drive file=disk.qcow2,format=qcow2,if=virtio \
-            -netdev user,id=n0,hostfwd=tcp::8080-:8080 -device virtio-net,netdev=n0 &
+            -netdev user,id=n0,hostfwd=tcp::8080-:8080,hostfwd=tcp::2222-:22 \
+            -device virtio-net,netdev=n0 &
           QPID=$!
           ok=0
-          # firstboot downloads the default model first, allow up to 30 min
-          for _ in $(seq 1 180); do
+          # the gateway comes up after the firstboot model download,
+          # allow up to 40 min (user-mode networking is slow)
+          for _ in $(seq 1 240); do
             sleep 10
-            # 401 means the gateway is up and enforcing the API key.
-            # Probe both schemes: which one answers is diagnostic.
             for scheme in https http; do
               code=$(curl -ks -o /dev/null -w '%{http_code}' "$scheme://127.0.0.1:8080/v1/models" || true)
               if [ "$code" = "401" ] || [ "$code" = "200" ]; then
@@ -181,11 +210,36 @@ jobs:
               fi
             done
           done
+          RC=1
+          if [ "$ok" -eq 1 ]; then
+            SSH="sshpass -p sibilla ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p 2222 sibilla@127.0.0.1"
+            KEY=$($SSH "echo sibilla | sudo -S cat /etc/llmd/apikey" | tail -1)
+            MODEL=$($SSH "echo sibilla | sudo -S cat /etc/llmd/model" | tail -1)
+            echo "selected model: $MODEL"
+            if [ -n "$KEY" ] && [ -n "$MODEL" ]; then
+              # a real chat completion through the gateway (CPU inference,
+              # be patient: up to 15 minutes)
+              RESP=$(curl -s -m 900 http://127.0.0.1:8080/v1/chat/completions \
+                -H "Authorization: Bearer $KEY" \
+                -H "Content-Type: application/json" \
+                -d "{\"model\": \"$MODEL\", \"messages\": [{\"role\": \"user\", \"content\": \"Reply with one short sentence: who are you?\"}], \"max_tokens\": 200}") || true
+              echo "--- gateway response ---"
+              echo "$RESP" | jq . || echo "$RESP"
+              if echo "$RESP" | jq -e '.choices[0].message.content | length > 0' >/dev/null; then
+                echo "INFERENCE OK"
+                RC=0
+              else
+                echo "inference failed: empty or malformed response"
+              fi
+            else
+              echo "could not read api key or model over ssh"
+            fi
+          fi
           echo "--- firstboot log (tail) ---"
           tail -100 firstboot.log || true
           kill "$QPID" 2>/dev/null || true
           grep -q "SibillaOS is ready" firstboot.log && echo "firstboot marker found" || echo "firstboot marker NOT found"
-          test "$ok" -eq 1
+          exit "$RC"
       - name: Upload install debug artifacts
         if: always()
         uses: actions/upload-artifact@v4

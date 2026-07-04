@@ -45,6 +45,13 @@ prepare_payload() {
   cp "$SCRIPT_DIR"/../packages/dist/*.deb "$WORK/sibilla/debs/"
   cp "$SCRIPT_DIR"/../branding/wallpaper.png "$WORK/sibilla/" 2>/dev/null || true
 
+  # optional model override for CI: forces a small model instead of the
+  # llmfit pick. Never set on release builds.
+  if [[ -n "${SIBILLA_TEST_MODEL:-}" ]]; then
+    echo "$SIBILLA_TEST_MODEL" > "$WORK/sibilla/ci-model"
+    log "CI test model override: $SIBILLA_TEST_MODEL"
+  fi
+
   # boot menu: replaces the stock grub.cfg on the ISO. The serial setup is
   # guarded so machines without a serial port fall through to VGA only.
   cat > "$WORK/grub.cfg" <<'GRUBCFG'

@@ -65,7 +65,7 @@ docs/         architecture document
 
 ## Status
 
-Proof of concept, moving toward MVP. Before any real deployment be aware that the autoinstall user password is a placeholder and must be replaced, and that engine versions are not yet pinned in the ISO build. The full design, decision log and roadmap live in [docs/architecture.md](docs/architecture.md).
+Working proof of concept: CI builds the ISO, boots it, runs the automated install end to end and verifies the gateway answers on first boot. Before any real deployment be aware that the autoinstall user password is a placeholder and must be replaced, and that engine versions are not yet pinned in the ISO build. The full design, decision log and roadmap live in [docs/architecture.md](docs/architecture.md).
 
 ## License
 
