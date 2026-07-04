@@ -21,6 +21,7 @@ Targets: headless servers and desktop workstations.
 | Models | Downloaded from Hugging Face during install, recommended by llmfit |
 | Catalog | Curated, signed list (subset of the llmfit catalog) |
 | Project license | Apache-2.0 for the llmd-* components |
+| Visual identity | Emerald serpent eye: lens with a vertical slit pupil, orbiting rune diamonds, golden glint. Palette: forest #0e2a1c, emerald #3ddc84, light green #a8e063, gold accent #f5c542 |
 
 ## 3. Base distribution
 

@@ -57,6 +57,12 @@ prepare_payload() {
   cat > "$WORK/grub.cfg" <<'GRUBCFG'
 set timeout=5
 
+# SibillaOS theme: emerald on black
+set color_normal=light-green/black
+set color_highlight=black/light-green
+set menu_color_normal=light-green/black
+set menu_color_highlight=black/light-green
+
 if serial --unit=0 --speed=115200; then
   terminal_input --append serial
   terminal_output --append serial

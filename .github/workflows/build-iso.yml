@@ -216,6 +216,8 @@ jobs:
             KEY=$($SSH "echo sibilla | sudo -S cat /etc/llmd/apikey" | tail -1)
             MODEL=$($SSH "echo sibilla | sudo -S cat /etc/llmd/model" | tail -1)
             echo "selected model: $MODEL"
+            echo "--- ollama journal (diagnostics) ---"
+            $SSH "echo sibilla | sudo -S journalctl -u ollama -n 40 --no-pager" || true
             if [ -n "$KEY" ] && [ -n "$MODEL" ]; then
               # a real chat completion through the gateway (CPU inference,
               # be patient: up to 15 minutes)

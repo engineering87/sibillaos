@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <rect x="16" y="16" width="480" height="480" rx="96" fill="#1b1740"/>
+  <!-- eye: wide lens shape, straight top, curved bottom -->
+  <path d="M76 236 L436 236 Q 366 372 256 372 Q 146 372 76 236 Z"
+        fill="#120e2b" stroke="#f5c542" stroke-width="22" stroke-linejoin="miter"/>
+  <!-- iris -->
+  <circle cx="256" cy="282" r="64" fill="#8a63e8"/>
+  <!-- serpent slit pupil: Delphi was won from the serpent Python -->
+  <path d="M256 226 Q 274 282 256 338 Q 238 282 256 226 Z" fill="#1b1740"/>
+  <circle cx="256" cy="252" r="8" fill="#f5c542"/>
+</svg>

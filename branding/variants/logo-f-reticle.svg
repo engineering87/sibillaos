@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <rect x="16" y="16" width="480" height="480" rx="96" fill="#1b1740"/>
+  <!-- angular brow: chevron -->
+  <path d="M84 240 L256 132 L428 240"
+        fill="none" stroke="#f5c542" stroke-width="34" stroke-linecap="square" stroke-linejoin="miter"/>
+  <!-- iris ring -->
+  <circle cx="256" cy="292" r="88" fill="none" stroke="#8a63e8" stroke-width="22"/>
+  <!-- reticle ticks -->
+  <g stroke="#8a63e8" stroke-width="22" stroke-linecap="square">
+    <path d="M256 388 V420"/>
+    <path d="M152 292 H120"/>
+    <path d="M360 292 H392"/>
+  </g>
+  <!-- point of sight -->
+  <circle cx="256" cy="292" r="34" fill="#f5c542"/>
+</svg>

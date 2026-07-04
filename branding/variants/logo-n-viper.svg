@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <rect x="16" y="16" width="480" height="480" rx="96" fill="#0e2a1c"/>
+  <!-- serpent lens eye: straight upper lid, curved lower -->
+  <path d="M76 232 L436 232 Q 366 376 256 376 Q 146 376 76 232 Z"
+        fill="#081b11" stroke="#3ddc84" stroke-width="22" stroke-linejoin="miter"/>
+  <!-- iris -->
+  <circle cx="256" cy="284" r="66" fill="#a8e063"/>
+  <!-- vertical slit pupil -->
+  <path d="M256 224 Q 274 284 256 344 Q 238 284 256 224 Z" fill="#081b11"/>
+  <!-- golden glint: the oracle's spark -->
+  <circle cx="256" cy="250" r="8" fill="#f5c542"/>
+</svg>

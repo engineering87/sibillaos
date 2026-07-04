@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <rect x="16" y="16" width="480" height="480" rx="96" fill="#1b1740"/>
+  <!-- heavy straight lid: the half-closed eye of the oracle -->
+  <rect x="88" y="196" width="336" height="44" fill="#f5c542"/>
+  <!-- iris rising below the lid, like a sun on the horizon -->
+  <path d="M156 316 A 100 100 0 0 1 356 316 Z" fill="#8a63e8" transform="rotate(180 256 289)"/>
+  <circle cx="256" cy="272" r="0" fill="none"/>
+  <path d="M166 262 A 90 90 0 0 0 346 262 Z" fill="#8a63e8"/>
+  <!-- pupil -->
+  <path d="M208 262 A 48 48 0 0 0 304 262 Z" fill="#1b1740"/>
+  <circle cx="256" cy="286" r="18" fill="#f5c542"/>
+</svg>

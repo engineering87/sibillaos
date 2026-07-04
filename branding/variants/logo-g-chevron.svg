@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <rect x="16" y="16" width="480" height="480" rx="96" fill="#1b1740"/>
+  <!-- lid: flat-topped angular sweep -->
+  <path d="M80 252 L176 148 L336 148 L432 252"
+        fill="none" stroke="#f5c542" stroke-width="32" stroke-linecap="square" stroke-linejoin="miter"/>
+  <!-- squared sonar arcs: angular U shapes -->
+  <g fill="none" stroke="#8a63e8" stroke-linecap="square" stroke-linejoin="miter">
+    <path d="M156 268 V330 L216 390 H296 L356 330 V268" stroke-width="24"/>
+    <path d="M212 268 V310 L244 342 H268 L300 310 V268" stroke-width="20"/>
+  </g>
+  <!-- point of sight -->
+  <circle cx="256" cy="268" r="30" fill="#f5c542"/>
+</svg>

@@ -25,10 +25,25 @@ if [[ -n "$model" ]]; then
     ollama)
       systemctl start ollama.service
       # wait for the API to accept connections before pulling
+      up=0
       for _ in $(seq 1 30); do
-        curl -fsS -o /dev/null http://127.0.0.1:11434/ && break
+        if curl -fsS -o /dev/null http://127.0.0.1:11434/ 2>/dev/null; then
+          up=1
+          break
+        fi
         sleep 3
       done
+      # self-heal: early-boot crash loops can trip the systemd start
+      # rate limit and leave the unit down; a fresh restart recovers it
+      if [[ "$up" -eq 0 ]]; then
+        systemctl restart ollama.service || true
+        for _ in $(seq 1 20); do
+          if curl -fsS -o /dev/null http://127.0.0.1:11434/ 2>/dev/null; then
+            break
+          fi
+          sleep 3
+        done
+      fi
       for _ in 1 2 3; do
         if ollama pull "$model"; then break; fi
         sleep 30

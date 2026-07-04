@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <rect x="16" y="16" width="480" height="480" rx="96" fill="#1b1740"/>
+  <!-- broken enchantment circle -->
+  <g fill="none" stroke="#8a63e8" stroke-width="14" stroke-linecap="round">
+    <path d="M256 76 A 180 180 0 0 1 421 186"/>
+    <path d="M436 256 A 180 180 0 0 1 331 419"/>
+    <path d="M256 436 A 180 180 0 0 1 91 326"/>
+    <path d="M76 256 A 180 180 0 0 1 181 93"/>
+  </g>
+  <!-- sigil studs at the gaps -->
+  <g fill="#f5c542">
+    <path d="M431 231 L448 248 L431 265 L414 248 Z"/>
+    <path d="M281 431 L298 448 L281 465 L264 448 Z" transform="translate(-25 -175) rotate(0)"/>
+    <path d="M81 231 L98 248 L81 265 L64 248 Z"/>
+    <path d="M256 47 L273 64 L256 81 L239 64 Z"/>
+    <path d="M256 431 L273 448 L256 465 L239 448 Z"/>
+  </g>
+  <!-- eye within the circle -->
+  <path d="M120 256 Q 256 164 392 256 Q 256 348 120 256 Z"
+        fill="#120e2b" stroke="#f5c542" stroke-width="18"/>
+  <circle cx="256" cy="256" r="52" fill="#8a63e8"/>
+  <path d="M256 212 Q 269 256 256 300 Q 243 256 256 212 Z" fill="#120e2b"/>
+  <circle cx="256" cy="234" r="6" fill="#f5c542"/>
+</svg>

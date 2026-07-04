@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <rect x="16" y="16" width="480" height="480" rx="96" fill="#1b1740"/>
+  <!-- terminal frame with heavy title bar -->
+  <rect x="96" y="136" width="320" height="240" rx="20" fill="#120e2b" stroke="#8a63e8" stroke-width="16"/>
+  <rect x="96" y="136" width="320" height="56" rx="20" fill="#8a63e8"/>
+  <rect x="96" y="168" width="320" height="24" fill="#8a63e8"/>
+  <!-- the oracle looks back from the terminal: eye as prompt line -->
+  <path d="M148 284 L208 254 V314 Z" fill="#f5c542"/>
+  <!-- block cursor as the point of sight -->
+  <rect x="236" y="254" width="44" height="60" fill="#f5c542"/>
+  <rect x="304" y="298" width="60" height="16" fill="#8a63e8"/>
+</svg>

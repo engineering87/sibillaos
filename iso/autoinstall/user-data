@@ -11,7 +11,7 @@ autoinstall:
     hostname: sibillaos
     username: sibilla
     # password: "sibilla" (PoC ONLY, replace before release: mkpasswd -m sha-512)
-    password: "$6$rounds=4096$sibillaPoC$IEhQzKX8Ei5FTS6BQMjyUXWFGyxs0lFm4RRz4sXKW1hZTvE9Tep9dO0dQxK9uCJ7hVOMi6BiPEyMIYzuUxRPO/"
+    password: "$6$rounds=4096$sibillaPoC$Xyzu7IZ4lUow9B0qOngdavYLr.qSwgUBGWdTMmDLOZ14andyQ/qZdzb01wKYiVnzVtn8winGUNAi2Z2g5YQhP0"
   ssh:
     install-server: true
     allow-pw: true

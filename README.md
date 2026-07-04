@@ -6,10 +6,10 @@
 
 **Install Linux, get a working LLM API. Nothing else to set up.**
 
-[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+[![License](https://img.shields.io/badge/license-Apache--2.0-2e9e63.svg)](LICENSE)
 [![Base](https://img.shields.io/badge/base-Ubuntu%2024.04%20LTS-e95420.svg)](https://ubuntu.com)
 [![Build](https://github.com/engineering87/sibillaos/actions/workflows/build-iso.yml/badge.svg)](https://github.com/engineering87/sibillaos/actions/workflows/build-iso.yml)
-[![Status](https://img.shields.io/badge/status-proof%20of%20concept-f5c542.svg)](docs/architecture.md)
+[![Status](https://img.shields.io/badge/status-proof%20of%20concept-3ddc84.svg)](docs/architecture.md)
 
 </div>
 
