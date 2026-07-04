@@ -54,7 +54,7 @@ Our components (Debian packages):
 - llmd-hw: GPU detection (VRAM, vendor, compute capability) for the engine choice; delegates model recommendation to llmfit.
 - llmfit (packaged by us as a .deb): existing Rust tool, MIT licensed, that detects the hardware and recommends models with the best quantization and a speed estimate. Scriptable JSON output (`llmfit recommend --json --limit 5`), hardware overrides (`--memory=24G --ram=64G`), use-case filter (`--use-case coding`). Supports multi-GPU, MoE models, and the Ollama, vLLM and llama.cpp runtimes. Sources: [GitHub](https://github.com/AlexsJones/llmfit), [llmfit.org](https://www.llmfit.org/).
 - llmd-engine-ollama / llmd-engine-vllm: packaged engines with hardened systemd units.
-- llmd-gateway: single OpenAI-compatible endpoint whatever the engine ([Ollama docs](https://docs.ollama.com/api/openai-compatibility), [vLLM docs](https://docs.vllm.ai/en/latest/)): routing, TLS, API key.
+- llmd-gateway: single OpenAI-compatible endpoint whatever the engine ([Ollama docs](https://docs.ollama.com/api/openai-compatibility), [vLLM docs](https://docs.vllm.ai/en/latest/)): routing and API key. PoC serves plain HTTP; TLS termination lands in v1.x together with a hostname setup step, since certificates need a subject.
 - llmd-firstboot: completes or resumes the model download at first boot if it was interrupted during install.
 
 ## 5. Engine selection (in the installer)
@@ -100,7 +100,7 @@ Note: llmfit is currently distributed via script/brew/scoop/cargo/pip, not as a 
 ## 8. Security
 
 - systemd services with sandboxing (DynamicUser, ProtectSystem, NoNewPrivileges).
-- API not exposed on the LAN by default; when enabled, TLS plus a mandatory API key through the gateway.
+- API protected by a mandatory bearer token through the gateway. PoC serves plain HTTP (do not expose beyond the LAN); TLS termination is a v1.x item, tied to a hostname setup step.
 - unattended-upgrades for the base system; separate channel for engines and models.
 - No telemetry.
 

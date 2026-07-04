@@ -18,7 +18,7 @@
 Running a local LLM still means picking an engine, matching a model to your VRAM, choosing a quantization and wiring up a service. SibillaOS does all of that in the installer. Boot the ISO, answer the usual questions, and the first thing your machine does is serve an OpenAI-compatible API.
 
 ```console
-$ curl https://myserver:8080/v1/chat/completions \
+$ curl http://myserver:8080/v1/chat/completions \
     -H "Authorization: Bearer $(cat /etc/llmd/apikey)" \
     -d '{"model": "default", "messages": [{"role": "user", "content": "hello"}]}'
 ```
@@ -35,7 +35,7 @@ The installer detects your hardware and makes the decisions a human would otherw
 | **Model sizing** | [llmfit](https://github.com/AlexsJones/llmfit) recommends only models that actually fit your VRAM and RAM, with the best quantization and a speed estimate. |
 | **Curated catalog** | Permissively licensed (Apache-2.0/MIT), non-gated Hugging Face repos only. Verified ids, signed list. |
 | **Resilient download** | The model is pulled from Hugging Face during install and resumed at first boot if the connection drops. |
-| **Single endpoint** | One OpenAI-compatible API on port 8080, TLS, bearer token. Engines stay on loopback. |
+| **Single endpoint** | One OpenAI-compatible API on port 8080 with a mandatory bearer token. Engines stay on loopback. TLS termination is planned for v1.x (needs a hostname); do not expose the port beyond the LAN. |
 
 Two variants: headless server and desktop (GNOME, optional Open WebUI).
 

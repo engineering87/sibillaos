@@ -30,6 +30,12 @@ EOF
   if [[ "$name" == "llmd-hw" ]]; then
     install -D -m644 "$DIR/../catalog/models.json" "$staging/usr/share/llmd/models.json"
   fi
+  # the hardened ollama unit lists this path in ReadWritePaths: it must
+  # exist at unit start or systemd fails the namespace and ollama
+  # crash-loops until firstboot creates it
+  if [[ "$name" == "llmd-engine-ollama" ]]; then
+    mkdir -p "$staging/var/lib/llmd/models/ollama"
+  fi
   dpkg-deb --build --root-owner-group "$staging" "$DIST/${name}_${VERSION}_all.deb"
   rm -rf "$staging"
   echo "OK $name"

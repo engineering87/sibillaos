@@ -24,6 +24,11 @@ if [[ -n "$model" ]]; then
   case "$engine" in
     ollama)
       systemctl start ollama.service
+      # wait for the API to accept connections before pulling
+      for _ in $(seq 1 30); do
+        curl -fsS -o /dev/null http://127.0.0.1:11434/ && break
+        sleep 3
+      done
       for _ in 1 2 3; do
         if ollama pull "$model"; then break; fi
         sleep 30
