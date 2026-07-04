@@ -103,6 +103,8 @@ Note: llmfit is currently distributed via script/brew/scoop/cargo/pip, not as a 
 - systemd services with sandboxing (DynamicUser, ProtectSystem, NoNewPrivileges).
 - API protected by a mandatory bearer token through the gateway. PoC serves plain HTTP (do not expose beyond the LAN); TLS termination is a v1.x item, tied to a hostname setup step.
 - unattended-upgrades for the base system; separate channel for engines and models.
+- Engine versions are pinned in the installer (OLLAMA_VERSION for the ollama install script, a fixed release asset for llmfit) and bumped deliberately; the CI install test validates every bump.
+- The default user password must be changed at first login (chage -d 0). CI images skip this through the CI marker file, since the ssh automation needs the known password.
 - No telemetry.
 
 ## 9. Licensing

@@ -10,7 +10,7 @@ autoinstall:
   identity:
     hostname: sibillaos
     username: sibilla
-    # password: "sibilla" (PoC ONLY, replace before release: mkpasswd -m sha-512)
+    # password: "sibilla"; outside CI the user must change it at first login
     password: "$6$rounds=4096$sibillaPoC$Xyzu7IZ4lUow9B0qOngdavYLr.qSwgUBGWdTMmDLOZ14andyQ/qZdzb01wKYiVnzVtn8winGUNAi2Z2g5YQhP0"
   ssh:
     install-server: true
@@ -31,9 +31,10 @@ autoinstall:
     - cp -r /cdrom/sibilla /target/opt/sibilla
     # 2. Install the llmd packages (the model catalog ships inside llmd-hw)
     - curtin in-target -- bash -c 'dpkg -i /opt/sibilla/debs/*.deb || apt-get -f install -y'
-    # 3. Inference engine and llmfit (network is available during install)
-    - curtin in-target -- bash -c 'curl -fsSL https://ollama.com/install.sh | sh'
-    - curtin in-target -- bash -c 'curl -fsSL https://llmfit.axjns.dev/install.sh | sh'
+    # 3. Inference engine and llmfit, PINNED versions for reproducible
+    #    builds (bump deliberately; the CI install test validates them)
+    - curtin in-target -- bash -c 'curl -fsSL https://ollama.com/install.sh | OLLAMA_VERSION=0.31.1 sh'
+    - curtin in-target -- bash -c 'curl -fL -o /tmp/llmfit.tgz https://github.com/AlexsJones/llmfit/releases/download/v0.9.36/llmfit-v0.9.36-x86_64-unknown-linux-musl.tar.gz && mkdir -p /tmp/llmfit-dist && tar -xzf /tmp/llmfit.tgz -C /tmp/llmfit-dist && install -m755 "$(find /tmp/llmfit-dist -type f -name llmfit | head -1)" /usr/local/bin/llmfit'
     # 4. Hardware detection and default model pick (non-fatal: firstboot
     #    still brings the gateway up without a preselected model)
     - curtin in-target -- /usr/lib/llmd/llmd-hw-detect --write /etc/llmd/engine
@@ -42,7 +43,10 @@ autoinstall:
     #    with a small model to keep the pipeline fast (absent in releases)
     - curtin in-target -- bash -c 'test -f /opt/sibilla/ci-model && install -m644 /opt/sibilla/ci-model /etc/llmd/model || true'
     - curtin in-target -- systemctl enable llmd-firstboot.service
-    # 5. Branding and serial console on the installed system
+    # 5. Force a password change at first login (skipped in CI, where
+    #    the marker file exists and ssh automation needs the password)
+    - curtin in-target -- bash -c 'test -f /opt/sibilla/ci-model || chage -d 0 sibilla'
+    # 6. Branding and serial console on the installed system
     - curtin in-target -- bash -c 'install -D -m644 /opt/sibilla/wallpaper.png /usr/share/backgrounds/sibillaos/wallpaper.png || true'
     - curtin in-target -- sed -i 's/GRUB_CMDLINE_LINUX_DEFAULT="/&console=tty0 console=ttyS0,115200n8 /' /etc/default/grub
     - curtin in-target -- update-grub
