@@ -23,7 +23,18 @@ fi
 if [[ -n "$model" ]]; then
   case "$engine" in
     ollama)
-      systemctl start ollama.service
+      # The models dir ships root-owned in the deb, but ollama runs as
+      # its own user and must own it: this was the root cause of the
+      # first-boot crash loop ("mkdir .../blobs: permission denied").
+      # The ollama user only exists after its installer ran, so the
+      # ownership can only be fixed here, not in the package.
+      mkdir -p /var/lib/llmd/models/ollama
+      if id ollama >/dev/null 2>&1; then
+        chown -R ollama:ollama /var/lib/llmd/models/ollama
+      fi
+      # restart, not start: the unit is likely rate-limited from the
+      # crash loop and a plain start would be a no-op
+      systemctl restart ollama.service
       # wait for the API to accept connections before pulling
       up=0
       for _ in $(seq 1 30); do
