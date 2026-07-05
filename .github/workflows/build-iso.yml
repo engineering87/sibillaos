@@ -225,10 +225,12 @@ jobs:
               RESP=$(curl -s -m 900 http://127.0.0.1:8080/v1/chat/completions \
                 -H "Authorization: Bearer $KEY" \
                 -H "Content-Type: application/json" \
-                -d "{\"model\": \"$MODEL\", \"messages\": [{\"role\": \"user\", \"content\": \"Reply with one short sentence: who are you?\"}], \"max_tokens\": 200}") || true
+                -d "{\"model\": \"$MODEL\", \"messages\": [{\"role\": \"user\", \"content\": \"Reply with one short sentence: who are you?\"}], \"max_tokens\": 600}") || true
               echo "--- gateway response ---"
               echo "$RESP" | jq . || echo "$RESP"
-              if echo "$RESP" | jq -e '.choices[0].message.content | length > 0' >/dev/null; then
+              # thinking models may put everything in .reasoning and leave
+              # .content empty when the token budget runs out: accept either
+              if echo "$RESP" | jq -e '.choices[0].message | ((.content // "") + (.reasoning // "")) | length > 0' >/dev/null; then
                 echo "INFERENCE OK"
                 RC=0
                 # sibilla-model must exist and report the served model
