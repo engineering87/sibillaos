@@ -54,12 +54,27 @@ jobs:
         run: |
           cd out
           sha256sum ./*.iso > SHA256SUMS
+      - name: Prepare release assets (tags only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          if [ -f "docs/releases/${GITHUB_REF_NAME}.md" ]; then
+            cp "docs/releases/${GITHUB_REF_NAME}.md" RELEASE_NOTES.md
+          else
+            echo "SibillaOS ${GITHUB_REF_NAME}" > RELEASE_NOTES.md
+          fi
+          # GitHub release assets are hard-capped at 2 GiB, so the ISO is
+          # published in parts; reassembly is a single cat command
+          cd out
+          ISO=$(ls ./*.iso | head -1)
+          split -b 1900M -d "$ISO" "$ISO.part"
+          sha256sum ./*.part* >> SHA256SUMS
       - name: Publish release (tags only)
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
+          body_path: RELEASE_NOTES.md
           files: |
-            out/*.iso
+            out/*.part*
             out/SHA256SUMS
           generate_release_notes: true
 

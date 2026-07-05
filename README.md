@@ -42,7 +42,7 @@ Two variants: headless server and desktop (GNOME, optional Open WebUI).
 
 ## Getting started
 
-The easiest path is a prebuilt ISO from [Releases](https://github.com/engineering87/sibillaos/releases), verified against its `SHA256SUMS`.
+The easiest path is a prebuilt ISO from [Releases](https://github.com/engineering87/sibillaos/releases), verified against its `SHA256SUMS`. GitHub caps release assets at 2 GiB, so the ISO ships in parts: `cat sibillaos-*.iso.part* > sibillaos.iso` reassembles it.
 
 To build from source you only need `xorriso` and `curl` (no root). The build downloads the official Ubuntu 24.04 live-server ISO, verifies its checksum and repacks it with the SibillaOS autoinstall, packages and branding:
 

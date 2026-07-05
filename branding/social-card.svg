@@ -1,0 +1,73 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 627" width="1200" height="627">
+  <defs>
+    <radialGradient id="forest" cx="0.3" cy="0.35" r="1.2">
+      <stop offset="0" stop-color="#14402a"/>
+      <stop offset="0.5" stop-color="#0e2a1c"/>
+      <stop offset="1" stop-color="#05130c"/>
+    </radialGradient>
+    <radialGradient id="halo" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#3ddc84" stop-opacity="0.14"/>
+      <stop offset="1" stop-color="#3ddc84" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="1200" height="627" fill="url(#forest)"/>
+
+  <!-- constellation accents -->
+  <g stroke="#2e9e63" stroke-width="1.5" opacity="0.35">
+    <path d="M80 520 L200 470 L310 540" fill="none"/>
+    <path d="M950 80 L1050 130 L1150 70" fill="none"/>
+  </g>
+  <g fill="#a8e063" opacity="0.5">
+    <circle cx="80" cy="520" r="4"/><circle cx="200" cy="470" r="5"/><circle cx="310" cy="540" r="3.5"/>
+    <circle cx="950" cy="80" r="4"/><circle cx="1050" cy="130" r="5"/><circle cx="1150" cy="70" r="3.5"/>
+    <circle cx="620" cy="60" r="3"/><circle cx="100" cy="120" r="3"/>
+  </g>
+
+  <circle cx="240" cy="220" r="260" fill="url(#halo)"/>
+
+  <!-- the mark -->
+  <g transform="translate(120.4 87.6) scale(0.52)">
+    <g fill="#2e9e63">
+      <path d="M256 84 L272 108 L256 132 L240 108 Z"/>
+      <path d="M256 380 L272 404 L256 428 L240 404 Z"/>
+      <path d="M96 160 L114 176 L96 192 L78 176 Z"/>
+      <path d="M416 160 L434 176 L416 192 L398 176 Z"/>
+      <path d="M96 320 L114 336 L96 352 L78 336 Z"/>
+      <path d="M416 320 L434 336 L416 352 L398 336 Z"/>
+    </g>
+    <path d="M76 256 Q 256 128 436 256 Q 256 384 76 256 Z"
+          fill="#05130c" stroke="#3ddc84" stroke-width="20"/>
+    <circle cx="256" cy="256" r="66" fill="#a8e063"/>
+    <path d="M256 200 Q 272 256 256 312 Q 240 256 256 200 Z" fill="#05130c"/>
+    <circle cx="256" cy="228" r="8" fill="#f5c542"/>
+  </g>
+
+  <!-- wordmark and pitch -->
+  <g font-family="Ubuntu, DejaVu Sans, sans-serif">
+    <text x="420" y="150" font-size="72" font-weight="bold" fill="#eaf7ee" letter-spacing="2">SibillaOS</text>
+    <text x="423" y="196" font-size="26" fill="#3ddc84" letter-spacing="6">THE ORACLE ON YOUR HARDWARE</text>
+    <text x="423" y="262" font-size="30" fill="#eaf7ee">Install Linux. Get a working LLM API.</text>
+    <text x="423" y="300" font-size="30" fill="#eaf7ee">Nothing else to set up.</text>
+  </g>
+
+  <!-- terminal -->
+  <g>
+    <rect x="120" y="360" width="960" height="190" rx="14" fill="#05130c" stroke="#2e9e63" stroke-width="2"/>
+    <circle cx="150" cy="388" r="7" fill="#2e9e63"/>
+    <circle cx="174" cy="388" r="7" fill="#a8e063"/>
+    <circle cx="198" cy="388" r="7" fill="#f5c542"/>
+    <g font-family="DejaVu Sans Mono, monospace" font-size="21">
+      <text x="150" y="432" fill="#a8e063">$ curl http://myserver:8080/v1/chat/completions \</text>
+      <text x="150" y="462" fill="#a8e063">    -H "Authorization: Bearer $KEY" -d '{"messages":[...]}'</text>
+      <text x="150" y="500" fill="#eaf7ee">{"choices":[{"message":{"content":</text>
+      <text x="150" y="530" fill="#f5c542">  "Hello from your own hardware."}}]}</text>
+    </g>
+  </g>
+
+  <!-- footer -->
+  <g font-family="Ubuntu, DejaVu Sans, sans-serif" font-size="20">
+    <text x="120" y="596" fill="#2e9e63">Open source, Apache 2.0</text>
+    <text x="1080" y="596" fill="#a8e063" text-anchor="end">github.com/engineering87/sibillaos</text>
+  </g>
+</svg>
