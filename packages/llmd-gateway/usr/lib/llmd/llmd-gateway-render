@@ -5,14 +5,18 @@
 # Encrypt; requires a reachable hostname and open ports 80/443).
 set -euo pipefail
 
-CONF=/etc/llmd/gateway.conf
+# paths are overridable so the CI lint job can render and validate
+# the configs on a plain runner
+CONF="${LLMD_GATEWAY_CONF:-/etc/llmd/gateway.conf}"
+CADDYFILE="${LLMD_CADDYFILE:-/etc/caddy/Caddyfile}"
+ENGINE_FILE="${LLMD_ENGINE_FILE:-/etc/llmd/engine}"
 MODE=http
 TLS_HOSTNAME=""
 ACME_EMAIL=""
 # shellcheck disable=SC1090
 [[ -r "$CONF" ]] && . "$CONF"
 
-engine=$(cat /etc/llmd/engine 2>/dev/null || echo ollama)
+engine=$(cat "$ENGINE_FILE" 2>/dev/null || echo ollama)
 case "$engine" in
   vllm) upstream="127.0.0.1:8000" ;;
   *)    upstream="127.0.0.1:11434" ;;
@@ -49,7 +53,7 @@ case "$MODE" in
       auth_block
       proxy_block
       echo "}"
-    } > /etc/caddy/Caddyfile
+    } > "$CADDYFILE"
     ;;
   acme)
     [[ -n "$TLS_HOSTNAME" && -n "$ACME_EMAIL" ]] || { echo "acme mode needs TLS_HOSTNAME and ACME_EMAIL" >&2; exit 1; }
@@ -61,7 +65,7 @@ case "$MODE" in
       auth_block
       proxy_block
       echo "}"
-    } > /etc/caddy/Caddyfile
+    } > "$CADDYFILE"
     ;;
   *)
     {
@@ -69,7 +73,7 @@ case "$MODE" in
       auth_block
       proxy_block
       echo "}"
-    } > /etc/caddy/Caddyfile
+    } > "$CADDYFILE"
     ;;
 esac
 echo "gateway config rendered: mode=$MODE upstream=$upstream"

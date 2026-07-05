@@ -23,9 +23,12 @@ case "${1:-}" in
     mkdir -p /var/lib/llmd/webui /etc/llmd
     touch "$FLAG"
     systemctl daemon-reload
-    systemctl start webui.service
+    # --no-block: the first start pulls a multi-GB image and a plain
+    # start would sit silent until the download finishes
+    systemctl start --no-block webui.service
     echo "Open WebUI enabled: http://$(hostname -I 2>/dev/null | awk '{print $1}'):3000"
-    echo "The first pull of the container image can take several minutes."
+    echo "The first pull of the container image can take several minutes;"
+    echo "follow it with: journalctl -u webui.service -f"
     ;;
   disable)
     need_root

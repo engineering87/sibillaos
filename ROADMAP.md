@@ -7,7 +7,7 @@ This document lists where the project is going and why. Versions are scoped by o
 The operability release: everything needed to run SibillaOS beyond the first demo.
 
 - llmfit shipped as a Debian package built from the pinned upstream release, removing the install-time network dependency. Done.
-- Open WebUI as an opt-in container managed by `sibilla-webui`. Done, pending manual validation.
+- Open WebUI as an opt-in container managed by `sibilla-webui`. Done; CI exercises the container plumbing (Quadlet conversion, flag gating, enable/disable), the web interface itself still needs a manual pass.
 - HTTPS on the gateway via `sibilla-tls`: local CA for LAN hostnames, ACME for public ones. Done, exercised in CI.
 - Multi-model serving verified in CI: the gateway passes the model field through, so a second model is pulled and addressed by name in the install test.
 - Editor and agent connection kit, pulled forward from v0.3 on request: `sibilla-connect` prints ready-to-paste configuration for VS Code (Continue and Cline), aider and any OpenAI-compatible client, wired to the gateway endpoint and API key, with the CA note when TLS runs in local-CA mode.
@@ -32,6 +32,21 @@ The release that makes a security review pleasant.
 - SBOM generated at build time and attached to releases; CVE scan of the ISO packages in CI with a documented triage policy.
 - Gateway hardening: multiple API keys with per-key revocation, optional rate limiting, structured access logs.
 - Air-gapped install profile: a companion payload (model files plus engine images on a second USB drive) for environments with no outbound network, which is where the on-premise pitch matters most.
+
+## Security track (cross-version)
+
+A dedicated track rather than a single milestone, because "your data stays on your machine" is the core promise and it has to hold at every release. What already holds today: engines bound to loopback with the gateway as the only entry point, a mandatory bearer token, systemd sandboxing on the Ollama unit, pinned engine versions, the upstream Host header rewritten by the proxy, and the Ubuntu base image verified against official checksums at build time.
+
+Planned, in order of appearance:
+
+- SECURITY.md with a private disclosure channel and a supported-versions table (v0.2).
+- Default firewall profile: ufw enabled at install with only SSH and the gateway port open; Open WebUI listens on all interfaces today (host networking), so its port stays closed until the user opens it deliberately (v0.3).
+- Sandboxing extended to every llmd unit and the containers (NoNewPrivileges, ProtectSystem, capability drops), with a CI check that fails when a unit regresses (v0.3).
+- Automatic security updates: unattended-upgrades enabled by default for the security pocket, since an appliance that nobody patches must patch itself (v0.3).
+- API key lifecycle: `sibilla key rotate`, multiple keys with per-key revocation, structured access logs; covered by the v0.4 gateway hardening item.
+- Supply chain: signed catalog, SBOM, CVE scanning with a triage policy; covered by v0.4.
+- Secure Boot: the repack keeps Ubuntu's signed shim and GRUB, but the chain has never been verified end to end on real firmware; test it and document the result (v0.4).
+- Model integrity: Ollama already verifies blob digests on pull; extend the catalog with expected digests so the model being served is provably the one that was reviewed (v0.4).
 
 ## v1.0 (general availability)
 

@@ -21,6 +21,37 @@ jobs:
             packages/llmd-webui/usr/bin/*
       - name: Validate catalog JSON
         run: jq empty catalog/models.json
+      - name: Validate rendered Caddyfiles
+        # render every gateway mode with the real script and let caddy
+        # parse and provision the result
+        run: |
+          sudo apt-get install -y caddy
+          export LLMD_GATEWAY_CONF="$RUNNER_TEMP/gateway.conf"
+          export LLMD_CADDYFILE="$RUNNER_TEMP/Caddyfile"
+          export LLMD_ENGINE_FILE="$RUNNER_TEMP/engine"
+          export LLMD_API_KEY=lint-test-key
+          echo ollama > "$LLMD_ENGINE_FILE"
+          for conf in 'MODE=http' \
+                      'MODE=internal\nTLS_HOSTNAME=sibillaos.test' \
+                      'MODE=acme\nTLS_HOSTNAME=example.org\nACME_EMAIL=ops@example.org'; do
+            printf "$conf\n" > "$LLMD_GATEWAY_CONF"
+            bash packages/llmd-gateway/usr/lib/llmd/llmd-gateway-render
+            caddy validate --adapter caddyfile --config "$LLMD_CADDYFILE"
+          done
+      - name: Validate Quadlet units
+        # dry-run the podman systemd generator against our .container
+        # files; a unit that fails to convert would be silently absent
+        # on the installed system
+        run: |
+          command -v podman >/dev/null || sudo apt-get install -y podman
+          QDIR="$RUNNER_TEMP/quadlet"
+          mkdir -p "$QDIR"
+          cp packages/llmd-engine-vllm/etc/containers/systemd/vllm.container \
+             packages/llmd-webui/etc/containers/systemd/webui.container "$QDIR/"
+          GEN=/usr/lib/systemd/system-generators/podman-system-generator
+          out=$(QUADLET_UNIT_DIRS="$QDIR" "$GEN" -dryrun 2>&1) || { echo "$out"; exit 1; }
+          echo "$out" | grep -q "vllm.service" || { echo "vllm quadlet did not convert"; echo "$out"; exit 1; }
+          echo "$out" | grep -q "webui.service" || { echo "webui quadlet did not convert"; echo "$out"; exit 1; }
 
   build:
     needs: lint
@@ -266,6 +297,13 @@ jobs:
                   https://sibillaos.test:8080/v1/models || true)
                 echo "tls gateway answered $tls_code"
                 [ "$tls_code" = "401" ] || RC=1
+                # a wrong key must be rejected exactly like a missing one
+                badcode=$(curl -ks -o /dev/null -w '%{http_code}' \
+                  --resolve sibillaos.test:8080:127.0.0.1 \
+                  -H "Authorization: Bearer not-the-key" \
+                  https://sibillaos.test:8080/v1/models || true)
+                echo "tls gateway answered $badcode to a wrong key"
+                [ "$badcode" = "401" ] || RC=1
                 # multi-model: pull a second quantization and require both
                 # to be served through the gateway by name
                 echo "--- multi-model check ---"
@@ -303,6 +341,44 @@ jobs:
                 $SSH "echo sibilla | sudo -S sibilla-connect" > connect.out || RC=1
                 head -12 connect.out || true
                 grep -q "apiBase" connect.out || { echo "connect kit missing apiBase"; RC=1; }
+                # webui plumbing: the quadlet must convert on the target
+                # and the flag file must gate activation; the image pull
+                # is too heavy for CI, so the service is stopped right
+                # after it starts activating (the UI itself stays a
+                # manual test)
+                echo "--- sibilla-webui check ---"
+                $SSH "systemctl cat webui.service >/dev/null" || { echo "webui quadlet did not convert"; RC=1; }
+                wstate=$($SSH "systemctl is-active webui.service" || true)
+                [ "$wstate" = "inactive" ] || { echo "webui running without its flag: $wstate"; RC=1; }
+                $SSH "echo sibilla | sudo -S sibilla-webui enable" || RC=1
+                sleep 5
+                wstate=$($SSH "systemctl is-active webui.service" || true)
+                echo "webui state after enable: $wstate"
+                case "$wstate" in
+                  active|activating) ;;
+                  *) echo "webui did not start"; RC=1 ;;
+                esac
+                $SSH "sibilla-webui status" | grep -q "enabled:  yes" || { echo "webui status does not report enabled"; RC=1; }
+                $SSH "echo sibilla | sudo -S sibilla-webui disable" || RC=1
+                wstate=$($SSH "systemctl is-active webui.service" || true)
+                [ "$wstate" = "inactive" ] || { echo "webui still $wstate after disable"; RC=1; }
+                # vllm must stay gated off on an ollama machine
+                $SSH "systemctl cat vllm.service >/dev/null" || { echo "vllm quadlet did not convert"; RC=1; }
+                vstate=$($SSH "systemctl is-active vllm.service" || true)
+                [ "$vstate" = "inactive" ] || { echo "vllm running on an ollama machine: $vstate"; RC=1; }
+                # back to plain http: the disable path must render and
+                # restart the gateway, and keep serving both models
+                echo "--- sibilla-tls disable ---"
+                $SSH "echo sibilla | sudo -S sibilla-tls disable" || RC=1
+                sleep 5
+                hcode=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/v1/models || true)
+                echo "http gateway answered $hcode after disable"
+                [ "$hcode" = "401" ] || RC=1
+                hcount=$(curl -s -H "Authorization: Bearer $KEY" \
+                  http://127.0.0.1:8080/v1/models | jq '.data | length' 2>/dev/null) || hcount=0
+                hcount=${hcount:-0}
+                echo "models served over http: $hcount"
+                [ "$hcount" -ge 2 ] || RC=1
               else
                 echo "inference failed: empty or malformed response"
               fi
