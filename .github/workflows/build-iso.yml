@@ -15,7 +15,8 @@ jobs:
         run: |
           sudo apt-get update && sudo apt-get install -y shellcheck
           shellcheck iso/build.sh packages/build-debs.sh \
-            packages/llmd-hw/usr/lib/llmd/* packages/llmd-firstboot/usr/lib/llmd/*
+            packages/llmd-hw/usr/lib/llmd/* packages/llmd-hw/usr/bin/* \
+            packages/llmd-firstboot/usr/lib/llmd/*
       - name: Validate catalog JSON
         run: jq empty catalog/models.json
 
@@ -230,6 +231,12 @@ jobs:
               if echo "$RESP" | jq -e '.choices[0].message.content | length > 0' >/dev/null; then
                 echo "INFERENCE OK"
                 RC=0
+                # sibilla-model must exist and report the served model
+                echo "--- sibilla-model status ---"
+                $SSH "sibilla-model status" || RC=1
+                $SSH "sibilla-model status" | grep -q "$MODEL" || { echo "sibilla-model does not report the served model"; RC=1; }
+                echo "--- sibilla-model list ---"
+                $SSH "sibilla-model list" || true
               else
                 echo "inference failed: empty or malformed response"
               fi

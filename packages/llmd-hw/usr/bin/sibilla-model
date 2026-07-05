@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+# sibilla-model: list, pick and switch the model served by SibillaOS.
+set -euo pipefail
+
+CATALOG=/usr/share/llmd/models.json
+ENGINE=$(cat /etc/llmd/engine 2>/dev/null || echo ollama)
+CURRENT=$(cat /etc/llmd/model 2>/dev/null || true)
+
+usage() {
+  cat <<EOF
+usage: sibilla-model COMMAND
+
+  status         show engine, current model and API endpoint
+  list           curated models for this machine, plus llmfit picks
+  use MODEL_ID   download MODEL_ID and make it the served model
+EOF
+  exit 1
+}
+
+need_root() { [[ $EUID -eq 0 ]] || { echo "run as root (sudo)" >&2; exit 1; }; }
+
+cmd_status() {
+  echo "engine:  $ENGINE"
+  echo "model:   ${CURRENT:-none selected}"
+  echo "api:     http://$(hostname -I 2>/dev/null | awk '{print $1}'):8080 (key in /etc/llmd/apikey)"
+}
+
+cmd_list() {
+  echo "curated models for engine '$ENGINE' (current: ${CURRENT:-none}):"
+  jq -r --arg e "$ENGINE" \
+    '.models[] | select(.engines[]? == $e) | "  " + .id + "  [" + .family + ", " + .license + "]"' \
+    "$CATALOG"
+  if command -v llmfit >/dev/null 2>&1; then
+    echo
+    echo "llmfit recommendations for this hardware:"
+    llmfit recommend --json --limit 5 2>/dev/null \
+      | jq -r '.[] | "  " + (.model // .id // empty)' \
+      || echo "  (llmfit recommendation unavailable)"
+  fi
+}
+
+cmd_use() {
+  need_root
+  local model="$1"
+  # the ollama CLI panics without HOME when run over ssh/sudo
+  export HOME="${HOME:-/root}"
+  case "$ENGINE" in
+    ollama)
+      ollama pull "$model"
+      ;;
+    vllm)
+      echo "LLMD_MODEL=$model" > /etc/llmd/vllm.env
+      systemctl restart vllm.service
+      ;;
+  esac
+  echo "$model" > /etc/llmd/model
+  echo "now serving: $model"
+}
+
+case "${1:-}" in
+  status) cmd_status ;;
+  list)   cmd_list ;;
+  use)    [[ $# -ge 2 ]] || usage; cmd_use "$2" ;;
+  *)      usage ;;
+esac

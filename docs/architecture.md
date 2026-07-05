@@ -1,6 +1,7 @@
 # SibillaOS - Architecture v0.5
 
 Date: 2026-07-03. Status: consolidated draft.
+Changelog v0.6: release ISOs make the standard installer sections interactive (locale, keyboard, network, storage, identity) while the llmd steps stay automated; CI images remain fully unattended. Model choice happens after install with the sibilla-model CLI (list/use); a boot-time selection menu was considered and deferred, since subiquity cannot host custom screens without a fork. The forced password change is superseded: release users set their own credentials in the installer.
 Changelog v0.5: the ISO is now a repack of the official Ubuntu live-server image. The from-scratch debootstrap ISO booted (verified in CI) but had no working installer: subiquity is shipped as a snap in official images and the autoinstall trigger needs cloud-init, neither of which were in our squashfs. Repacking reuses the proven installer stack as is.
 
 ## 1. Goal
@@ -72,12 +73,9 @@ The user can always override the choice. Verified requirements: vLLM supports NV
 
 Base: Ubuntu autoinstall (Subiquity) for the server ISO; the desktop variant uses the same backend. For full UI control: Calamares with a custom module.
 
-Extra flow on top of a standard install:
+Current flow (v0.6): release ISOs show the standard subiquity screens (locale, keyboard, network, storage, identity) via interactive-sections; everything llmd-specific runs automated in the late-commands: hardware detection picks the engine, llmfit picks the default model, firstboot downloads it and brings up the gateway. After install, `sibilla-model list` shows the curated models that fit the machine plus the llmfit recommendations, and `sibilla-model use ID` downloads and switches the served model.
 
-1. Hardware detection (llmd-hw), engine proposal (table in section 5).
-2. Model recommendation: the installer runs `llmfit recommend --json` in the live environment and shows the top N models that run well on the detected hardware, with the suggested quantization, estimated memory footprint and expected speed (fit: GPU / GPU+CPU offload / CPU). Optional use-case filter (chat, coding). The user picks one or more models.
-3. Download into the target partition (`/var/lib/llmd/models`), with resume. If the network is missing or the download fails, the install still completes and llmd-firstboot resumes at first boot (re-running llmfit if needed).
-4. Configuration: API port, generated API key, Open WebUI (yes/no), LAN exposure (yes/no).
+Deferred to v1.x: a model selection screen inside the installer itself (subiquity cannot host custom screens without a fork; candidates are a Calamares module for the desktop variant or a first-boot console menu), plus install-time configuration of API port, Open WebUI and LAN exposure.
 
 ### Model source: Hugging Face (single source)
 

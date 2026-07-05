@@ -15,7 +15,7 @@
 
 <br/>
 
-Running a local LLM still means picking an engine, matching a model to your VRAM, choosing a quantization and wiring up a service. SibillaOS does all of that in the installer. Boot the ISO, answer the usual questions, and the first thing your machine does is serve an OpenAI-compatible API.
+Running a local LLM still means picking an engine, matching a model to your VRAM, choosing a quantization and wiring up a service. SibillaOS does all of that for you. Boot the ISO, walk through the standard Ubuntu screens (locale, network, disk, your user), and the first thing your machine does after installing is serve an OpenAI-compatible API.
 
 ```console
 $ curl http://myserver:8080/v1/chat/completions \
@@ -36,6 +36,7 @@ The installer detects your hardware and makes the decisions a human would otherw
 | **Curated catalog** | Permissively licensed (Apache-2.0/MIT), non-gated Hugging Face repos only. Verified ids, signed list. |
 | **Resilient download** | The model is pulled from Hugging Face during install and resumed at first boot if the connection drops. |
 | **Single endpoint** | One OpenAI-compatible API on port 8080 with a mandatory bearer token. Engines stay on loopback. TLS termination is planned for v1.x (needs a hostname); do not expose the port beyond the LAN. |
+| **Model management** | `sibilla-model list` shows what fits your machine, `sibilla-model use ID` downloads and switches the served model. |
 
 Two variants: headless server and desktop (GNOME, optional Open WebUI).
 
@@ -65,7 +66,11 @@ docs/         architecture document
 
 ## Status
 
-Working proof of concept: on every push, CI builds the ISO, boots it under BIOS and UEFI, runs the automated install end to end and gets a real chat completion through the gateway on first boot. Engine versions are pinned in the installer. The default user is `sibilla` with password `sibilla`, and a password change is forced at first login. The full design, decision log and roadmap live in [docs/architecture.md](docs/architecture.md).
+Working proof of concept: on every push, CI builds the ISO, boots it under BIOS and UEFI, runs the install end to end and gets a real chat completion through the gateway on first boot. Engine versions are pinned in the installer. Release ISOs walk you through the standard installer screens and you choose your own credentials; only the fully unattended CI images use a fixed test user. The full design, decision log and roadmap live in [docs/architecture.md](docs/architecture.md).
+
+## Contributing
+
+Contributions are welcome. [CONTRIBUTING.md](CONTRIBUTING.md) covers the build setup, the CI test suite your change has to pass, and the criteria for model catalog additions.
 
 ## License
 

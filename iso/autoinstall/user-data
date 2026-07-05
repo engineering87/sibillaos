@@ -10,7 +10,8 @@ autoinstall:
   identity:
     hostname: sibillaos
     username: sibilla
-    # password: "sibilla"; outside CI the user must change it at first login
+    # password "sibilla": only used by fully unattended CI installs;
+    # release builds make the identity screen interactive (see build.sh)
     password: "$6$rounds=4096$sibillaPoC$Xyzu7IZ4lUow9B0qOngdavYLr.qSwgUBGWdTMmDLOZ14andyQ/qZdzb01wKYiVnzVtn8winGUNAi2Z2g5YQhP0"
   ssh:
     install-server: true
@@ -43,10 +44,7 @@ autoinstall:
     #    with a small model to keep the pipeline fast (absent in releases)
     - curtin in-target -- bash -c 'test -f /opt/sibilla/ci-model && install -m644 /opt/sibilla/ci-model /etc/llmd/model || true'
     - curtin in-target -- systemctl enable llmd-firstboot.service
-    # 5. Force a password change at first login (skipped in CI, where
-    #    the marker file exists and ssh automation needs the password)
-    - curtin in-target -- bash -c 'test -f /opt/sibilla/ci-model || chage -d 0 sibilla'
-    # 6. Branding and serial console on the installed system
+    # 5. Branding and serial console on the installed system
     - curtin in-target -- bash -c 'install -D -m644 /opt/sibilla/wallpaper.png /usr/share/backgrounds/sibillaos/wallpaper.png || true'
     - curtin in-target -- sed -i 's/GRUB_CMDLINE_LINUX_DEFAULT="/&console=tty0 console=ttyS0,115200n8 /' /etc/default/grub
     - curtin in-target -- update-grub

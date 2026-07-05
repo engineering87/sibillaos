@@ -25,7 +25,7 @@ Maintainer: SibillaOS contributors
 Description: $desc
 EOF
   # executable bit for the scripts
-  find "$staging/usr/lib/llmd" -type f -exec chmod 755 {} + 2>/dev/null || true
+  find "$staging/usr/lib/llmd" "$staging/usr/bin" -type f -exec chmod 755 {} + 2>/dev/null || true
   # the curated model catalog ships with llmd-hw
   if [[ "$name" == "llmd-hw" ]]; then
     install -D -m644 "$DIR/../catalog/models.json" "$staging/usr/share/llmd/models.json"

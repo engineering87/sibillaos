@@ -45,11 +45,17 @@ prepare_payload() {
   cp "$SCRIPT_DIR"/../packages/dist/*.deb "$WORK/sibilla/debs/"
   cp "$SCRIPT_DIR"/../branding/wallpaper.png "$WORK/sibilla/" 2>/dev/null || true
 
-  # optional model override for CI: forces a small model instead of the
-  # llmfit pick. Never set on release builds.
   if [[ -n "${SIBILLA_TEST_MODEL:-}" ]]; then
+    # CI build: fully unattended install, small model override
     echo "$SIBILLA_TEST_MODEL" > "$WORK/sibilla/ci-model"
-    log "CI test model override: $SIBILLA_TEST_MODEL"
+    log "CI build: unattended install, test model $SIBILLA_TEST_MODEL"
+  else
+    # release build: the standard installer screens are interactive, so
+    # the user picks locale, network, disk and their own credentials;
+    # the llmd steps stay automated in the late-commands
+    sed -i 's/^  version: 1$/  version: 1\n  interactive-sections: [locale, keyboard, network, storage, identity]/' \
+      "$WORK/nocloud/user-data"
+    log "release build: standard installer sections are interactive"
   fi
 
   # boot menu: replaces the stock grub.cfg on the ISO. The serial setup is
