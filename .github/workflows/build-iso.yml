@@ -2,7 +2,7 @@ name: Build SibillaOS ISO
 
 on:
   push:
-    branches: [main]
+    branches: [main, "release/*"]
     tags: ["v*"]
   pull_request:
 
@@ -16,7 +16,9 @@ jobs:
           sudo apt-get update && sudo apt-get install -y shellcheck
           shellcheck iso/build.sh packages/build-debs.sh \
             packages/llmd-hw/usr/lib/llmd/* packages/llmd-hw/usr/bin/* \
-            packages/llmd-firstboot/usr/lib/llmd/*
+            packages/llmd-firstboot/usr/lib/llmd/* \
+            packages/llmd-gateway/usr/lib/llmd/* packages/llmd-gateway/usr/bin/* \
+            packages/llmd-webui/usr/bin/*
       - name: Validate catalog JSON
         run: jq empty catalog/models.json
 
@@ -254,6 +256,16 @@ jobs:
                 $SSH "sibilla-model status" | grep -q "$MODEL" || { echo "sibilla-model does not report the served model"; RC=1; }
                 echo "--- sibilla-model list ---"
                 $SSH "sibilla-model list" || true
+                # TLS path: switch the gateway to https with the local CA
+                # and require a 401 with the right SNI
+                echo "--- sibilla-tls check ---"
+                $SSH "echo sibilla | sudo -S sibilla-tls enable sibillaos.test" || RC=1
+                sleep 5
+                tls_code=$(curl -ks -o /dev/null -w '%{http_code}' \
+                  --resolve sibillaos.test:8080:127.0.0.1 \
+                  https://sibillaos.test:8080/v1/models || true)
+                echo "tls gateway answered $tls_code"
+                [ "$tls_code" = "401" ] || RC=1
               else
                 echo "inference failed: empty or malformed response"
               fi

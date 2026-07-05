@@ -1,6 +1,7 @@
 # SibillaOS - Architecture v0.5
 
 Date: 2026-07-03. Status: consolidated draft.
+Changelog v0.7 (post v0.1.0): llmfit now ships as a deb built from the pinned upstream release, removing the install-time dependency on its installer. Open WebUI is available as an opt-in Quadlet container (sibilla-webui enable, port 3000, host networking to reach the loopback-only ollama, own login). The gateway config is rendered by llmd-gateway-render from /etc/llmd/gateway.conf, and sibilla-tls switches between plain HTTP, HTTPS with Caddy's local CA for a hostname, and public ACME; the TLS path is exercised in CI.
 Changelog v0.6: release ISOs make the standard installer sections interactive (locale, keyboard, network, storage, identity) while the llmd steps stay automated; CI images remain fully unattended. Model choice happens after install with the sibilla-model CLI (list/use); a boot-time selection menu was considered and deferred, since subiquity cannot host custom screens without a fork. The forced password change is superseded: release users set their own credentials in the installer.
 Changelog v0.5: the ISO is now a repack of the official Ubuntu live-server image. The from-scratch debootstrap ISO booted (verified in CI) but had no working installer: subiquity is shipped as a snap in official images and the autoinstall trigger needs cloud-init, neither of which were in our squashfs. Repacking reuses the proven installer stack as is.
 
@@ -56,7 +57,7 @@ Our components (Debian packages):
 - llmd-hw: GPU detection (VRAM, vendor, compute capability) for the engine choice; delegates model recommendation to llmfit.
 - llmfit (packaged by us as a .deb): existing Rust tool, MIT licensed, that detects the hardware and recommends models with the best quantization and a speed estimate. Scriptable JSON output (`llmfit recommend --json --limit 5`), hardware overrides (`--memory=24G --ram=64G`), use-case filter (`--use-case coding`). Supports multi-GPU, MoE models, and the Ollama, vLLM and llama.cpp runtimes. Sources: [GitHub](https://github.com/AlexsJones/llmfit), [llmfit.org](https://www.llmfit.org/).
 - llmd-engine-ollama / llmd-engine-vllm: packaged engines with hardened systemd units.
-- llmd-gateway: single OpenAI-compatible endpoint whatever the engine ([Ollama docs](https://docs.ollama.com/api/openai-compatibility), [vLLM docs](https://docs.vllm.ai/en/latest/)): routing and API key. PoC serves plain HTTP; TLS termination lands in v1.x together with a hostname setup step, since certificates need a subject.
+- llmd-gateway: single OpenAI-compatible endpoint whatever the engine ([Ollama docs](https://docs.ollama.com/api/openai-compatibility), [vLLM docs](https://docs.vllm.ai/en/latest/)): routing and API key. Defaults to plain HTTP on 8080; sibilla-tls switches to HTTPS with the local CA for a hostname, or to public ACME. The config is rendered by llmd-gateway-render from /etc/llmd/gateway.conf.
 - llmd-firstboot: completes or resumes the model download at first boot if it was interrupted during install.
 
 ## 5. Engine selection (in the installer)
@@ -99,7 +100,7 @@ Note: llmfit is currently distributed via script/brew/scoop/cargo/pip, not as a 
 ## 8. Security
 
 - systemd services with sandboxing (DynamicUser, ProtectSystem, NoNewPrivileges).
-- API protected by a mandatory bearer token through the gateway. PoC serves plain HTTP (do not expose beyond the LAN); TLS termination is a v1.x item, tied to a hostname setup step.
+- API protected by a mandatory bearer token through the gateway. Plain HTTP by default (do not expose beyond the LAN); sibilla-tls enables HTTPS with a hostname (local CA or ACME).
 - unattended-upgrades for the base system; separate channel for engines and models.
 - Engine versions are pinned in the installer (OLLAMA_VERSION for the ollama install script, a fixed release asset for llmfit) and bumped deliberately; the CI install test validates every bump.
 - The default user password must be changed at first login (chage -d 0). CI images skip this through the CI marker file, since the ssh automation needs the known password.

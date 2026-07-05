@@ -35,10 +35,11 @@ The installer detects your hardware and makes the decisions a human would otherw
 | **Model sizing** | [llmfit](https://github.com/AlexsJones/llmfit) recommends only models that actually fit your VRAM and RAM, with the best quantization and a speed estimate. |
 | **Curated catalog** | Permissively licensed (Apache-2.0/MIT), non-gated Hugging Face repos only. Verified ids, signed list. |
 | **Resilient download** | The model is pulled from Hugging Face during install and resumed at first boot if the connection drops. |
-| **Single endpoint** | One OpenAI-compatible API on port 8080 with a mandatory bearer token. Engines stay on loopback. TLS termination is planned for v1.x (needs a hostname); do not expose the port beyond the LAN. |
+| **Single endpoint** | One OpenAI-compatible API on port 8080 with a mandatory bearer token. Engines stay on loopback. `sibilla-tls enable HOSTNAME` switches the gateway to HTTPS (local CA, or Let's Encrypt with `--acme`). |
 | **Model management** | `sibilla-model list` shows what fits your machine, `sibilla-model use ID` downloads and switches the served model. |
+| **Chat interface** | `sibilla-webui enable` starts Open WebUI on port 3000 as an opt-in container, wired to the local engine. |
 
-Two variants: headless server and desktop (GNOME, optional Open WebUI).
+The base install is a headless server; a desktop variant is on the roadmap.
 
 ## Getting started
 

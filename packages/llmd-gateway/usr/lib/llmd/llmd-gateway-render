@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+# llmd-gateway-render: writes /etc/caddy/Caddyfile from /etc/llmd/gateway.conf
+# Modes: http (default, port 8080), internal (HTTPS on 8080 with Caddy's
+# local CA for a given hostname), acme (public HTTPS on 443 with Let's
+# Encrypt; requires a reachable hostname and open ports 80/443).
+set -euo pipefail
+
+CONF=/etc/llmd/gateway.conf
+MODE=http
+TLS_HOSTNAME=""
+ACME_EMAIL=""
+# shellcheck disable=SC1090
+[[ -r "$CONF" ]] && . "$CONF"
+
+engine=$(cat /etc/llmd/engine 2>/dev/null || echo ollama)
+case "$engine" in
+  vllm) upstream="127.0.0.1:8000" ;;
+  *)    upstream="127.0.0.1:11434" ;;
+esac
+
+auth_block() {
+  cat <<'BLOCK'
+	# API key required (generated at first boot, stored in /etc/llmd/apikey)
+	@unauthorized not header Authorization "Bearer {$LLMD_API_KEY}"
+	respond @unauthorized 401
+BLOCK
+}
+
+case "$MODE" in
+  internal)
+    [[ -n "$TLS_HOSTNAME" ]] || { echo "internal mode needs TLS_HOSTNAME" >&2; exit 1; }
+    {
+      echo "https://$TLS_HOSTNAME:8080 {"
+      echo "	tls internal"
+      auth_block
+      echo "	reverse_proxy $upstream"
+      echo "}"
+    } > /etc/caddy/Caddyfile
+    ;;
+  acme)
+    [[ -n "$TLS_HOSTNAME" && -n "$ACME_EMAIL" ]] || { echo "acme mode needs TLS_HOSTNAME and ACME_EMAIL" >&2; exit 1; }
+    {
+      echo "{"
+      echo "	email $ACME_EMAIL"
+      echo "}"
+      echo "$TLS_HOSTNAME {"
+      auth_block
+      echo "	reverse_proxy $upstream"
+      echo "}"
+    } > /etc/caddy/Caddyfile
+    ;;
+  *)
+    {
+      echo ":8080 {"
+      auth_block
+      echo "	reverse_proxy $upstream"
+      echo "}"
+    } > /etc/caddy/Caddyfile
+    ;;
+esac
+echo "gateway config rendered: mode=$MODE upstream=$upstream"

@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+# sibilla-tls: switch the gateway between plain HTTP and HTTPS.
+set -euo pipefail
+
+CONF=/etc/llmd/gateway.conf
+
+usage() {
+  cat <<USAGE
+usage: sibilla-tls COMMAND
+
+  enable HOSTNAME            HTTPS on port 8080 with a locally trusted
+                             certificate for HOSTNAME (Caddy internal CA)
+  enable HOSTNAME --acme EMAIL
+                             public HTTPS on port 443 via Let's Encrypt
+                             (HOSTNAME must resolve here, ports 80/443 open)
+  disable                    back to plain HTTP on port 8080
+  status                     show the current gateway mode
+USAGE
+  exit 1
+}
+
+need_root() { [[ $EUID -eq 0 ]] || { echo "run as root (sudo)" >&2; exit 1; }; }
+
+render_restart() {
+  /usr/lib/llmd/llmd-gateway-render
+  systemctl restart caddy.service
+}
+
+case "${1:-}" in
+  enable)
+    need_root
+    [[ $# -ge 2 ]] || usage
+    host="$2"
+    if [[ "${3:-}" == "--acme" ]]; then
+      [[ $# -ge 4 ]] || usage
+      printf 'MODE=acme\nTLS_HOSTNAME=%s\nACME_EMAIL=%s\n' "$host" "$4" > "$CONF"
+      render_restart
+      echo "gateway: https://$host (Let's Encrypt)"
+    else
+      printf 'MODE=internal\nTLS_HOSTNAME=%s\n' "$host" > "$CONF"
+      render_restart
+      echo "gateway: https://$host:8080 (local CA; clients need -k or the CA cert)"
+    fi
+    ;;
+  disable)
+    need_root
+    printf 'MODE=http\n' > "$CONF"
+    render_restart
+    echo "gateway: http on port 8080"
+    ;;
+  status)
+    if [[ -r "$CONF" ]]; then cat "$CONF"; else echo "MODE=http (default)"; fi
+    ;;
+  *) usage ;;
+esac
