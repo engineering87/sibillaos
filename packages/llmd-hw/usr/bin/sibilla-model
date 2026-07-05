@@ -34,7 +34,7 @@ cmd_list() {
     echo
     echo "llmfit recommendations for this hardware:"
     llmfit recommend --json --limit 5 2>/dev/null \
-      | jq -r '.[] | "  " + (.model // .id // empty)' \
+      | jq -r '.. | objects | .model? // empty' 2>/dev/null | head -5 | sed 's/^/  /' \
       || echo "  (llmfit recommendation unavailable)"
   fi
 }

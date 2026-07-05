@@ -22,8 +22,10 @@ command -v llmfit >/dev/null 2>&1 || { echo "llmfit not found" >&2; exit 2; }
 engine=$(cat /etc/llmd/engine 2>/dev/null || echo ollama)
 
 # llmfit recommendations (one model id per line)
-mapfile -t recommended < <(llmfit recommend --json --limit 10 \
-  | jq -r '.[].model // .[].id // empty' 2>/dev/null || true)
+# tolerant parsing: the llmfit JSON shape has changed across releases,
+# so collect any "model" field found at any depth
+mapfile -t recommended < <(llmfit recommend --json --limit 10 2>/dev/null \
+  | jq -r '.. | objects | .model? // empty' 2>/dev/null || true)
 
 # ids allowed by the curated catalog for the chosen engine
 mapfile -t allowed < <(jq -r --arg e "$engine" \
