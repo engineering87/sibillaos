@@ -26,6 +26,20 @@ auth_block() {
 BLOCK
 }
 
+# Ollama guards against DNS rebinding: on a loopback listener it rejects
+# any Host header that is not an IP, "localhost", the machine hostname or
+# a .localhost/.local/.internal name with an empty 403 (allowedHostsMiddleware
+# in server/routes.go). Caddy forwards the original Host by default, so a
+# request for https://myhost:8080 would reach ollama as Host "myhost:8080"
+# and be dropped. Rewrite the proxied Host to the upstream address instead.
+proxy_block() {
+  cat <<BLOCK
+	reverse_proxy $upstream {
+		header_up Host {upstream_hostport}
+	}
+BLOCK
+}
+
 case "$MODE" in
   internal)
     [[ -n "$TLS_HOSTNAME" ]] || { echo "internal mode needs TLS_HOSTNAME" >&2; exit 1; }
@@ -33,7 +47,7 @@ case "$MODE" in
       echo "https://$TLS_HOSTNAME:8080 {"
       echo "	tls internal"
       auth_block
-      echo "	reverse_proxy $upstream"
+      proxy_block
       echo "}"
     } > /etc/caddy/Caddyfile
     ;;
@@ -45,7 +59,7 @@ case "$MODE" in
       echo "}"
       echo "$TLS_HOSTNAME {"
       auth_block
-      echo "	reverse_proxy $upstream"
+      proxy_block
       echo "}"
     } > /etc/caddy/Caddyfile
     ;;
@@ -53,7 +67,7 @@ case "$MODE" in
     {
       echo ":8080 {"
       auth_block
-      echo "	reverse_proxy $upstream"
+      proxy_block
       echo "}"
     } > /etc/caddy/Caddyfile
     ;;

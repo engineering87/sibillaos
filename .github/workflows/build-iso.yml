@@ -272,13 +272,16 @@ jobs:
                 $SSH "echo sibilla | sudo -S bash -c 'export HOME=/root; ollama pull hf.co/bartowski/Qwen_Qwen3-0.6B-GGUF:Q8_0' >/dev/null 2>&1" || RC=1
                 mcount=0
                 for _ in 1 2 3; do
-                  mbody=$(curl -ks --resolve sibillaos.test:8080:127.0.0.1 \
+                  mcode=$(curl -ks -o mbody.json -w '%{http_code}' \
+                    --resolve sibillaos.test:8080:127.0.0.1 \
                     -H "Authorization: Bearer $KEY" \
-                    https://sibillaos.test:8080/v1/models) || true
-                  mcount=$(echo "$mbody" | jq '.data | length' 2>/dev/null) || mcount=0
+                    https://sibillaos.test:8080/v1/models) || mcode=000
+                  mcount=$(jq '.data | length' mbody.json 2>/dev/null) || mcount=0
                   mcount=${mcount:-0}
                   if [ "$mcount" -ge 2 ]; then break; fi
-                  echo "models endpoint not ready yet (body: ${mbody:-empty}), retrying"
+                  echo "models endpoint answered $mcode with $mcount model(s), retrying"
+                  head -c 300 mbody.json 2>/dev/null || true
+                  echo
                   sleep 10
                 done
                 echo "models served: $mcount"
