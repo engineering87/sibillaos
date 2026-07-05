@@ -8,7 +8,7 @@
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-2e9e63.svg)](LICENSE)
 [![Base](https://img.shields.io/badge/base-Ubuntu%2024.04%20LTS-e95420.svg)](https://ubuntu.com)
-[![Build](https://github.com/engineering87/sibillaos/actions/workflows/build-iso.yml/badge.svg)](https://github.com/engineering87/sibillaos/actions/workflows/build-iso.yml)
+[![Build](https://github.com/engineering87/sibillaos/actions/workflows/build-iso.yml/badge.svg?branch=main)](https://github.com/engineering87/sibillaos/actions/workflows/build-iso.yml)
 [![Status](https://img.shields.io/badge/status-proof%20of%20concept-3ddc84.svg)](docs/architecture.md)
 
 </div>
@@ -67,7 +67,7 @@ docs/         architecture document
 
 ## Status
 
-Working proof of concept: on every push, CI builds the ISO, boots it under BIOS and UEFI, runs the install end to end and gets a real chat completion through the gateway on first boot. Engine versions are pinned in the installer. Release ISOs walk you through the standard installer screens and you choose your own credentials; only the fully unattended CI images use a fixed test user. The full design, decision log and roadmap live in [docs/architecture.md](docs/architecture.md).
+Working proof of concept: on every push, CI builds the ISO, boots it under BIOS and UEFI, runs the install end to end and gets a real chat completion through the gateway on first boot. Engine versions are pinned in the installer. Release ISOs walk you through the standard installer screens and you choose your own credentials; only the fully unattended CI images use a fixed test user. The design and decision log live in [docs/architecture.md](docs/architecture.md); where the project is going is in [ROADMAP.md](ROADMAP.md).
 
 ## Contributing
 
