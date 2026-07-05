@@ -266,6 +266,32 @@ jobs:
                   https://sibillaos.test:8080/v1/models || true)
                 echo "tls gateway answered $tls_code"
                 [ "$tls_code" = "401" ] || RC=1
+                # multi-model: pull a second quantization and require both
+                # to be served through the gateway by name
+                echo "--- multi-model check ---"
+                $SSH "echo sibilla | sudo -S bash -c 'export HOME=/root; ollama pull hf.co/bartowski/Qwen_Qwen3-0.6B-GGUF:Q8_0'" || RC=1
+                mcount=$(curl -ks --resolve sibillaos.test:8080:127.0.0.1 \
+                  -H "Authorization: Bearer $KEY" \
+                  https://sibillaos.test:8080/v1/models | jq '.data | length' || echo 0)
+                echo "models served: $mcount"
+                [ "$mcount" -ge 2 ] || RC=1
+                RESP2=$(curl -ks -m 900 --resolve sibillaos.test:8080:127.0.0.1 \
+                  https://sibillaos.test:8080/v1/chat/completions \
+                  -H "Authorization: Bearer $KEY" \
+                  -H "Content-Type: application/json" \
+                  -d "{\"model\": \"hf.co/bartowski/Qwen_Qwen3-0.6B-GGUF:Q8_0\", \"messages\": [{\"role\": \"user\", \"content\": \"Say ok.\"}], \"max_tokens\": 200}") || true
+                if echo "$RESP2" | jq -e '.choices[0].message | ((.content // "") + (.reasoning // "")) | length > 0' >/dev/null; then
+                  echo "SECOND MODEL OK"
+                else
+                  echo "second model failed"
+                  echo "$RESP2" | jq . || echo "$RESP2"
+                  RC=1
+                fi
+                # the connection kit must render and reference the endpoint
+                echo "--- sibilla-connect ---"
+                $SSH "echo sibilla | sudo -S sibilla-connect" > connect.out || RC=1
+                head -12 connect.out || true
+                grep -q "apiBase" connect.out || { echo "connect kit missing apiBase"; RC=1; }
               else
                 echo "inference failed: empty or malformed response"
               fi

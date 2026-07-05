@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+# sibilla-connect: print ready-to-paste configuration for coding tools on
+# your workstation, pointed at this SibillaOS machine.
+set -euo pipefail
+
+[[ $EUID -eq 0 ]] || { echo "run as root (sudo): the API key lives in /etc/llmd/apikey" >&2; exit 1; }
+
+MODE=http
+TLS_HOSTNAME=""
+# shellcheck disable=SC1091
+[[ -r /etc/llmd/gateway.conf ]] && . /etc/llmd/gateway.conf
+
+KEY=$(cat /etc/llmd/apikey 2>/dev/null || true)
+MODEL=$(cat /etc/llmd/model 2>/dev/null || echo "default")
+IP=$(hostname -I 2>/dev/null | awk '{print $1}')
+
+CANOTE=0
+case "$MODE" in
+  internal) BASE="https://$TLS_HOSTNAME:8080/v1"; CANOTE=1 ;;
+  acme)     BASE="https://$TLS_HOSTNAME/v1" ;;
+  *)        BASE="http://$IP:8080/v1" ;;
+esac
+
+cat <<KIT
+SibillaOS connection kit
+========================
+endpoint:  $BASE
+api key:   $KEY
+model id:  $MODEL
+
+VS Code (Continue, ~/.continue/config.yaml)
+-------------------------------------------
+models:
+  - name: SibillaOS
+    provider: openai
+    model: $MODEL
+    apiBase: $BASE
+    apiKey: $KEY
+    roles:
+      - chat
+      - edit
+
+VS Code (Cline)
+---------------
+Settings -> API Provider: OpenAI Compatible
+  Base URL:  $BASE
+  API Key:   $KEY
+  Model ID:  $MODEL
+
+aider
+-----
+aider --openai-api-base $BASE --openai-api-key $KEY --model openai/$MODEL
+
+Any OpenAI-compatible client
+----------------------------
+export OPENAI_BASE_URL=$BASE
+export OPENAI_API_KEY=$KEY
+KIT
+
+if [[ "$CANOTE" -eq 1 ]]; then
+  cat <<'NOTE'
+
+Note: the gateway uses a locally trusted CA. Import its certificate on
+your workstation (on this machine:
+/var/lib/caddy/.local/share/caddy/pki/authorities/local/root.crt) or
+configure the client to skip TLS verification for this host.
+NOTE
+fi

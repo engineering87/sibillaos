@@ -38,6 +38,7 @@ The installer detects your hardware and makes the decisions a human would otherw
 | **Single endpoint** | One OpenAI-compatible API on port 8080 with a mandatory bearer token. Engines stay on loopback. `sibilla-tls enable HOSTNAME` switches the gateway to HTTPS (local CA, or Let's Encrypt with `--acme`). |
 | **Model management** | `sibilla-model list` shows what fits your machine, `sibilla-model use ID` downloads and switches the served model. |
 | **Chat interface** | `sibilla-webui enable` starts Open WebUI on port 3000 as an opt-in container, wired to the local engine. |
+| **Editor hookup** | `sibilla-connect` prints ready-to-paste configuration for VS Code (Continue, Cline), aider and any OpenAI-compatible client. |
 
 The base install is a headless server; a desktop variant is on the roadmap.
 

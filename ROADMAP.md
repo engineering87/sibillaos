@@ -9,7 +9,8 @@ The operability release: everything needed to run SibillaOS beyond the first dem
 - llmfit shipped as a Debian package built from the pinned upstream release, removing the install-time network dependency. Done.
 - Open WebUI as an opt-in container managed by `sibilla-webui`. Done, pending manual validation.
 - HTTPS on the gateway via `sibilla-tls`: local CA for LAN hostnames, ACME for public ones. Done, exercised in CI.
-- Multi-model serving documented and tested: the gateway already passes the model field through, so `sibilla-model pull` for additional models and per-request model selection should be verified in CI rather than built.
+- Multi-model serving verified in CI: the gateway passes the model field through, so a second model is pulled and addressed by name in the install test.
+- Editor and agent connection kit, pulled forward from v0.3 on request: `sibilla-connect` prints ready-to-paste configuration for VS Code (Continue and Cline), aider and any OpenAI-compatible client, wired to the gateway endpoint and API key, with the CA note when TLS runs in local-CA mode.
 
 ## v0.3 (operations and platforms)
 
@@ -21,7 +22,6 @@ The release for people who run SibillaOS on real infrastructure.
 - Model store management: `sibilla model rm` and `sibilla model prune`, with disk usage reporting.
 - A cloud image alongside the ISO: the same stack published as a qcow2 with cloud-init, for Proxmox, libvirt and cloud providers. Likely the cheapest way to widen adoption, since the whole late-commands flow already lives in cloud-init territory.
 - arm64 build: Ubuntu, Ollama and llmfit all ship arm64 binaries; the repack pipeline should port with modest effort. Raspberry Pi 5 and Ampere servers are real targets for small local models.
-- Editor and agent connection kit: `sibilla connect` emits ready-to-paste configuration for coding tools on the user's workstation, wired to the gateway endpoint and API key. First targets: VS Code via Continue and Cline, aider, and a generic OpenAI-compatible snippet; includes the CA certificate note when TLS runs in local-CA mode.
 
 ## v0.4 (supply chain and enterprise)
 
