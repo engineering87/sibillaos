@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# sibilla: single entry point for SibillaOS administration.
+# The sibilla-* commands keep working as aliases.
+set -euo pipefail
+
+usage() {
+  cat <<USAGE
+usage: sibilla COMMAND [ARGS]
+
+  status         health view: engine, served models, disk, GPU, gateway
+  model ...      list, download, switch and remove models
+  tls ...        switch the gateway between HTTP and HTTPS
+  webui ...      enable or disable the Open WebUI chat interface
+  connect        print client configuration for editors and agents
+
+Run a command without arguments for its own usage.
+USAGE
+  exit 1
+}
+
+cmd="${1:-}"
+[[ $# -gt 0 ]] && shift
+case "$cmd" in
+  status)  exec /usr/lib/llmd/sibilla-status "$@" ;;
+  model)   exec sibilla-model "$@" ;;
+  tls)     exec sibilla-tls "$@" ;;
+  webui)   exec sibilla-webui "$@" ;;
+  connect) exec sibilla-connect "$@" ;;
+  *)       usage ;;
+esac

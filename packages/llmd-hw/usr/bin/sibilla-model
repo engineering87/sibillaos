@@ -13,6 +13,8 @@ usage: sibilla-model COMMAND
   status         show engine, current model and API endpoint
   list           curated models for this machine, plus llmfit picks
   use MODEL_ID   download MODEL_ID and make it the served model
+  rm MODEL_ID    remove a downloaded model (refuses the served one)
+  prune          remove every downloaded model except the served one
 EOF
   exit 1
 }
@@ -57,9 +59,61 @@ cmd_use() {
   echo "now serving: $model"
 }
 
+cmd_rm() {
+  need_root
+  local model="$1"
+  if [[ -n "$CURRENT" && "$model" == "$CURRENT" ]]; then
+    echo "refusing to remove the served model; switch first with: sibilla model use ID" >&2
+    exit 1
+  fi
+  # the ollama CLI panics without HOME when run over ssh/sudo
+  export HOME="${HOME:-/root}"
+  case "$ENGINE" in
+    ollama)
+      ollama rm "$model"
+      ;;
+    vllm)
+      # vllm models live in the shared HF cache; the repo id maps to
+      # a models--org--name directory inside hub/
+      local dir="/var/lib/llmd/models/hf/hub/models--${model//\//--}"
+      [[ -d "$dir" ]] || { echo "no local files for $model" >&2; exit 1; }
+      rm -rf "$dir"
+      ;;
+  esac
+  echo "removed: $model"
+}
+
+cmd_prune() {
+  need_root
+  export HOME="${HOME:-/root}"
+  local removed=0
+  case "$ENGINE" in
+    ollama)
+      while IFS= read -r m; do
+        [[ -z "$m" || "$m" == "$CURRENT" ]] && continue
+        ollama rm "$m" && removed=$((removed + 1))
+      done < <(ollama list 2>/dev/null | tail -n +2 | awk '{print $1}')
+      ;;
+    vllm)
+      local keep="models--${CURRENT//\//--}"
+      local d
+      for d in /var/lib/llmd/models/hf/hub/models--*; do
+        [[ -e "$d" ]] || continue
+        [[ "$(basename "$d")" == "$keep" ]] && continue
+        rm -rf "$d"
+        removed=$((removed + 1))
+      done
+      ;;
+  esac
+  echo "removed $removed model(s); kept: ${CURRENT:-none}"
+  du -sh /var/lib/llmd/models 2>/dev/null || true
+}
+
 case "${1:-}" in
   status) cmd_status ;;
   list)   cmd_list ;;
   use)    [[ $# -ge 2 ]] || usage; cmd_use "$2" ;;
+  rm)     [[ $# -ge 2 ]] || usage; cmd_rm "$2" ;;
+  prune)  cmd_prune ;;
   *)      usage ;;
 esac

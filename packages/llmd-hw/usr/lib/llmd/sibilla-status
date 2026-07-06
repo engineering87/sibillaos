@@ -1,0 +1,80 @@
+#!/usr/bin/env bash
+# sibilla-status: health view of the SibillaOS stack.
+# Exits nonzero when the engine or the gateway is down, so it can be
+# used as a machine check as well as a human summary.
+set -euo pipefail
+
+ENGINE=$(cat /etc/llmd/engine 2>/dev/null || echo ollama)
+MODEL=$(cat /etc/llmd/model 2>/dev/null || true)
+FAIL=0
+
+# engine service state
+unit=ollama.service
+[[ "$ENGINE" == "vllm" ]] && unit=vllm.service
+engine_state=$(systemctl is-active "$unit" 2>/dev/null || true)
+[[ "$engine_state" == "active" ]] || FAIL=1
+echo "engine:    $ENGINE ($engine_state)"
+echo "model:     ${MODEL:-none selected}"
+
+# served models, straight from the engine on loopback
+case "$ENGINE" in
+  vllm) mjson=$(curl -s -m 5 http://127.0.0.1:8000/v1/models 2>/dev/null || true) ;;
+  *)    mjson=$(curl -s -m 5 http://127.0.0.1:11434/v1/models 2>/dev/null || true) ;;
+esac
+count=$(echo "$mjson" | jq '.data | length' 2>/dev/null) || count=""
+if [[ -n "$count" ]]; then
+  echo "served:    $count model(s)"
+  echo "$mjson" | jq -r '.data[].id' 2>/dev/null | sed 's/^/           - /'
+else
+  echo "served:    engine API not reachable"
+  FAIL=1
+fi
+
+# model store disk usage
+store=/var/lib/llmd/models
+if [[ -d "$store" ]]; then
+  used=$(du -sh "$store" 2>/dev/null | cut -f1)
+  free=$(df -h --output=avail "$store" 2>/dev/null | tail -1 | tr -d ' ')
+  echo "disk:      $used in $store ($free free on the filesystem)"
+fi
+
+# GPU utilization when present
+if command -v nvidia-smi >/dev/null 2>&1; then
+  if ! nvidia-smi --query-gpu=name,utilization.gpu,memory.used,memory.total \
+      --format=csv,noheader 2>/dev/null | sed 's/^/gpu:       /'; then
+    echo "gpu:       nvidia-smi present but not responding"
+  fi
+else
+  echo "gpu:       none detected (CPU inference)"
+fi
+
+# gateway reachability, honoring the configured mode
+MODE=http
+TLS_HOSTNAME=""
+# shellcheck disable=SC1091
+[[ -r /etc/llmd/gateway.conf ]] && . /etc/llmd/gateway.conf
+case "$MODE" in
+  internal)
+    endpoint="https://$TLS_HOSTNAME:8080"
+    code=$(curl -ks -o /dev/null -w '%{http_code}' -m 5 \
+      --resolve "$TLS_HOSTNAME:8080:127.0.0.1" "$endpoint/v1/models" || true)
+    ;;
+  acme)
+    endpoint="https://$TLS_HOSTNAME"
+    code=$(curl -s -o /dev/null -w '%{http_code}' -m 5 \
+      --resolve "$TLS_HOSTNAME:443:127.0.0.1" "$endpoint/v1/models" || true)
+    ;;
+  *)
+    endpoint="http://$(hostname -I 2>/dev/null | awk '{print $1}'):8080"
+    code=$(curl -s -o /dev/null -w '%{http_code}' -m 5 \
+      http://127.0.0.1:8080/v1/models || true)
+    ;;
+esac
+if [[ "$code" == "401" || "$code" == "200" ]]; then
+  echo "gateway:   $endpoint up, mode $MODE (key in /etc/llmd/apikey)"
+else
+  echo "gateway:   $endpoint NOT responding (http ${code:-000})"
+  FAIL=1
+fi
+
+exit "$FAIL"

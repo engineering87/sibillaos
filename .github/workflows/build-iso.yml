@@ -379,6 +379,29 @@ jobs:
                 hcount=${hcount:-0}
                 echo "models served over http: $hcount"
                 [ "$hcount" -ge 2 ] || RC=1
+                # unified CLI: the health view must aggregate the stack
+                # state, show the served model and exit zero
+                echo "--- sibilla status ---"
+                if $SSH "sibilla status" > status.out; then
+                  cat status.out
+                else
+                  echo "sibilla status exited nonzero"
+                  cat status.out || true
+                  RC=1
+                fi
+                grep -q "gateway:.*up" status.out || { echo "status does not report the gateway up"; RC=1; }
+                grep -q "$MODEL" status.out || { echo "status does not show the served model"; RC=1; }
+                # prune must drop the second model and keep the served one
+                echo "--- sibilla model prune ---"
+                $SSH "echo sibilla | sudo -S sibilla model prune" || RC=1
+                pcount=$(curl -s -H "Authorization: Bearer $KEY" \
+                  http://127.0.0.1:8080/v1/models | jq '.data | length' 2>/dev/null) || pcount=0
+                pcount=${pcount:-0}
+                echo "models after prune: $pcount"
+                [ "$pcount" -eq 1 ] || RC=1
+                # the served model must survive the prune
+                curl -s -H "Authorization: Bearer $KEY" http://127.0.0.1:8080/v1/models \
+                  | jq -r '.data[].id' | grep -q "$MODEL" || { echo "prune removed the served model"; RC=1; }
               else
                 echo "inference failed: empty or malformed response"
               fi
