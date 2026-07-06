@@ -24,6 +24,8 @@ autoinstall:
     - jq
     - pciutils
     - caddy
+    - ufw
+    - unattended-upgrades
   drivers:
     # Install NVIDIA drivers from the Ubuntu restricted component when detected
     install: true

@@ -17,6 +17,8 @@ AddDevice=nvidia.com/gpu=all
 PublishPort=127.0.0.1:8000:8000
 Volume=/var/lib/llmd/models/hf:/root/.cache/huggingface:Z
 EnvironmentFile=-/etc/llmd/vllm.env
+# the workload never needs to gain privileges at runtime
+PodmanArgs=--security-opt=no-new-privileges
 # The model selected at install time is passed as an argument
 Exec=--model ${LLMD_MODEL} --host 0.0.0.0 --port 8000
 

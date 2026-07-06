@@ -35,6 +35,12 @@ case "${1:-}" in
       [[ $# -ge 4 ]] || usage
       printf 'MODE=acme\nTLS_HOSTNAME=%s\nACME_EMAIL=%s\n' "$host" "$4" > "$CONF"
       render_restart
+      # ACME needs 80 (challenge) and 443 (service) reachable
+      if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q "Status: active"; then
+        ufw allow 80/tcp >/dev/null
+        ufw allow 443/tcp >/dev/null
+        echo "firewall: opened ports 80 and 443 for ACME"
+      fi
       echo "gateway: https://$host (Let's Encrypt)"
     else
       printf 'MODE=internal\nTLS_HOSTNAME=%s\n' "$host" > "$CONF"

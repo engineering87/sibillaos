@@ -86,5 +86,15 @@ esac
 systemctl enable caddy.service
 systemctl restart caddy.service
 
+# 5. Firewall: default-closed, only SSH and the gateway port open.
+# Open WebUI's port 3000 stays closed until the admin opens it
+# deliberately (sibilla webui enable prints the command).
+if command -v ufw >/dev/null 2>&1; then
+  ufw allow OpenSSH >/dev/null 2>&1 || ufw allow 22/tcp >/dev/null
+  ufw allow 8080/tcp >/dev/null
+  ufw --force enable
+  echo "firewall enabled: only SSH and the gateway port are open"
+fi
+
 touch "$STATE"
 echo "SibillaOS is ready: OpenAI-compatible API on :8080 (key in /etc/llmd/apikey)"

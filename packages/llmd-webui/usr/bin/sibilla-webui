@@ -29,6 +29,10 @@ case "${1:-}" in
     echo "Open WebUI enabled: http://$(hostname -I 2>/dev/null | awk '{print $1}'):3000"
     echo "The first pull of the container image can take several minutes;"
     echo "follow it with: journalctl -u webui.service -f"
+    if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q "Status: active"; then
+      echo "Port 3000 is closed by the firewall; expose it deliberately with:"
+      echo "  sudo ufw allow 3000/tcp"
+    fi
     ;;
   disable)
     need_root

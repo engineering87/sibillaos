@@ -402,6 +402,30 @@ jobs:
                 # the served model must survive the prune
                 curl -s -H "Authorization: Bearer $KEY" http://127.0.0.1:8080/v1/models \
                   | jq -r '.data[].id' | grep -q "$MODEL" || { echo "prune removed the served model"; RC=1; }
+                # security baseline: firewall active with only ssh and
+                # the gateway open, unattended upgrades configured, and
+                # the hardening directives still on the units
+                echo "--- security baseline ---"
+                $SSH "echo sibilla | sudo -S ufw status" > ufw.out || RC=1
+                cat ufw.out
+                grep -q "Status: active" ufw.out || { echo "ufw not active"; RC=1; }
+                grep -q "8080/tcp" ufw.out || { echo "gateway port not allowed"; RC=1; }
+                grep -q "3000" ufw.out && { echo "webui port open by default"; RC=1; }
+                $SSH "grep -q 'Unattended-Upgrade .1.' /etc/apt/apt.conf.d/51sibilla-upgrades" \
+                  || { echo "unattended upgrades config missing"; RC=1; }
+                for u in ollama caddy; do
+                  $SSH "systemctl show -p NoNewPrivileges $u.service" | grep -q "=yes" \
+                    || { echo "$u.service lost NoNewPrivileges"; RC=1; }
+                done
+                $SSH "systemctl show -p ProtectSystem ollama.service" | grep -q "=strict" \
+                  || { echo "ollama.service lost ProtectSystem=strict"; RC=1; }
+                $SSH "systemctl show -p PrivateTmp llmd-firstboot.service" | grep -q "=yes" \
+                  || { echo "llmd-firstboot.service lost its sandbox"; RC=1; }
+                # informational: exposure scores for the record
+                $SSH "echo sibilla | sudo -S systemd-analyze security --no-pager ollama.service 2>/dev/null" \
+                  | grep -i "overall exposure" || true
+                $SSH "echo sibilla | sudo -S systemd-analyze security --no-pager caddy.service 2>/dev/null" \
+                  | grep -i "overall exposure" || true
               else
                 echo "inference failed: empty or malformed response"
               fi

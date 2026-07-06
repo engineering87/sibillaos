@@ -11,6 +11,14 @@ RemainAfterExit=true
 TimeoutStartSec=infinity
 StandardOutput=journal+console
 StandardError=journal+console
+# Sandbox, as far as a root setup task allows. No ProtectHome: the
+# ollama CLI writes its key under /root/.ollama during the pull.
+PrivateTmp=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
 
 [Install]
 WantedBy=multi-user.target
