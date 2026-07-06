@@ -1,0 +1,79 @@
+#!/usr/bin/env bash
+# llmd-gateway-render: writes /etc/caddy/Caddyfile from /etc/llmd/gateway.conf
+# Modes: http (default, port 8080), internal (HTTPS on 8080 with Caddy's
+# local CA for a given hostname), acme (public HTTPS on 443 with Let's
+# Encrypt; requires a reachable hostname and open ports 80/443).
+set -euo pipefail
+
+# paths are overridable so the CI lint job can render and validate
+# the configs on a plain runner
+CONF="${LLMD_GATEWAY_CONF:-/etc/llmd/gateway.conf}"
+CADDYFILE="${LLMD_CADDYFILE:-/etc/caddy/Caddyfile}"
+ENGINE_FILE="${LLMD_ENGINE_FILE:-/etc/llmd/engine}"
+MODE=http
+TLS_HOSTNAME=""
+ACME_EMAIL=""
+# shellcheck disable=SC1090
+[[ -r "$CONF" ]] && . "$CONF"
+
+engine=$(cat "$ENGINE_FILE" 2>/dev/null || echo ollama)
+case "$engine" in
+  vllm) upstream="127.0.0.1:8000" ;;
+  *)    upstream="127.0.0.1:11434" ;;
+esac
+
+auth_block() {
+  cat <<'BLOCK'
+	# API key required (generated at first boot, stored in /etc/llmd/apikey)
+	@unauthorized not header Authorization "Bearer {$LLMD_API_KEY}"
+	respond @unauthorized 401
+BLOCK
+}
+
+# Ollama guards against DNS rebinding: on a loopback listener it rejects
+# any Host header that is not an IP, "localhost", the machine hostname or
+# a .localhost/.local/.internal name with an empty 403 (allowedHostsMiddleware
+# in server/routes.go). Caddy forwards the original Host by default, so a
+# request for https://myhost:8080 would reach ollama as Host "myhost:8080"
+# and be dropped. Rewrite the proxied Host to the upstream address instead.
+proxy_block() {
+  cat <<BLOCK
+	reverse_proxy $upstream {
+		header_up Host {upstream_hostport}
+	}
+BLOCK
+}
+
+case "$MODE" in
+  internal)
+    [[ -n "$TLS_HOSTNAME" ]] || { echo "internal mode needs TLS_HOSTNAME" >&2; exit 1; }
+    {
+      echo "https://$TLS_HOSTNAME:8080 {"
+      echo "	tls internal"
+      auth_block
+      proxy_block
+      echo "}"
+    } > "$CADDYFILE"
+    ;;
+  acme)
+    [[ -n "$TLS_HOSTNAME" && -n "$ACME_EMAIL" ]] || { echo "acme mode needs TLS_HOSTNAME and ACME_EMAIL" >&2; exit 1; }
+    {
+      echo "{"
+      echo "	email $ACME_EMAIL"
+      echo "}"
+      echo "$TLS_HOSTNAME {"
+      auth_block
+      proxy_block
+      echo "}"
+    } > "$CADDYFILE"
+    ;;
+  *)
+    {
+      echo ":8080 {"
+      auth_block
+      proxy_block
+      echo "}"
+    } > "$CADDYFILE"
+    ;;
+esac
+echo "gateway config rendered: mode=$MODE upstream=$upstream"

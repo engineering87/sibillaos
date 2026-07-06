@@ -1,0 +1,25 @@
+# SibillaOS Quadlet: Open WebUI chat interface (opt-in)
+# Generates webui.service; enable and disable with the sibilla-webui CLI.
+[Unit]
+Description=Open WebUI chat interface (container)
+After=network-online.target ollama.service
+Wants=network-online.target
+# Only activate when the admin opted in via sibilla-webui enable
+ConditionPathExists=/etc/llmd/webui.enabled
+
+[Container]
+Image=ghcr.io/open-webui/open-webui:main
+# Host networking so the container reaches ollama on 127.0.0.1:11434
+# (ollama is deliberately loopback-only). PORT avoids clashing with the
+# gateway on 8080. Open WebUI has its own login on first access.
+Network=host
+Environment=PORT=3000
+Environment=OLLAMA_BASE_URL=http://127.0.0.1:11434
+Volume=/var/lib/llmd/webui:/app/backend/data:Z
+
+[Service]
+Restart=on-failure
+TimeoutStartSec=900
+
+[Install]
+WantedBy=multi-user.target

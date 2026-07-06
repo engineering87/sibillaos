@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# sibilla-webui: enable or disable the Open WebUI chat interface.
+set -euo pipefail
+
+FLAG=/etc/llmd/webui.enabled
+
+usage() {
+  cat <<USAGE
+usage: sibilla-webui COMMAND
+
+  enable    start Open WebUI on port 3000 (persists across reboots)
+  disable   stop Open WebUI and keep it off
+  status    show whether the interface is enabled and running
+USAGE
+  exit 1
+}
+
+need_root() { [[ $EUID -eq 0 ]] || { echo "run as root (sudo)" >&2; exit 1; }; }
+
+case "${1:-}" in
+  enable)
+    need_root
+    mkdir -p /var/lib/llmd/webui /etc/llmd
+    touch "$FLAG"
+    systemctl daemon-reload
+    # --no-block: the first start pulls a multi-GB image and a plain
+    # start would sit silent until the download finishes
+    systemctl start --no-block webui.service
+    echo "Open WebUI enabled: http://$(hostname -I 2>/dev/null | awk '{print $1}'):3000"
+    echo "The first pull of the container image can take several minutes;"
+    echo "follow it with: journalctl -u webui.service -f"
+    ;;
+  disable)
+    need_root
+    systemctl stop webui.service 2>/dev/null || true
+    rm -f "$FLAG"
+    systemctl daemon-reload
+    echo "Open WebUI disabled."
+    ;;
+  status)
+    if [[ -e "$FLAG" ]]; then
+      echo "enabled:  yes"
+    else
+      echo "enabled:  no"
+    fi
+    echo "service:  $(systemctl is-active webui.service 2>/dev/null || true)"
+    ;;
+  *) usage ;;
+esac

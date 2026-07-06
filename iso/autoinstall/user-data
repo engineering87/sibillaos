@@ -32,10 +32,10 @@ autoinstall:
     - cp -r /cdrom/sibilla /target/opt/sibilla
     # 2. Install the llmd packages (the model catalog ships inside llmd-hw)
     - curtin in-target -- bash -c 'dpkg -i /opt/sibilla/debs/*.deb || apt-get -f install -y'
-    # 3. Inference engine and llmfit, PINNED versions for reproducible
-    #    builds (bump deliberately; the CI install test validates them)
+    # 3. Inference engine, PINNED version for reproducible builds (bump
+    #    deliberately; the CI install test validates it). llmfit ships as
+    #    a deb in the ISO payload since v0.2.
     - curtin in-target -- bash -c 'curl -fsSL https://ollama.com/install.sh | OLLAMA_VERSION=0.31.1 sh'
-    - curtin in-target -- bash -c 'curl -fL -o /tmp/llmfit.tgz https://github.com/AlexsJones/llmfit/releases/download/v0.9.36/llmfit-v0.9.36-x86_64-unknown-linux-musl.tar.gz && mkdir -p /tmp/llmfit-dist && tar -xzf /tmp/llmfit.tgz -C /tmp/llmfit-dist && install -m755 "$(find /tmp/llmfit-dist -type f -name llmfit | head -1)" /usr/local/bin/llmfit'
     # 4. Hardware detection and default model pick (non-fatal: firstboot
     #    still brings the gateway up without a preselected model)
     - curtin in-target -- /usr/lib/llmd/llmd-hw-detect --write /etc/llmd/engine
