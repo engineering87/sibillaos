@@ -27,7 +27,10 @@ write_files:
       # inference engine, PINNED version (same pin as the ISO build)
       curl -fsSL https://ollama.com/install.sh | OLLAMA_VERSION=0.31.1 sh
       if [ -f /mnt/seed/ci-model ]; then
-        install -m644 /mnt/seed/ci-model /etc/llmd/model
+        # -D: /etc/llmd does not exist yet at bake time; on the ISO
+        # path the installer late-commands create it, here the whole
+        # llmd setup is deferred to the first boot
+        install -D -m644 /mnt/seed/ci-model /etc/llmd/model
       fi
       systemctl enable llmd-firstboot.service
       umount /mnt/seed
