@@ -9,9 +9,22 @@ STATE=/var/lib/llmd/firstboot.done
 # systemd oneshot units have no HOME; the ollama CLI panics without it
 export HOME="${HOME:-/root}"
 
+mkdir -p /var/lib/llmd/models /etc/llmd
+
+# Cloud images skip the installer: detect the engine and pick a model
+# here, at the real first boot, where the deployed hardware (and its
+# GPU, if any) is visible. No-ops on ISO installs, where the files
+# were already written by the autoinstall late-commands.
+if [[ ! -s /etc/llmd/engine && -x /usr/lib/llmd/llmd-hw-detect ]]; then
+  /usr/lib/llmd/llmd-hw-detect --write /etc/llmd/engine || true
+fi
+if [[ ! -s /etc/llmd/model && -x /usr/lib/llmd/llmd-model-select ]]; then
+  /usr/lib/llmd/llmd-model-select --auto \
+    --catalog /usr/share/llmd/models.json --out /etc/llmd/model || true
+fi
+
 engine=$(cat /etc/llmd/engine 2>/dev/null || echo ollama)
 model=$(cat /etc/llmd/model 2>/dev/null || true)
-mkdir -p /var/lib/llmd/models /etc/llmd
 
 # 1. API key: stored for the admin and exported to Caddy via gateway.env
 if [[ ! -s /etc/llmd/apikey ]]; then

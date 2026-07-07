@@ -38,6 +38,7 @@ The installer detects your hardware and makes the decisions a human would otherw
 | **Single endpoint** | One OpenAI-compatible API on port 8080 with a mandatory bearer token. Engines stay on loopback. `sibilla tls enable HOSTNAME` switches the gateway to HTTPS (local CA, or Let's Encrypt with `--acme`). |
 | **One CLI** | `sibilla status` is a health view of the whole stack: engine, served models, disk usage of the model store, GPU utilization, gateway reachability. |
 | **Model management** | `sibilla model list` shows what fits your machine, `sibilla model use ID` downloads and switches the served model, `rm` and `prune` reclaim disk. |
+| **Observability** | `sibilla metrics enable` serves Prometheus metrics behind the same API key; Grafana dashboard included in [docs/observability](docs/observability/). |
 | **Chat interface** | `sibilla webui enable` starts Open WebUI on port 3000 as an opt-in container, wired to the local engine. |
 | **Editor hookup** | `sibilla connect` prints ready-to-paste configuration for VS Code (Continue, Cline), aider and any OpenAI-compatible client. |
 
@@ -46,6 +47,8 @@ The base install is a headless server; a desktop variant is on the roadmap.
 ## Getting started
 
 The easiest path is a prebuilt ISO from [Releases](https://github.com/engineering87/sibillaos/releases), verified against its `SHA256SUMS`. GitHub caps release assets at 2 GiB, so the ISO ships in parts: `cat sibillaos-*.iso.part* > sibillaos.iso` reassembles it.
+
+For virtual machines there is also a qcow2 cloud image: attach your own cloud-init user-data (user, SSH keys) as on any Ubuntu cloud image, and the LLM stack configures itself at first boot, detecting the hardware it landed on. Works with Proxmox, libvirt and anything that speaks cloud-init.
 
 To build from source you only need `xorriso` and `curl` (no root). The build downloads the official Ubuntu 24.04 live-server ISO, verifies its checksum and repacks it with the SibillaOS autoinstall, packages and branding:
 
@@ -61,6 +64,7 @@ Every push to `main` also builds the ISO in CI, boots it in QEMU and runs the au
 
 ```
 iso/          ISO repack (official Ubuntu live-server + payload) and autoinstall
+cloud/        qcow2 cloud image bake (official Ubuntu cloud image + payload)
 packages/     Debian packages: hardware detection, engines, gateway, first boot
 catalog/      curated model list (signed JSON)
 branding/     logo, banner and wallpaper

@@ -1,0 +1,29 @@
+#cloud-config
+# SibillaOS bake-phase configuration. Runs exactly once inside the
+# build VM, then reseals cloud-init: the deployer's own user-data
+# applies at the real first boot. No user is created here.
+users: []
+runcmd:
+  - |
+    set -e
+    mkdir -p /mnt/seed
+    mount -o ro /dev/disk/by-label/CIDATA /mnt/seed \
+      || mount -o ro /dev/disk/by-label/cidata /mnt/seed
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update
+    dpkg -i /mnt/seed/debs/*.deb || apt-get -f install -y
+    # inference engine, PINNED version (same pin as the ISO build)
+    curl -fsSL https://ollama.com/install.sh | OLLAMA_VERSION=0.31.1 sh
+    if [ -f /mnt/seed/ci-model ]; then
+      install -m644 /mnt/seed/ci-model /etc/llmd/model
+    fi
+    systemctl enable llmd-firstboot.service
+    umount /mnt/seed
+    # reseal: wipe cloud-init state and the machine identity so every
+    # deployment starts as a fresh instance
+    cloud-init clean --logs --machine-id
+    echo "SIBILLA_BAKE_OK"
+power_state:
+  mode: poweroff
+  timeout: 60
+  condition: true

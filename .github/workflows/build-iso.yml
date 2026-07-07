@@ -14,13 +14,17 @@ jobs:
       - name: Shellcheck
         run: |
           sudo apt-get update && sudo apt-get install -y shellcheck
-          shellcheck iso/build.sh packages/build-debs.sh \
+          shellcheck iso/build.sh packages/build-debs.sh cloud/build-cloud.sh \
             packages/llmd-hw/usr/lib/llmd/* packages/llmd-hw/usr/bin/* \
             packages/llmd-firstboot/usr/lib/llmd/* \
             packages/llmd-gateway/usr/lib/llmd/* packages/llmd-gateway/usr/bin/* \
             packages/llmd-webui/usr/bin/*
       - name: Validate catalog JSON
         run: jq empty catalog/models.json
+      - name: Validate cloud-init YAML
+        run: |
+          python3 -c "import yaml; yaml.safe_load(open('cloud/bake/user-data').read().replace('#cloud-config','',1))"
+          python3 -c "import yaml; yaml.safe_load(open('iso/autoinstall/user-data').read().replace('#cloud-config','',1))"
       - name: Validate rendered Caddyfiles
         # render every gateway mode with the real script and let caddy
         # parse and provision the result
@@ -32,7 +36,9 @@ jobs:
           export LLMD_API_KEY=lint-test-key
           echo ollama > "$LLMD_ENGINE_FILE"
           for conf in 'MODE=http' \
+                      'MODE=http\nMETRICS=on' \
                       'MODE=internal\nTLS_HOSTNAME=sibillaos.test' \
+                      'MODE=internal\nTLS_HOSTNAME=sibillaos.test\nMETRICS=on' \
                       'MODE=acme\nTLS_HOSTNAME=example.org\nACME_EMAIL=ops@example.org'; do
             printf "$conf\n" > "$LLMD_GATEWAY_CONF"
             bash packages/llmd-gateway/usr/lib/llmd/llmd-gateway-render
@@ -426,6 +432,37 @@ jobs:
                   | grep -i "overall exposure" || true
                 $SSH "echo sibilla | sudo -S systemd-analyze security --no-pager caddy.service 2>/dev/null" \
                   | grep -i "overall exposure" || true
+                # metrics: the endpoint must appear when enabled, carry
+                # caddy http series and honor the same bearer token
+                echo "--- sibilla metrics ---"
+                $SSH "echo sibilla | sudo -S sibilla metrics enable" || RC=1
+                sleep 3
+                mgcode=$(curl -s -o metrics.out -w '%{http_code}' \
+                  -H "Authorization: Bearer $KEY" \
+                  http://127.0.0.1:8080/metrics/gateway || true)
+                if [ "$mgcode" = "200" ] && grep -q "caddy_http_" metrics.out; then
+                  echo "metrics endpoint OK"
+                else
+                  echo "metrics endpoint answered $mgcode"
+                  head -5 metrics.out || true
+                  RC=1
+                fi
+                mgnokey=$(curl -s -o /dev/null -w '%{http_code}' \
+                  http://127.0.0.1:8080/metrics/gateway || true)
+                [ "$mgnokey" = "401" ] || { echo "metrics served without key: $mgnokey"; RC=1; }
+                # the API must still work with metrics on
+                acode=$(curl -s -o /dev/null -w '%{http_code}' \
+                  -H "Authorization: Bearer $KEY" http://127.0.0.1:8080/v1/models || true)
+                [ "$acode" = "200" ] || { echo "api broken with metrics on: $acode"; RC=1; }
+                # the metrics flag must survive a tls mode change
+                $SSH "echo sibilla | sudo -S sibilla tls enable sibillaos.test" || RC=1
+                sleep 5
+                tmcode=$(curl -ks -o /dev/null -w '%{http_code}' \
+                  --resolve sibillaos.test:8080:127.0.0.1 \
+                  -H "Authorization: Bearer $KEY" \
+                  https://sibillaos.test:8080/metrics/gateway || true)
+                [ "$tmcode" = "200" ] || { echo "metrics lost across tls switch: $tmcode"; RC=1; }
+                $SSH "echo sibilla | sudo -S sibilla tls disable" || RC=1
               else
                 echo "inference failed: empty or malformed response"
               fi
@@ -446,3 +483,156 @@ jobs:
           path: |
             install.log
             firstboot.log
+
+  build-cloud:
+    needs: lint
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-system-x86 qemu-utils xorriso
+          if [ -e /dev/kvm ]; then sudo chmod 666 /dev/kvm; fi
+      - name: Cache Ubuntu cloud image
+        uses: actions/cache@v4
+        with:
+          path: work-cloud/*.img
+          key: ubuntu-noble-cloudimg-amd64
+      - name: Build llmd-* debs
+        run: bash ./packages/build-debs.sh
+      - name: Bake cloud image
+        # same small-model override as the ISO build; never on tags
+        env:
+          SIBILLA_TEST_MODEL: ${{ startsWith(github.ref, 'refs/tags/') && '' || 'hf.co/bartowski/Qwen_Qwen3-0.6B-GGUF:Q4_K_M' }}
+        run: bash ./cloud/build-cloud.sh
+      - name: Upload bake log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloud-bake-log
+          path: work-cloud/bake.log
+      - name: Upload cloud image artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sibillaos-cloud
+          path: out/*.qcow2
+          retention-days: 14
+      - name: Prepare cloud release assets (tags only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          cd out
+          sha256sum ./*.qcow2 > SHA256SUMS-cloud
+          # release assets are hard-capped at 2 GiB: split when needed
+          for f in ./*.qcow2; do
+            size=$(stat -c%s "$f")
+            if [ "$size" -gt 1900000000 ]; then
+              split -b 1900M -d "$f" "$f.part"
+              rm "$f"
+              sha256sum ./*.part* >> SHA256SUMS-cloud
+            fi
+          done
+      - name: Attach cloud image to release (tags only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            out/*.qcow2*
+            out/SHA256SUMS-cloud
+
+  cloud-test:
+    needs: build-cloud
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Download cloud image
+        uses: actions/download-artifact@v4
+        with:
+          name: sibillaos-cloud
+          path: cloud-img
+      - name: Install QEMU
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-system-x86 qemu-utils xorriso sshpass jq
+      - name: Deploy and probe
+        run: |
+          IMG=$(ls cloud-img/*.qcow2 | head -1)
+          KVM=""
+          if [ -e /dev/kvm ]; then
+            sudo chmod 666 /dev/kvm
+            KVM="-enable-kvm -cpu host"
+          fi
+          # a deployer-style NoCloud seed: own user, password ssh
+          mkdir seed
+          cat > seed/user-data <<'EOF'
+          #cloud-config
+          hostname: sibilla-cloud
+          ssh_pwauth: true
+          users:
+            - name: sibilla
+              plain_text_passwd: sibilla
+              lock_passwd: false
+              shell: /bin/bash
+              groups: sudo
+              sudo: ALL=(ALL) NOPASSWD:ALL
+          EOF
+          printf 'instance-id: sibilla-cloud-ci\n' > seed/meta-data
+          xorriso -as mkisofs -volid CIDATA -joliet -rock -o seed.iso seed
+          # shellcheck disable=SC2086
+          qemu-system-x86_64 -m 4096 -smp 2 $KVM \
+            -display none -serial file:cloud.log \
+            -drive "file=$IMG,format=qcow2,if=virtio" \
+            -drive "file=seed.iso,format=raw,if=virtio,readonly=on" \
+            -netdev user,id=n0,hostfwd=tcp::8080-:8080,hostfwd=tcp::2222-:22 \
+            -device virtio-net,netdev=n0 &
+          QPID=$!
+          ok=0
+          # first boot downloads the model; allow up to 20 minutes
+          for _ in $(seq 1 120); do
+            sleep 10
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/v1/models || true)
+            if [ "$code" = "401" ]; then
+              ok=1
+              break
+            fi
+          done
+          RC=1
+          if [ "$ok" -eq 1 ]; then
+            echo "gateway answered 401"
+            SSH="sshpass -p sibilla ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p 2222 sibilla@127.0.0.1"
+            KEY=$($SSH "sudo cat /etc/llmd/apikey" | tail -1)
+            MODEL=$($SSH "sudo cat /etc/llmd/model" | tail -1)
+            echo "model: $MODEL"
+            if [ -n "$KEY" ] && [ -n "$MODEL" ]; then
+              RESP=$(curl -s -m 900 http://127.0.0.1:8080/v1/chat/completions \
+                -H "Authorization: Bearer $KEY" \
+                -H "Content-Type: application/json" \
+                -d "{\"model\": \"$MODEL\", \"messages\": [{\"role\": \"user\", \"content\": \"Say ok.\"}], \"max_tokens\": 200}") || true
+              if echo "$RESP" | jq -e '.choices[0].message | ((.content // "") + (.reasoning // "")) | length > 0' >/dev/null; then
+                echo "CLOUD INFERENCE OK"
+                if $SSH "sibilla status"; then
+                  RC=0
+                else
+                  echo "sibilla status failed on the cloud image"
+                fi
+              else
+                echo "cloud inference failed"
+                echo "$RESP" | jq . || echo "$RESP"
+              fi
+            else
+              echo "could not read api key or model over ssh"
+            fi
+          else
+            echo "gateway never came up; console tail:"
+            tail -80 cloud.log || true
+          fi
+          kill "$QPID" 2>/dev/null || true
+          exit "$RC"
+      - name: Upload cloud debug artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloud-debug
+          path: cloud.log

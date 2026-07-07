@@ -3,6 +3,7 @@
 # Modes: http (default, port 8080), internal (HTTPS on 8080 with Caddy's
 # local CA for a given hostname), acme (public HTTPS on 443 with Let's
 # Encrypt; requires a reachable hostname and open ports 80/443).
+# METRICS=on adds an authenticated Prometheus endpoint at /metrics/gateway.
 set -euo pipefail
 
 # paths are overridable so the CI lint job can render and validate
@@ -13,6 +14,7 @@ ENGINE_FILE="${LLMD_ENGINE_FILE:-/etc/llmd/engine}"
 MODE=http
 TLS_HOSTNAME=""
 ACME_EMAIL=""
+METRICS=off
 # shellcheck disable=SC1090
 [[ -r "$CONF" ]] && . "$CONF"
 
@@ -22,24 +24,35 @@ case "$engine" in
   *)    upstream="127.0.0.1:11434" ;;
 esac
 
-auth_block() {
+# The site body is wrapped in a route block because Caddy's default
+# directive order runs handlers like metrics BEFORE respond: without
+# route, /metrics/gateway would be served to unauthenticated clients.
+# route preserves the written order, so the 401 always comes first.
+#
+# The proxied Host header is rewritten to the upstream address: ollama
+# guards against DNS rebinding (allowedHostsMiddleware in its
+# server/routes.go) and drops any non-local Host on a loopback
+# listener with an empty 403, which would break every authenticated
+# request as soon as the gateway serves a hostname.
+site_body() {
   cat <<'BLOCK'
 	# API key required (generated at first boot, stored in /etc/llmd/apikey)
 	@unauthorized not header Authorization "Bearer {$LLMD_API_KEY}"
-	respond @unauthorized 401
 BLOCK
-}
-
-# Ollama guards against DNS rebinding: on a loopback listener it rejects
-# any Host header that is not an IP, "localhost", the machine hostname or
-# a .localhost/.local/.internal name with an empty 403 (allowedHostsMiddleware
-# in server/routes.go). Caddy forwards the original Host by default, so a
-# request for https://myhost:8080 would reach ollama as Host "myhost:8080"
-# and be dropped. Rewrite the proxied Host to the upstream address instead.
-proxy_block() {
+  if [[ "$METRICS" == "on" ]]; then
+    cat <<'BLOCK'
+	@gwmetrics path /metrics/gateway
+BLOCK
+  fi
+  echo "	route {"
+  echo "		respond @unauthorized 401"
+  if [[ "$METRICS" == "on" ]]; then
+    echo "		metrics @gwmetrics"
+  fi
   cat <<BLOCK
-	reverse_proxy $upstream {
-		header_up Host {upstream_hostport}
+		reverse_proxy $upstream {
+			header_up Host {upstream_hostport}
+		}
 	}
 BLOCK
 }
@@ -50,8 +63,7 @@ case "$MODE" in
     {
       echo "https://$TLS_HOSTNAME:8080 {"
       echo "	tls internal"
-      auth_block
-      proxy_block
+      site_body
       echo "}"
     } > "$CADDYFILE"
     ;;
@@ -62,18 +74,16 @@ case "$MODE" in
       echo "	email $ACME_EMAIL"
       echo "}"
       echo "$TLS_HOSTNAME {"
-      auth_block
-      proxy_block
+      site_body
       echo "}"
     } > "$CADDYFILE"
     ;;
   *)
     {
       echo ":8080 {"
-      auth_block
-      proxy_block
+      site_body
       echo "}"
     } > "$CADDYFILE"
     ;;
 esac
-echo "gateway config rendered: mode=$MODE upstream=$upstream"
+echo "gateway config rendered: mode=$MODE upstream=$upstream metrics=$METRICS"

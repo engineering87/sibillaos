@@ -16,11 +16,11 @@ The operability release: everything needed to run SibillaOS beyond the first dem
 
 The release for people who run SibillaOS on real infrastructure.
 
-- A unified `sibilla` CLI as the single entry point (`sibilla status`, `sibilla model`, `sibilla tls`, `sibilla webui`), with the current commands kept as aliases.
-- `sibilla status` grown into a real health view: engine state, served models, disk usage of the model store, GPU utilization when present, gateway reachability.
-- Observability opt-in: expose the native Prometheus metrics of the engines (vLLM has /metrics, Ollama gained them in recent releases; verify) through an authenticated endpoint, plus a ready-made Grafana dashboard in the repo.
-- Model store management: `sibilla model rm` and `sibilla model prune`, with disk usage reporting.
-- A cloud image alongside the ISO: the same stack published as a qcow2 with cloud-init, for Proxmox, libvirt and cloud providers. Likely the cheapest way to widen adoption, since the whole late-commands flow already lives in cloud-init territory.
+- A unified `sibilla` CLI as the single entry point (`sibilla status`, `sibilla model`, `sibilla tls`, `sibilla webui`, `sibilla connect`), with the current commands kept as aliases. Done.
+- `sibilla status` grown into a real health view: engine state, served models, disk usage of the model store, GPU utilization when present, gateway reachability; exits nonzero on failure so scripts can use it as a check. Done.
+- Observability opt-in: `sibilla metrics enable` serves gateway-level Prometheus metrics (request rate, latency histograms, status codes, upstream health) at an authenticated /metrics/gateway endpoint, with a ready-made Grafana dashboard and scrape config in docs/observability/. vLLM's native /metrics passes through the gateway; Ollama at the pinned 0.31.1 exposes no Prometheus endpoint (verified in its source, revisit on engine bumps). Done.
+- Model store management: `sibilla model rm` and `sibilla model prune`, with disk usage reporting. Done.
+- A cloud image alongside the ISO: the same stack published as a qcow2 with cloud-init, for Proxmox, libvirt and cloud providers. Built by baking the official Ubuntu cloud image in one QEMU boot and resealing cloud-init; engine and model detection moved into llmd-firstboot so it happens on the deployed hardware. CI deploys the image with a real user seed and gets a chat completion. Done.
 - arm64 build: Ubuntu, Ollama and llmfit all ship arm64 binaries; the repack pipeline should port with modest effort. Raspberry Pi 5 and Ampere servers are real targets for small local models.
 
 ## v0.4 (supply chain and enterprise)
@@ -39,10 +39,10 @@ A dedicated track rather than a single milestone, because "your data stays on yo
 
 Planned, in order of appearance:
 
-- SECURITY.md with a private disclosure channel and a supported-versions table (v0.2).
-- Default firewall profile: ufw enabled at install with only SSH and the gateway port open; Open WebUI listens on all interfaces today (host networking), so its port stays closed until the user opens it deliberately (v0.3).
-- Sandboxing extended to every llmd unit and the containers (NoNewPrivileges, ProtectSystem, capability drops), with a CI check that fails when a unit regresses (v0.3).
-- Automatic security updates: unattended-upgrades enabled by default for the security pocket, since an appliance that nobody patches must patch itself (v0.3).
+- SECURITY.md with a private disclosure channel and a supported-versions table. Done in v0.2.
+- Default firewall profile: ufw enabled at first boot with only SSH and the gateway port open; Open WebUI listens on all interfaces (host networking), so its port stays closed until the user opens it deliberately, and `sibilla tls --acme` opens 80/443 itself. Done in v0.3.
+- Sandboxing extended to every llmd unit and the containers (NoNewPrivileges, kernel and realtime restrictions), with a CI check that asserts the directives on the installed system; capability drops on the containers deferred until their runtime can be exercised in CI. Done in v0.3.
+- Automatic security updates: unattended-upgrades enabled by default for the security pocket, since an appliance that nobody patches must patch itself. Done in v0.3.
 - API key lifecycle: `sibilla key rotate`, multiple keys with per-key revocation, structured access logs; covered by the v0.4 gateway hardening item.
 - Supply chain: signed catalog, SBOM, CVE scanning with a triage policy; covered by v0.4.
 - Secure Boot: the repack keeps Ubuntu's signed shim and GRUB, but the chain has never been verified end to end on real firmware; test it and document the result (v0.4).
