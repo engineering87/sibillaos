@@ -67,9 +67,14 @@ bake() {
     -drive "file=$WORK/seed.iso,format=raw,if=virtio,readonly=on" \
     -netdev user,id=n0 -device virtio-net,netdev=n0 \
     -no-reboot
+  if grep -q "SIBILLA_BAKE_FAILED" "$WORK/bake.log"; then
+    echo "bake failed; log tail:" >&2
+    tail -80 "$WORK/bake.log" >&2
+    exit 1
+  fi
   if ! grep -q "SIBILLA_BAKE_OK" "$WORK/bake.log"; then
-    echo "bake did not complete; log tail:" >&2
-    tail -40 "$WORK/bake.log" >&2
+    echo "bake did not complete (no marker); log tail:" >&2
+    tail -80 "$WORK/bake.log" >&2
     exit 1
   fi
 }

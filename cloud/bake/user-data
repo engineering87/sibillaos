@@ -6,6 +6,11 @@ users: []
 runcmd:
   - |
     set -e
+    # cloud-init sends runcmd output to its own log file, not to the
+    # console: redirect explicitly so the bake log on the serial port
+    # shows the real progress and the success or failure marker
+    exec > /dev/console 2>&1
+    trap 'echo SIBILLA_BAKE_FAILED' ERR
     mkdir -p /mnt/seed
     mount -o ro /dev/disk/by-label/CIDATA /mnt/seed \
       || mount -o ro /dev/disk/by-label/cidata /mnt/seed
