@@ -2,32 +2,42 @@
 # SibillaOS bake-phase configuration. Runs exactly once inside the
 # build VM, then reseals cloud-init: the deployer's own user-data
 # applies at the real first boot. No user is created here.
+#
+# The bake logic lives in a real bash script dropped via write_files
+# and invoked explicitly with bash: string-form runcmd items run under
+# /bin/sh (dash), where ERR traps and other bashisms fail silently.
 users: []
+write_files:
+  - path: /usr/local/sbin/sibilla-bake
+    permissions: "0755"
+    content: |
+      #!/usr/bin/env bash
+      # Output goes to the serial console so the builder can follow
+      # the progress and detect the outcome markers.
+      set -euo pipefail
+      exec > /dev/console 2>&1
+      trap 'echo SIBILLA_BAKE_FAILED' ERR
+      echo "bake: starting"
+      mkdir -p /mnt/seed
+      mount -o ro /dev/disk/by-label/CIDATA /mnt/seed \
+        || mount -o ro /dev/disk/by-label/cidata /mnt/seed
+      export DEBIAN_FRONTEND=noninteractive
+      apt-get update
+      dpkg -i /mnt/seed/debs/*.deb || apt-get -f install -y
+      # inference engine, PINNED version (same pin as the ISO build)
+      curl -fsSL https://ollama.com/install.sh | OLLAMA_VERSION=0.31.1 sh
+      if [ -f /mnt/seed/ci-model ]; then
+        install -m644 /mnt/seed/ci-model /etc/llmd/model
+      fi
+      systemctl enable llmd-firstboot.service
+      umount /mnt/seed
+      # reseal: wipe cloud-init state and the machine identity so
+      # every deployment starts as a fresh instance
+      cloud-init clean --logs --machine-id
+      rm -f /usr/local/sbin/sibilla-bake
+      echo "SIBILLA_BAKE_OK"
 runcmd:
-  - |
-    set -e
-    # cloud-init sends runcmd output to its own log file, not to the
-    # console: redirect explicitly so the bake log on the serial port
-    # shows the real progress and the success or failure marker
-    exec > /dev/console 2>&1
-    trap 'echo SIBILLA_BAKE_FAILED' ERR
-    mkdir -p /mnt/seed
-    mount -o ro /dev/disk/by-label/CIDATA /mnt/seed \
-      || mount -o ro /dev/disk/by-label/cidata /mnt/seed
-    export DEBIAN_FRONTEND=noninteractive
-    apt-get update
-    dpkg -i /mnt/seed/debs/*.deb || apt-get -f install -y
-    # inference engine, PINNED version (same pin as the ISO build)
-    curl -fsSL https://ollama.com/install.sh | OLLAMA_VERSION=0.31.1 sh
-    if [ -f /mnt/seed/ci-model ]; then
-      install -m644 /mnt/seed/ci-model /etc/llmd/model
-    fi
-    systemctl enable llmd-firstboot.service
-    umount /mnt/seed
-    # reseal: wipe cloud-init state and the machine identity so every
-    # deployment starts as a fresh instance
-    cloud-init clean --logs --machine-id
-    echo "SIBILLA_BAKE_OK"
+  - [bash, /usr/local/sbin/sibilla-bake]
 power_state:
   mode: poweroff
   timeout: 60
