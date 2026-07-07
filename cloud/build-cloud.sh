@@ -6,11 +6,13 @@
 # deployer's own user-data applies at the real first boot. Engine and
 # model selection happen on the deployed machine (llmd-firstboot runs
 # the hardware detection when the installer did not).
-# Requires: qemu-system-x86_64 qemu-img xorriso curl (no root needed)
+# Builds for the native architecture (amd64 or arm64) by default.
+# Requires: qemu-system qemu-img xorriso curl (no root needed); on
+# arm64 also qemu-efi-aarch64 for the AAVMF UEFI firmware.
 set -euo pipefail
 
 VERSION="${SIBILLA_VERSION:-0.1.0}"
-ARCH="amd64"
+ARCH="${SIBILLA_ARCH:-$(dpkg --print-architecture)}"
 UBUNTU_SERIES="noble"
 MIRROR="${SIBILLA_CLOUDIMG_MIRROR:-https://cloud-images.ubuntu.com/${UBUNTU_SERIES}/current}"
 IMG_NAME="${UBUNTU_SERIES}-server-cloudimg-${ARCH}.img"
@@ -19,12 +21,38 @@ WORK="$(pwd)/work-cloud"
 OUT="$(pwd)/out"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# Architecture-specific QEMU setup. Without KVM (GitHub's arm64
+# runners have none) TCG emulation is used: slower, hence the wider
+# bake timeout.
+BAKE_TIMEOUT=1800
+case "$ARCH" in
+  amd64)
+    QEMU_BIN=qemu-system-x86_64
+    QEMU_ARGS=(-m 2048 -smp 2)
+    if [[ -w /dev/kvm ]]; then
+      QEMU_ARGS+=(-enable-kvm -cpu host)
+    fi
+    ;;
+  arm64)
+    QEMU_BIN=qemu-system-aarch64
+    QEMU_ARGS=(-machine virt -m 2048 -smp 4)
+    if [[ -w /dev/kvm ]]; then
+      QEMU_ARGS+=(-enable-kvm -cpu host)
+    else
+      QEMU_ARGS+=(-cpu max)
+      BAKE_TIMEOUT=5400
+    fi
+    QEMU_ARGS+=(-bios /usr/share/AAVMF/AAVMF_CODE.fd)
+    ;;
+  *) echo "unsupported architecture: $ARCH" >&2; exit 1 ;;
+esac
+
 log() { echo "[sibilla-cloud] $*"; }
 mkdir -p "$WORK" "$OUT"
 
 # 1. Fetch the current cloud image, verified by checksum
 fetch_image() {
-  log "resolving the current ${UBUNTU_SERIES} cloud image"
+  log "resolving the current ${UBUNTU_SERIES} $ARCH cloud image"
   curl -fsSL "$MIRROR/SHA256SUMS" -o "$WORK/SHA256SUMS"
   if [[ ! -f "$WORK/$IMG_NAME" ]]; then
     curl -fL --retry 3 -o "$WORK/$IMG_NAME" "$MIRROR/$IMG_NAME"
@@ -57,11 +85,8 @@ bake() {
   local disk="$WORK/sibillaos-cloud.qcow2"
   rm -f "$disk" "$WORK/bake.log"
   qemu-img create -f qcow2 -b "$WORK/$IMG_NAME" -F qcow2 "$disk" "$DISK_SIZE" >/dev/null
-  KVM=""
-  if [[ -w /dev/kvm ]]; then KVM="-enable-kvm -cpu host"; fi
-  log "baking (single boot with the install seed, log in work-cloud/bake.log)"
-  # shellcheck disable=SC2086
-  timeout 1800 qemu-system-x86_64 -m 2048 -smp 2 $KVM \
+  log "baking with $QEMU_BIN (single boot, log in work-cloud/bake.log)"
+  timeout "$BAKE_TIMEOUT" "$QEMU_BIN" "${QEMU_ARGS[@]}" \
     -display none -serial "file:$WORK/bake.log" \
     -drive "file=$disk,format=qcow2,if=virtio" \
     -drive "file=$WORK/seed.iso,format=raw,if=virtio,readonly=on" \

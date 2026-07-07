@@ -489,7 +489,15 @@ jobs:
 
   build-cloud:
     needs: lint
-    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
     permissions:
       contents: write
     steps:
@@ -497,13 +505,18 @@ jobs:
       - name: Install build deps
         run: |
           sudo apt-get update
-          sudo apt-get install -y qemu-system-x86 qemu-utils xorriso
+          if [ "${{ matrix.arch }}" = "arm64" ]; then
+            # no KVM on GitHub arm64 runners: the bake runs under TCG
+            sudo apt-get install -y qemu-system-arm qemu-efi-aarch64 qemu-utils xorriso
+          else
+            sudo apt-get install -y qemu-system-x86 qemu-utils xorriso
+          fi
           if [ -e /dev/kvm ]; then sudo chmod 666 /dev/kvm; fi
       - name: Cache Ubuntu cloud image
         uses: actions/cache@v4
         with:
           path: work-cloud/*.img
-          key: ubuntu-noble-cloudimg-amd64
+          key: ubuntu-noble-cloudimg-${{ matrix.arch }}
       - name: Build llmd-* debs
         run: bash ./packages/build-debs.sh
       - name: Bake cloud image
@@ -515,26 +528,26 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: cloud-bake-log
+          name: cloud-bake-log-${{ matrix.arch }}
           path: work-cloud/bake.log
       - name: Upload cloud image artifact
         uses: actions/upload-artifact@v4
         with:
-          name: sibillaos-cloud
+          name: sibillaos-cloud-${{ matrix.arch }}
           path: out/*.qcow2
           retention-days: 14
       - name: Prepare cloud release assets (tags only)
         if: startsWith(github.ref, 'refs/tags/v')
         run: |
           cd out
-          sha256sum ./*.qcow2 > SHA256SUMS-cloud
+          sha256sum ./*.qcow2 > "SHA256SUMS-cloud-${{ matrix.arch }}"
           # release assets are hard-capped at 2 GiB: split when needed
           for f in ./*.qcow2; do
             size=$(stat -c%s "$f")
             if [ "$size" -gt 1900000000 ]; then
               split -b 1900M -d "$f" "$f.part"
               rm "$f"
-              sha256sum ./*.part* >> SHA256SUMS-cloud
+              sha256sum ./*.part* >> "SHA256SUMS-cloud-${{ matrix.arch }}"
             fi
           done
       - name: Attach cloud image to release (tags only)
@@ -543,29 +556,55 @@ jobs:
         with:
           files: |
             out/*.qcow2*
-            out/SHA256SUMS-cloud
+            out/SHA256SUMS-cloud-*
 
   cloud-test:
     needs: build-cloud
-    runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+            # KVM available: inference is asserted
+            strict: "yes"
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+            # no KVM: TCG-emulated inference is informational only
+            strict: "no"
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: ${{ matrix.arch == 'arm64' && 150 || 45 }}
     steps:
       - name: Download cloud image
         uses: actions/download-artifact@v4
         with:
-          name: sibillaos-cloud
+          name: sibillaos-cloud-${{ matrix.arch }}
           path: cloud-img
       - name: Install QEMU
         run: |
           sudo apt-get update
-          sudo apt-get install -y qemu-system-x86 qemu-utils xorriso sshpass jq
+          if [ "${{ matrix.arch }}" = "arm64" ]; then
+            sudo apt-get install -y qemu-system-arm qemu-efi-aarch64 qemu-utils xorriso sshpass jq
+          else
+            sudo apt-get install -y qemu-system-x86 qemu-utils xorriso sshpass jq
+          fi
       - name: Deploy and probe
         run: |
           IMG=$(ls cloud-img/*.qcow2 | head -1)
-          KVM=""
-          if [ -e /dev/kvm ]; then
-            sudo chmod 666 /dev/kvm
-            KVM="-enable-kvm -cpu host"
+          if [ "${{ matrix.arch }}" = "arm64" ]; then
+            QEMU=qemu-system-aarch64
+            KVM="-machine virt -cpu max -bios /usr/share/AAVMF/AAVMF_CODE.fd"
+            if [ -e /dev/kvm ]; then
+              sudo chmod 666 /dev/kvm
+              KVM="-machine virt -enable-kvm -cpu host -bios /usr/share/AAVMF/AAVMF_CODE.fd"
+            fi
+          else
+            QEMU=qemu-system-x86_64
+            KVM=""
+            if [ -e /dev/kvm ]; then
+              sudo chmod 666 /dev/kvm
+              KVM="-enable-kvm -cpu host"
+            fi
           fi
           # a deployer-style NoCloud seed: own user, password ssh
           mkdir seed
@@ -584,7 +623,7 @@ jobs:
           printf 'instance-id: sibilla-cloud-ci\n' > seed/meta-data
           xorriso -as mkisofs -volid CIDATA -joliet -rock -o seed.iso seed
           # shellcheck disable=SC2086
-          qemu-system-x86_64 -m 4096 -smp 2 $KVM \
+          $QEMU $KVM -m 4096 -smp 4 \
             -display none -serial file:cloud.log \
             -drive "file=$IMG,format=qcow2,if=virtio" \
             -drive "file=seed.iso,format=raw,if=virtio,readonly=on" \
@@ -592,8 +631,9 @@ jobs:
             -device virtio-net,netdev=n0 &
           QPID=$!
           ok=0
-          # first boot downloads the model; allow up to 20 minutes
-          for _ in $(seq 1 120); do
+          # first boot downloads the model; under TCG everything is
+          # slower, so allow up to 40 minutes
+          for _ in $(seq 1 240); do
             sleep 10
             code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/v1/models || true)
             if [ "$code" = "401" ]; then
@@ -609,20 +649,39 @@ jobs:
             MODEL=$($SSH "sudo cat /etc/llmd/model" | tail -1)
             echo "model: $MODEL"
             if [ -n "$KEY" ] && [ -n "$MODEL" ]; then
-              RESP=$(curl -s -m 900 http://127.0.0.1:8080/v1/chat/completions \
+              RC=0
+              # the API surface is asserted on every architecture
+              mjson=$(curl -s -H "Authorization: Bearer $KEY" http://127.0.0.1:8080/v1/models) || true
+              if echo "$mjson" | jq -e --arg m "$MODEL" '.data[] | select(.id == $m)' >/dev/null; then
+                echo "served models include $MODEL"
+              else
+                echo "served models do not include $MODEL: $mjson"
+                RC=1
+              fi
+              if $SSH "sibilla status"; then
+                true
+              else
+                echo "sibilla status failed on the cloud image"
+                RC=1
+              fi
+              # inference: asserted with KVM, informational under TCG
+              # (emulated token generation is minutes per sentence)
+              RESP=$(curl -s -m 1500 http://127.0.0.1:8080/v1/chat/completions \
                 -H "Authorization: Bearer $KEY" \
                 -H "Content-Type: application/json" \
-                -d "{\"model\": \"$MODEL\", \"messages\": [{\"role\": \"user\", \"content\": \"Say ok.\"}], \"max_tokens\": 200}") || true
+                -d "{\"model\": \"$MODEL\", \"messages\": [{\"role\": \"user\", \"content\": \"Say ok.\"}], \"max_tokens\": 60}") || true
               if echo "$RESP" | jq -e '.choices[0].message | ((.content // "") + (.reasoning // "")) | length > 0' >/dev/null; then
                 echo "CLOUD INFERENCE OK"
-                if $SSH "sibilla status"; then
-                  RC=0
-                else
-                  echo "sibilla status failed on the cloud image"
-                fi
               else
-                echo "cloud inference failed"
-                echo "$RESP" | jq . || echo "$RESP"
+                if [ "${{ matrix.strict }}" = "yes" ]; then
+                  echo "cloud inference failed"
+                  echo "$RESP" | jq . || echo "$RESP"
+                  RC=1
+                else
+                  echo "inference not asserted on this architecture (no KVM, TCG emulation)"
+                  echo "$RESP" | head -c 400 || true
+                  echo
+                fi
               fi
             else
               echo "could not read api key or model over ssh"
@@ -637,5 +696,5 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: cloud-debug
+          name: cloud-debug-${{ matrix.arch }}
           path: cloud.log

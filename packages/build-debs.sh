@@ -9,6 +9,16 @@ VERSION="${LLMD_VERSION:-0.2.0}"
 LLMFIT_VERSION="0.9.36"
 mkdir -p "$DIST"
 
+# Target architecture: native by default (the arm64 CI jobs run on
+# arm64 runners), overridable for local cross-builds. Only llmfit is
+# architecture-specific; every other package is Architecture: all.
+DEB_ARCH="${SIBILLA_DEB_ARCH:-$(dpkg --print-architecture)}"
+case "$DEB_ARCH" in
+  amd64) LLMFIT_TRIPLE="x86_64-unknown-linux-musl" ;;
+  arm64) LLMFIT_TRIPLE="aarch64-unknown-linux-musl" ;;
+  *) echo "unsupported architecture: $DEB_ARCH" >&2; exit 1 ;;
+esac
+
 build_pkg() {
   local name="$1" desc="$2" deps="$3"
   local staging
@@ -42,25 +52,31 @@ EOF
   echo "OK $name"
 }
 
-build_pkg llmd-hw            "Hardware detection and engine selection for SibillaOS" "pciutils, jq"
+# curl is a real runtime dependency (llmd-firstboot waits on the engine
+# API, sibilla-status probes the gateway); it was inherited from the
+# base images so far, but a dependency that works by luck is a bug
+build_pkg llmd-hw            "Hardware detection and engine selection for SibillaOS" "pciutils, jq, curl"
 build_pkg llmd-engine-ollama "Hardened systemd drop-in for Ollama"                    "systemd"
 build_pkg llmd-engine-vllm   "vLLM OCI container (podman Quadlet)"                    "podman (>= 4.4)"
 build_pkg llmd-gateway       "Unified OpenAI-compatible gateway (Caddy)"              "caddy"
-build_pkg llmd-firstboot     "First boot model download and service setup"            "llmd-hw, jq"
+build_pkg llmd-firstboot     "First boot model download and service setup"            "llmd-hw, jq, curl"
 build_pkg llmd-webui         "Open WebUI chat interface (opt-in container)"           "podman (>= 4.4)"
 
 # llmfit is repackaged from the pinned upstream release so the ISO does
-# not depend on external installers at install time
+# not depend on external installers at install time; the tarball is
+# verified against the sha256 file published with the release
 build_llmfit() {
-  local staging tgz
-  staging=$(mktemp -d)
-  tgz="$DIST/.llmfit-v$LLMFIT_VERSION.tgz"
-  if [[ ! -f "$tgz" ]]; then
-    curl -fL --retry 3 -o "$tgz" \
-      "https://github.com/AlexsJones/llmfit/releases/download/v$LLMFIT_VERSION/llmfit-v$LLMFIT_VERSION-x86_64-unknown-linux-musl.tar.gz"
+  local staging asset base
+  base="https://github.com/AlexsJones/llmfit/releases/download/v$LLMFIT_VERSION"
+  asset="llmfit-v$LLMFIT_VERSION-$LLMFIT_TRIPLE.tar.gz"
+  if [[ ! -f "$DIST/$asset" ]]; then
+    curl -fL --retry 3 -o "$DIST/$asset" "$base/$asset"
+    curl -fL --retry 3 -o "$DIST/$asset.sha256" "$base/$asset.sha256"
   fi
+  (cd "$DIST" && sha256sum -c "$asset.sha256")
+  staging=$(mktemp -d)
   mkdir -p "$staging/usr/bin" "$staging/DEBIAN" "$staging/tmp-extract"
-  tar -xzf "$tgz" -C "$staging/tmp-extract"
+  tar -xzf "$DIST/$asset" -C "$staging/tmp-extract"
   install -m755 "$(find "$staging/tmp-extract" -type f -name llmfit | head -1)" \
     "$staging/usr/bin/llmfit"
   rm -rf "$staging/tmp-extract"
@@ -69,15 +85,14 @@ Package: llmd-llmfit
 Version: $LLMFIT_VERSION
 Section: admin
 Priority: optional
-Architecture: amd64
+Architecture: $DEB_ARCH
 Maintainer: SibillaOS contributors
 Description: llmfit model recommender (repackaged upstream MIT binary)
 EOF
-  dpkg-deb --build --root-owner-group "$staging" "$DIST/llmd-llmfit_${LLMFIT_VERSION}_amd64.deb"
+  dpkg-deb --build --root-owner-group "$staging" "$DIST/llmd-llmfit_${LLMFIT_VERSION}_${DEB_ARCH}.deb"
   rm -rf "$staging"
-  echo "OK llmd-llmfit"
+  echo "OK llmd-llmfit ($DEB_ARCH)"
 }
 build_llmfit
 
-# The curated catalog ships with llmd-hw
 echo "packages in $DIST"

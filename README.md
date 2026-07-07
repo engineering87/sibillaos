@@ -48,7 +48,7 @@ The base install is a headless server; a desktop variant is on the roadmap.
 
 The easiest path is a prebuilt ISO from [Releases](https://github.com/engineering87/sibillaos/releases), verified against its `SHA256SUMS`. GitHub caps release assets at 2 GiB, so the ISO ships in parts: `cat sibillaos-*.iso.part* > sibillaos.iso` reassembles it.
 
-For virtual machines there is also a qcow2 cloud image: attach your own cloud-init user-data (user, SSH keys) as on any Ubuntu cloud image, and the LLM stack configures itself at first boot, detecting the hardware it landed on. Works with Proxmox, libvirt and anything that speaks cloud-init.
+For virtual machines there is also a qcow2 cloud image, published for amd64 and arm64: attach your own cloud-init user-data (user, SSH keys) as on any Ubuntu cloud image, and the LLM stack configures itself at first boot, detecting the hardware it landed on. Works with Proxmox, libvirt, arm64 cloud instances (Ampere, Graviton) and anything that speaks cloud-init.
 
 To build from source you only need `xorriso` and `curl` (no root). The build downloads the official Ubuntu 24.04 live-server ISO, verifies its checksum and repacks it with the SibillaOS autoinstall, packages and branding:
 

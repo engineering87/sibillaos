@@ -2,17 +2,11 @@
 
 This document lists where the project is going and why. Versions are scoped by outcome, not by date. Items move between versions when reality disagrees with the plan; the architecture document records the decisions once they are made. Suggestions are welcome as issues.
 
-## v0.2 (in progress, branch release/0.2)
+## v0.2 (released)
 
-The operability release: everything needed to run SibillaOS beyond the first demo.
+The operability release: everything needed to run SibillaOS beyond the first demo. Shipped: llmfit as a Debian package built from the pinned upstream release, Open WebUI as an opt-in container managed by `sibilla-webui` (container plumbing exercised in CI, the web interface itself still pending a manual pass), HTTPS on the gateway via `sibilla-tls` (local CA for LAN hostnames, ACME for public ones), multi-model serving through the gateway, and the `sibilla-connect` kit with ready-to-paste configuration for VS Code (Continue and Cline), aider and any OpenAI-compatible client. Release notes in [docs/releases/v0.2.0.md](docs/releases/v0.2.0.md).
 
-- llmfit shipped as a Debian package built from the pinned upstream release, removing the install-time network dependency. Done.
-- Open WebUI as an opt-in container managed by `sibilla-webui`. Done; CI exercises the container plumbing (Quadlet conversion, flag gating, enable/disable), the web interface itself still needs a manual pass.
-- HTTPS on the gateway via `sibilla-tls`: local CA for LAN hostnames, ACME for public ones. Done, exercised in CI.
-- Multi-model serving verified in CI: the gateway passes the model field through, so a second model is pulled and addressed by name in the install test.
-- Editor and agent connection kit, pulled forward from v0.3 on request: `sibilla-connect` prints ready-to-paste configuration for VS Code (Continue and Cline), aider and any OpenAI-compatible client, wired to the gateway endpoint and API key, with the CA note when TLS runs in local-CA mode.
-
-## v0.3 (operations and platforms)
+## v0.3 (in progress, branch release/0.3)
 
 The release for people who run SibillaOS on real infrastructure.
 
@@ -21,7 +15,7 @@ The release for people who run SibillaOS on real infrastructure.
 - Observability opt-in: `sibilla metrics enable` serves gateway-level Prometheus metrics (request rate, latency histograms, status codes, upstream health) at an authenticated /metrics/gateway endpoint, with a ready-made Grafana dashboard and scrape config in docs/observability/. vLLM's native /metrics passes through the gateway; Ollama at the pinned 0.31.1 exposes no Prometheus endpoint (verified in its source, revisit on engine bumps). Done.
 - Model store management: `sibilla model rm` and `sibilla model prune`, with disk usage reporting. Done.
 - A cloud image alongside the ISO: the same stack published as a qcow2 with cloud-init, for Proxmox, libvirt and cloud providers. Built by baking the official Ubuntu cloud image in one QEMU boot and resealing cloud-init; engine and model detection moved into llmd-firstboot so it happens on the deployed hardware. CI deploys the image with a real user seed and gets a chat completion. Done.
-- arm64 build: Ubuntu, Ollama and llmfit all ship arm64 binaries; the repack pipeline should port with modest effort. Raspberry Pi 5 and Ampere servers are real targets for small local models.
+- arm64 build: delivered as the cloud image (qcow2 for Ampere, Graviton and other arm64 VMs), built and deployed in CI on native arm64 runners with the llmfit deb repackaged from the aarch64 musl release. GitHub's arm64 runners have no KVM, so the CI deploy runs under TCG emulation: the API surface is asserted, token generation is exercised but not asserted (documented in the test). The arm64 ISO is deferred: the unattended-install test that guards every ISO change is impractical under pure emulation; revisit if arm64 KVM runners appear, and note Raspberry Pi needs its own image flavor anyway (not the generic cloudimg). Done for the cloud image.
 
 ## v0.4 (supply chain and enterprise)
 
