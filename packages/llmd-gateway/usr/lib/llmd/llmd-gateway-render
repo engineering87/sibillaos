@@ -24,6 +24,28 @@ case "$engine" in
   *)    upstream="127.0.0.1:11434" ;;
 esac
 
+# Global options block (a Caddyfile allows exactly one, so email and
+# metrics are merged here). HTTP metrics instrumentation is opt-in
+# per server since Caddy 2.6 (serverOpts.Metrics in the source): the
+# "servers { metrics }" option is what makes the caddy_http_* series
+# exist at all.
+global_block() {
+  local acme_email="$1"
+  if [[ "$METRICS" != "on" && -z "$acme_email" ]]; then
+    return 0
+  fi
+  echo "{"
+  if [[ -n "$acme_email" ]]; then
+    echo "	email $acme_email"
+  fi
+  if [[ "$METRICS" == "on" ]]; then
+    echo "	servers {"
+    echo "		metrics"
+    echo "	}"
+  fi
+  echo "}"
+}
+
 # The site body is wrapped in a route block because Caddy's default
 # directive order runs handlers like metrics BEFORE respond: without
 # route, /metrics/gateway would be served to unauthenticated clients.
@@ -61,6 +83,7 @@ case "$MODE" in
   internal)
     [[ -n "$TLS_HOSTNAME" ]] || { echo "internal mode needs TLS_HOSTNAME" >&2; exit 1; }
     {
+      global_block ""
       echo "https://$TLS_HOSTNAME:8080 {"
       echo "	tls internal"
       site_body
@@ -70,9 +93,7 @@ case "$MODE" in
   acme)
     [[ -n "$TLS_HOSTNAME" && -n "$ACME_EMAIL" ]] || { echo "acme mode needs TLS_HOSTNAME and ACME_EMAIL" >&2; exit 1; }
     {
-      echo "{"
-      echo "	email $ACME_EMAIL"
-      echo "}"
+      global_block "$ACME_EMAIL"
       echo "$TLS_HOSTNAME {"
       site_body
       echo "}"
@@ -80,6 +101,7 @@ case "$MODE" in
     ;;
   *)
     {
+      global_block ""
       echo ":8080 {"
       site_body
       echo "}"

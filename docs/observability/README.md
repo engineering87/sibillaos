@@ -52,7 +52,9 @@ gateway's reverse proxy handler.
 
 ## Version note
 
-The base system ships Caddy 2.6 (Ubuntu 24.04), where HTTP metrics are
-always collected. Caddy 2.7 turned collection into an opt-in global
-option; if a future base bump moves past 2.6, the renderer must start
-emitting that option or the series will be empty.
+HTTP metrics instrumentation in Caddy is opt-in per server (verified
+in the 2.6.2 source, the version Ubuntu 24.04 ships): the renderer
+emits the `servers { metrics }` global option whenever metrics are
+enabled, which is what makes the `caddy_http_*` series exist. Newer
+Caddy releases keep this option and add refinements such as per-host
+labels; revisit the rendered block on a base image bump.
