@@ -16,6 +16,8 @@ Network=host
 Environment=PORT=3000
 Environment=OLLAMA_BASE_URL=http://127.0.0.1:11434
 Volume=/var/lib/llmd/webui:/app/backend/data:Z
+# the workload never needs to gain privileges at runtime
+PodmanArgs=--security-opt=no-new-privileges
 
 [Service]
 Restart=on-failure

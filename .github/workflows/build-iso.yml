@@ -14,13 +14,17 @@ jobs:
       - name: Shellcheck
         run: |
           sudo apt-get update && sudo apt-get install -y shellcheck
-          shellcheck iso/build.sh packages/build-debs.sh \
+          shellcheck iso/build.sh packages/build-debs.sh cloud/build-cloud.sh \
             packages/llmd-hw/usr/lib/llmd/* packages/llmd-hw/usr/bin/* \
             packages/llmd-firstboot/usr/lib/llmd/* \
             packages/llmd-gateway/usr/lib/llmd/* packages/llmd-gateway/usr/bin/* \
             packages/llmd-webui/usr/bin/*
       - name: Validate catalog JSON
         run: jq empty catalog/models.json
+      - name: Validate cloud-init YAML
+        run: |
+          python3 -c "import yaml; yaml.safe_load(open('cloud/bake/user-data').read().replace('#cloud-config','',1))"
+          python3 -c "import yaml; yaml.safe_load(open('iso/autoinstall/user-data').read().replace('#cloud-config','',1))"
       - name: Validate rendered Caddyfiles
         # render every gateway mode with the real script and let caddy
         # parse and provision the result
@@ -32,7 +36,9 @@ jobs:
           export LLMD_API_KEY=lint-test-key
           echo ollama > "$LLMD_ENGINE_FILE"
           for conf in 'MODE=http' \
+                      'MODE=http\nMETRICS=on' \
                       'MODE=internal\nTLS_HOSTNAME=sibillaos.test' \
+                      'MODE=internal\nTLS_HOSTNAME=sibillaos.test\nMETRICS=on' \
                       'MODE=acme\nTLS_HOSTNAME=example.org\nACME_EMAIL=ops@example.org'; do
             printf "$conf\n" > "$LLMD_GATEWAY_CONF"
             bash packages/llmd-gateway/usr/lib/llmd/llmd-gateway-render
@@ -379,6 +385,87 @@ jobs:
                 hcount=${hcount:-0}
                 echo "models served over http: $hcount"
                 [ "$hcount" -ge 2 ] || RC=1
+                # unified CLI: the health view must aggregate the stack
+                # state, show the served model and exit zero
+                echo "--- sibilla status ---"
+                if $SSH "sibilla status" > status.out; then
+                  cat status.out
+                else
+                  echo "sibilla status exited nonzero"
+                  cat status.out || true
+                  RC=1
+                fi
+                grep -q "gateway:.*up" status.out || { echo "status does not report the gateway up"; RC=1; }
+                grep -q "$MODEL" status.out || { echo "status does not show the served model"; RC=1; }
+                # prune must drop the second model and keep the served one
+                echo "--- sibilla model prune ---"
+                $SSH "echo sibilla | sudo -S sibilla model prune" || RC=1
+                pcount=$(curl -s -H "Authorization: Bearer $KEY" \
+                  http://127.0.0.1:8080/v1/models | jq '.data | length' 2>/dev/null) || pcount=0
+                pcount=${pcount:-0}
+                echo "models after prune: $pcount"
+                [ "$pcount" -eq 1 ] || RC=1
+                # the served model must survive the prune
+                curl -s -H "Authorization: Bearer $KEY" http://127.0.0.1:8080/v1/models \
+                  | jq -r '.data[].id' | grep -q "$MODEL" || { echo "prune removed the served model"; RC=1; }
+                # security baseline: firewall active with only ssh and
+                # the gateway open, unattended upgrades configured, and
+                # the hardening directives still on the units
+                echo "--- security baseline ---"
+                $SSH "echo sibilla | sudo -S ufw status" > ufw.out || RC=1
+                cat ufw.out
+                grep -q "Status: active" ufw.out || { echo "ufw not active"; RC=1; }
+                grep -q "8080/tcp" ufw.out || { echo "gateway port not allowed"; RC=1; }
+                grep -q "3000" ufw.out && { echo "webui port open by default"; RC=1; }
+                $SSH "grep -q 'Unattended-Upgrade .1.' /etc/apt/apt.conf.d/51sibilla-upgrades" \
+                  || { echo "unattended upgrades config missing"; RC=1; }
+                for u in ollama caddy; do
+                  $SSH "systemctl show -p NoNewPrivileges $u.service" | grep -q "=yes" \
+                    || { echo "$u.service lost NoNewPrivileges"; RC=1; }
+                done
+                $SSH "systemctl show -p ProtectSystem ollama.service" | grep -q "=strict" \
+                  || { echo "ollama.service lost ProtectSystem=strict"; RC=1; }
+                $SSH "systemctl show -p PrivateTmp llmd-firstboot.service" | grep -q "=yes" \
+                  || { echo "llmd-firstboot.service lost its sandbox"; RC=1; }
+                # informational: exposure scores for the record
+                $SSH "echo sibilla | sudo -S systemd-analyze security --no-pager ollama.service 2>/dev/null" \
+                  | grep -i "overall exposure" || true
+                $SSH "echo sibilla | sudo -S systemd-analyze security --no-pager caddy.service 2>/dev/null" \
+                  | grep -i "overall exposure" || true
+                # metrics: the endpoint must appear when enabled, carry
+                # caddy http series and honor the same bearer token
+                echo "--- sibilla metrics ---"
+                $SSH "echo sibilla | sudo -S sibilla metrics enable" || RC=1
+                sleep 3
+                # the API must still work with metrics on; this request
+                # also warms the counters: enabling metrics restarts
+                # caddy, and the prometheus client only exposes the
+                # caddy_http_* series after a first completed request
+                acode=$(curl -s -o /dev/null -w '%{http_code}' \
+                  -H "Authorization: Bearer $KEY" http://127.0.0.1:8080/v1/models || true)
+                [ "$acode" = "200" ] || { echo "api broken with metrics on: $acode"; RC=1; }
+                mgcode=$(curl -s -o metrics.out -w '%{http_code}' \
+                  -H "Authorization: Bearer $KEY" \
+                  http://127.0.0.1:8080/metrics/gateway || true)
+                if [ "$mgcode" = "200" ] && grep -q "caddy_http_" metrics.out; then
+                  echo "metrics endpoint OK"
+                else
+                  echo "metrics endpoint answered $mgcode without caddy_http_ series"
+                  head -5 metrics.out || true
+                  RC=1
+                fi
+                mgnokey=$(curl -s -o /dev/null -w '%{http_code}' \
+                  http://127.0.0.1:8080/metrics/gateway || true)
+                [ "$mgnokey" = "401" ] || { echo "metrics served without key: $mgnokey"; RC=1; }
+                # the metrics flag must survive a tls mode change
+                $SSH "echo sibilla | sudo -S sibilla tls enable sibillaos.test" || RC=1
+                sleep 5
+                tmcode=$(curl -ks -o /dev/null -w '%{http_code}' \
+                  --resolve sibillaos.test:8080:127.0.0.1 \
+                  -H "Authorization: Bearer $KEY" \
+                  https://sibillaos.test:8080/metrics/gateway || true)
+                [ "$tmcode" = "200" ] || { echo "metrics lost across tls switch: $tmcode"; RC=1; }
+                $SSH "echo sibilla | sudo -S sibilla tls disable" || RC=1
               else
                 echo "inference failed: empty or malformed response"
               fi
@@ -399,3 +486,215 @@ jobs:
           path: |
             install.log
             firstboot.log
+
+  build-cloud:
+    needs: lint
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build deps
+        run: |
+          sudo apt-get update
+          if [ "${{ matrix.arch }}" = "arm64" ]; then
+            # no KVM on GitHub arm64 runners: the bake runs under TCG
+            sudo apt-get install -y qemu-system-arm qemu-efi-aarch64 qemu-utils xorriso
+          else
+            sudo apt-get install -y qemu-system-x86 qemu-utils xorriso
+          fi
+          if [ -e /dev/kvm ]; then sudo chmod 666 /dev/kvm; fi
+      - name: Cache Ubuntu cloud image
+        uses: actions/cache@v4
+        with:
+          path: work-cloud/*.img
+          key: ubuntu-noble-cloudimg-${{ matrix.arch }}
+      - name: Build llmd-* debs
+        run: bash ./packages/build-debs.sh
+      - name: Bake cloud image
+        # same small-model override as the ISO build; never on tags
+        env:
+          SIBILLA_TEST_MODEL: ${{ startsWith(github.ref, 'refs/tags/') && '' || 'hf.co/bartowski/Qwen_Qwen3-0.6B-GGUF:Q4_K_M' }}
+        run: bash ./cloud/build-cloud.sh
+      - name: Upload bake log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloud-bake-log-${{ matrix.arch }}
+          path: work-cloud/bake.log
+      - name: Upload cloud image artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sibillaos-cloud-${{ matrix.arch }}
+          path: out/*.qcow2
+          retention-days: 14
+      - name: Prepare cloud release assets (tags only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          cd out
+          sha256sum ./*.qcow2 > "SHA256SUMS-cloud-${{ matrix.arch }}"
+          # release assets are hard-capped at 2 GiB: split when needed
+          for f in ./*.qcow2; do
+            size=$(stat -c%s "$f")
+            if [ "$size" -gt 1900000000 ]; then
+              split -b 1900M -d "$f" "$f.part"
+              rm "$f"
+              sha256sum ./*.part* >> "SHA256SUMS-cloud-${{ matrix.arch }}"
+            fi
+          done
+      - name: Attach cloud image to release (tags only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            out/*.qcow2*
+            out/SHA256SUMS-cloud-*
+
+  cloud-test:
+    needs: build-cloud
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+            # KVM available: inference is asserted
+            strict: "yes"
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+            # no KVM: TCG-emulated inference is informational only
+            strict: "no"
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: ${{ matrix.arch == 'arm64' && 150 || 45 }}
+    steps:
+      - name: Download cloud image
+        uses: actions/download-artifact@v4
+        with:
+          name: sibillaos-cloud-${{ matrix.arch }}
+          path: cloud-img
+      - name: Install QEMU
+        run: |
+          sudo apt-get update
+          if [ "${{ matrix.arch }}" = "arm64" ]; then
+            sudo apt-get install -y qemu-system-arm qemu-efi-aarch64 qemu-utils xorriso sshpass jq
+          else
+            sudo apt-get install -y qemu-system-x86 qemu-utils xorriso sshpass jq
+          fi
+      - name: Deploy and probe
+        run: |
+          IMG=$(ls cloud-img/*.qcow2 | head -1)
+          if [ "${{ matrix.arch }}" = "arm64" ]; then
+            QEMU=qemu-system-aarch64
+            KVM="-machine virt -cpu max -bios /usr/share/AAVMF/AAVMF_CODE.fd"
+            if [ -e /dev/kvm ]; then
+              sudo chmod 666 /dev/kvm
+              KVM="-machine virt -enable-kvm -cpu host -bios /usr/share/AAVMF/AAVMF_CODE.fd"
+            fi
+          else
+            QEMU=qemu-system-x86_64
+            KVM=""
+            if [ -e /dev/kvm ]; then
+              sudo chmod 666 /dev/kvm
+              KVM="-enable-kvm -cpu host"
+            fi
+          fi
+          # a deployer-style NoCloud seed: own user, password ssh
+          mkdir seed
+          cat > seed/user-data <<'EOF'
+          #cloud-config
+          hostname: sibilla-cloud
+          ssh_pwauth: true
+          users:
+            - name: sibilla
+              plain_text_passwd: sibilla
+              lock_passwd: false
+              shell: /bin/bash
+              groups: sudo
+              sudo: ALL=(ALL) NOPASSWD:ALL
+          EOF
+          printf 'instance-id: sibilla-cloud-ci\n' > seed/meta-data
+          xorriso -as mkisofs -volid CIDATA -joliet -rock -o seed.iso seed
+          # shellcheck disable=SC2086
+          $QEMU $KVM -m 4096 -smp 4 \
+            -display none -serial file:cloud.log \
+            -drive "file=$IMG,format=qcow2,if=virtio" \
+            -drive "file=seed.iso,format=raw,if=virtio,readonly=on" \
+            -netdev user,id=n0,hostfwd=tcp::8080-:8080,hostfwd=tcp::2222-:22 \
+            -device virtio-net,netdev=n0 &
+          QPID=$!
+          ok=0
+          # first boot downloads the model; under TCG everything is
+          # slower, so allow up to 40 minutes
+          for _ in $(seq 1 240); do
+            sleep 10
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/v1/models || true)
+            if [ "$code" = "401" ]; then
+              ok=1
+              break
+            fi
+          done
+          RC=1
+          if [ "$ok" -eq 1 ]; then
+            echo "gateway answered 401"
+            SSH="sshpass -p sibilla ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p 2222 sibilla@127.0.0.1"
+            KEY=$($SSH "sudo cat /etc/llmd/apikey" | tail -1)
+            MODEL=$($SSH "sudo cat /etc/llmd/model" | tail -1)
+            echo "model: $MODEL"
+            if [ -n "$KEY" ] && [ -n "$MODEL" ]; then
+              RC=0
+              # the API surface is asserted on every architecture
+              mjson=$(curl -s -H "Authorization: Bearer $KEY" http://127.0.0.1:8080/v1/models) || true
+              if echo "$mjson" | jq -e --arg m "$MODEL" '.data[] | select(.id == $m)' >/dev/null; then
+                echo "served models include $MODEL"
+              else
+                echo "served models do not include $MODEL: $mjson"
+                RC=1
+              fi
+              if $SSH "sibilla status"; then
+                true
+              else
+                echo "sibilla status failed on the cloud image"
+                RC=1
+              fi
+              # inference: asserted with KVM, informational under TCG
+              # (emulated token generation is minutes per sentence)
+              RESP=$(curl -s -m 1500 http://127.0.0.1:8080/v1/chat/completions \
+                -H "Authorization: Bearer $KEY" \
+                -H "Content-Type: application/json" \
+                -d "{\"model\": \"$MODEL\", \"messages\": [{\"role\": \"user\", \"content\": \"Say ok.\"}], \"max_tokens\": 60}") || true
+              if echo "$RESP" | jq -e '.choices[0].message | ((.content // "") + (.reasoning // "")) | length > 0' >/dev/null; then
+                echo "CLOUD INFERENCE OK"
+              else
+                if [ "${{ matrix.strict }}" = "yes" ]; then
+                  echo "cloud inference failed"
+                  echo "$RESP" | jq . || echo "$RESP"
+                  RC=1
+                else
+                  echo "inference not asserted on this architecture (no KVM, TCG emulation)"
+                  echo "$RESP" | head -c 400 || true
+                  echo
+                fi
+              fi
+            else
+              echo "could not read api key or model over ssh"
+            fi
+          else
+            echo "gateway never came up; console tail:"
+            tail -80 cloud.log || true
+          fi
+          kill "$QPID" 2>/dev/null || true
+          exit "$RC"
+      - name: Upload cloud debug artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloud-debug-${{ matrix.arch }}
+          path: cloud.log

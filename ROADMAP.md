@@ -2,26 +2,20 @@
 
 This document lists where the project is going and why. Versions are scoped by outcome, not by date. Items move between versions when reality disagrees with the plan; the architecture document records the decisions once they are made. Suggestions are welcome as issues.
 
-## v0.2 (in progress, branch release/0.2)
+## v0.2 (released)
 
-The operability release: everything needed to run SibillaOS beyond the first demo.
+The operability release: everything needed to run SibillaOS beyond the first demo. Shipped: llmfit as a Debian package built from the pinned upstream release, Open WebUI as an opt-in container managed by `sibilla-webui` (container plumbing exercised in CI, the web interface itself still pending a manual pass), HTTPS on the gateway via `sibilla-tls` (local CA for LAN hostnames, ACME for public ones), multi-model serving through the gateway, and the `sibilla-connect` kit with ready-to-paste configuration for VS Code (Continue and Cline), aider and any OpenAI-compatible client. Release notes in [docs/releases/v0.2.0.md](docs/releases/v0.2.0.md).
 
-- llmfit shipped as a Debian package built from the pinned upstream release, removing the install-time network dependency. Done.
-- Open WebUI as an opt-in container managed by `sibilla-webui`. Done; CI exercises the container plumbing (Quadlet conversion, flag gating, enable/disable), the web interface itself still needs a manual pass.
-- HTTPS on the gateway via `sibilla-tls`: local CA for LAN hostnames, ACME for public ones. Done, exercised in CI.
-- Multi-model serving verified in CI: the gateway passes the model field through, so a second model is pulled and addressed by name in the install test.
-- Editor and agent connection kit, pulled forward from v0.3 on request: `sibilla-connect` prints ready-to-paste configuration for VS Code (Continue and Cline), aider and any OpenAI-compatible client, wired to the gateway endpoint and API key, with the CA note when TLS runs in local-CA mode.
+## v0.3 (released)
 
-## v0.3 (operations and platforms)
+The release for people who run SibillaOS on real infrastructure. Release notes in [docs/releases/v0.3.0.md](docs/releases/v0.3.0.md).
 
-The release for people who run SibillaOS on real infrastructure.
-
-- A unified `sibilla` CLI as the single entry point (`sibilla status`, `sibilla model`, `sibilla tls`, `sibilla webui`), with the current commands kept as aliases.
-- `sibilla status` grown into a real health view: engine state, served models, disk usage of the model store, GPU utilization when present, gateway reachability.
-- Observability opt-in: expose the native Prometheus metrics of the engines (vLLM has /metrics, Ollama gained them in recent releases; verify) through an authenticated endpoint, plus a ready-made Grafana dashboard in the repo.
-- Model store management: `sibilla model rm` and `sibilla model prune`, with disk usage reporting.
-- A cloud image alongside the ISO: the same stack published as a qcow2 with cloud-init, for Proxmox, libvirt and cloud providers. Likely the cheapest way to widen adoption, since the whole late-commands flow already lives in cloud-init territory.
-- arm64 build: Ubuntu, Ollama and llmfit all ship arm64 binaries; the repack pipeline should port with modest effort. Raspberry Pi 5 and Ampere servers are real targets for small local models.
+- A unified `sibilla` CLI as the single entry point (`sibilla status`, `sibilla model`, `sibilla tls`, `sibilla webui`, `sibilla connect`), with the current commands kept as aliases. Done.
+- `sibilla status` grown into a real health view: engine state, served models, disk usage of the model store, GPU utilization when present, gateway reachability; exits nonzero on failure so scripts can use it as a check. Done.
+- Observability opt-in: `sibilla metrics enable` serves gateway-level Prometheus metrics (request rate, latency histograms, status codes, upstream health) at an authenticated /metrics/gateway endpoint, with a ready-made Grafana dashboard and scrape config in docs/observability/. vLLM's native /metrics passes through the gateway; Ollama at the pinned 0.31.1 exposes no Prometheus endpoint (verified in its source, revisit on engine bumps). Done.
+- Model store management: `sibilla model rm` and `sibilla model prune`, with disk usage reporting. Done.
+- A cloud image alongside the ISO: the same stack published as a qcow2 with cloud-init, for Proxmox, libvirt and cloud providers. Built by baking the official Ubuntu cloud image in one QEMU boot and resealing cloud-init; engine and model detection moved into llmd-firstboot so it happens on the deployed hardware. CI deploys the image with a real user seed and gets a chat completion. Done.
+- arm64 build: delivered as the cloud image (qcow2 for Ampere, Graviton and other arm64 VMs), built and deployed in CI on native arm64 runners with the llmfit deb repackaged from the aarch64 musl release. GitHub's arm64 runners have no KVM, so the CI deploy runs under TCG emulation: the API surface is asserted, token generation is exercised but not asserted (documented in the test). The arm64 ISO is deferred: the unattended-install test that guards every ISO change is impractical under pure emulation; revisit if arm64 KVM runners appear, and note Raspberry Pi needs its own image flavor anyway (not the generic cloudimg). Done for the cloud image.
 
 ## v0.4 (supply chain and enterprise)
 
@@ -39,10 +33,10 @@ A dedicated track rather than a single milestone, because "your data stays on yo
 
 Planned, in order of appearance:
 
-- SECURITY.md with a private disclosure channel and a supported-versions table (v0.2).
-- Default firewall profile: ufw enabled at install with only SSH and the gateway port open; Open WebUI listens on all interfaces today (host networking), so its port stays closed until the user opens it deliberately (v0.3).
-- Sandboxing extended to every llmd unit and the containers (NoNewPrivileges, ProtectSystem, capability drops), with a CI check that fails when a unit regresses (v0.3).
-- Automatic security updates: unattended-upgrades enabled by default for the security pocket, since an appliance that nobody patches must patch itself (v0.3).
+- SECURITY.md with a private disclosure channel and a supported-versions table. Done in v0.2.
+- Default firewall profile: ufw enabled at first boot with only SSH and the gateway port open; Open WebUI listens on all interfaces (host networking), so its port stays closed until the user opens it deliberately, and `sibilla tls --acme` opens 80/443 itself. Done in v0.3.
+- Sandboxing extended to every llmd unit and the containers (NoNewPrivileges, kernel and realtime restrictions), with a CI check that asserts the directives on the installed system; capability drops on the containers deferred until their runtime can be exercised in CI. Done in v0.3.
+- Automatic security updates: unattended-upgrades enabled by default for the security pocket, since an appliance that nobody patches must patch itself. Done in v0.3.
 - API key lifecycle: `sibilla key rotate`, multiple keys with per-key revocation, structured access logs; covered by the v0.4 gateway hardening item.
 - Supply chain: signed catalog, SBOM, CVE scanning with a triage policy; covered by v0.4.
 - Secure Boot: the repack keeps Ubuntu's signed shim and GRUB, but the chain has never been verified end to end on real firmware; test it and document the result (v0.4).

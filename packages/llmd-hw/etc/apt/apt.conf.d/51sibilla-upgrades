@@ -1,0 +1,4 @@
+// SibillaOS: automatic security updates. An appliance that nobody
+// patches must patch itself; see the security track in ROADMAP.md.
+APT::Periodic::Update-Package-Lists "1";
+APT::Periodic::Unattended-Upgrade "1";

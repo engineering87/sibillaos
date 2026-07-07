@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+# sibilla-metrics: Prometheus metrics endpoint on the gateway, on or off.
+set -euo pipefail
+
+CONF=/etc/llmd/gateway.conf
+
+usage() {
+  cat <<USAGE
+usage: sibilla-metrics COMMAND
+
+  enable    serve Prometheus metrics at /metrics/gateway
+  disable   remove the metrics endpoint
+  status    show whether metrics are enabled
+
+The endpoint answers with the same bearer token as the API. Scrape
+configuration and a Grafana dashboard live in docs/observability/ in
+the SibillaOS repository. With vLLM as the engine, its native metrics
+also pass through the gateway at /metrics.
+USAGE
+  exit 1
+}
+
+need_root() { [[ $EUID -eq 0 ]] || { echo "run as root (sudo)" >&2; exit 1; }; }
+
+read_conf() {
+  MODE=http
+  TLS_HOSTNAME=""
+  ACME_EMAIL=""
+  METRICS=off
+  # shellcheck disable=SC1090
+  [[ -r "$CONF" ]] && . "$CONF"
+}
+
+write_conf() {
+  {
+    printf 'MODE=%s\n' "$MODE"
+    if [[ -n "$TLS_HOSTNAME" ]]; then printf 'TLS_HOSTNAME=%s\n' "$TLS_HOSTNAME"; fi
+    if [[ -n "$ACME_EMAIL" ]]; then printf 'ACME_EMAIL=%s\n' "$ACME_EMAIL"; fi
+    printf 'METRICS=%s\n' "$METRICS"
+  } > "$CONF"
+}
+
+render_restart() {
+  /usr/lib/llmd/llmd-gateway-render
+  systemctl restart caddy.service
+}
+
+case "${1:-}" in
+  enable)
+    need_root
+    read_conf
+    METRICS=on
+    write_conf
+    render_restart
+    echo "metrics enabled at /metrics/gateway (same API key as the API)"
+    ;;
+  disable)
+    need_root
+    read_conf
+    METRICS=off
+    write_conf
+    render_restart
+    echo "metrics disabled"
+    ;;
+  status)
+    read_conf
+    echo "metrics: $METRICS"
+    ;;
+  *) usage ;;
+esac
