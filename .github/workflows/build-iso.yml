@@ -437,23 +437,26 @@ jobs:
                 echo "--- sibilla metrics ---"
                 $SSH "echo sibilla | sudo -S sibilla metrics enable" || RC=1
                 sleep 3
+                # the API must still work with metrics on; this request
+                # also warms the counters: enabling metrics restarts
+                # caddy, and the prometheus client only exposes the
+                # caddy_http_* series after a first completed request
+                acode=$(curl -s -o /dev/null -w '%{http_code}' \
+                  -H "Authorization: Bearer $KEY" http://127.0.0.1:8080/v1/models || true)
+                [ "$acode" = "200" ] || { echo "api broken with metrics on: $acode"; RC=1; }
                 mgcode=$(curl -s -o metrics.out -w '%{http_code}' \
                   -H "Authorization: Bearer $KEY" \
                   http://127.0.0.1:8080/metrics/gateway || true)
                 if [ "$mgcode" = "200" ] && grep -q "caddy_http_" metrics.out; then
                   echo "metrics endpoint OK"
                 else
-                  echo "metrics endpoint answered $mgcode"
+                  echo "metrics endpoint answered $mgcode without caddy_http_ series"
                   head -5 metrics.out || true
                   RC=1
                 fi
                 mgnokey=$(curl -s -o /dev/null -w '%{http_code}' \
                   http://127.0.0.1:8080/metrics/gateway || true)
                 [ "$mgnokey" = "401" ] || { echo "metrics served without key: $mgnokey"; RC=1; }
-                # the API must still work with metrics on
-                acode=$(curl -s -o /dev/null -w '%{http_code}' \
-                  -H "Authorization: Bearer $KEY" http://127.0.0.1:8080/v1/models || true)
-                [ "$acode" = "200" ] || { echo "api broken with metrics on: $acode"; RC=1; }
                 # the metrics flag must survive a tls mode change
                 $SSH "echo sibilla | sudo -S sibilla tls enable sibillaos.test" || RC=1
                 sleep 5
