@@ -6,9 +6,9 @@ This document lists where the project is going and why. Versions are scoped by o
 
 The operability release: everything needed to run SibillaOS beyond the first demo. Shipped: llmfit as a Debian package built from the pinned upstream release, Open WebUI as an opt-in container managed by `sibilla-webui` (container plumbing exercised in CI, the web interface itself still pending a manual pass), HTTPS on the gateway via `sibilla-tls` (local CA for LAN hostnames, ACME for public ones), multi-model serving through the gateway, and the `sibilla-connect` kit with ready-to-paste configuration for VS Code (Continue and Cline), aider and any OpenAI-compatible client. Release notes in [docs/releases/v0.2.0.md](docs/releases/v0.2.0.md).
 
-## v0.3 (in progress, branch release/0.3)
+## v0.3 (released)
 
-The release for people who run SibillaOS on real infrastructure.
+The release for people who run SibillaOS on real infrastructure. Release notes in [docs/releases/v0.3.0.md](docs/releases/v0.3.0.md).
 
 - A unified `sibilla` CLI as the single entry point (`sibilla status`, `sibilla model`, `sibilla tls`, `sibilla webui`, `sibilla connect`), with the current commands kept as aliases. Done.
 - `sibilla status` grown into a real health view: engine state, served models, disk usage of the model store, GPU utilization when present, gateway reachability; exits nonzero on failure so scripts can use it as a check. Done.
