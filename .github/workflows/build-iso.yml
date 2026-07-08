@@ -6,6 +6,11 @@ on:
     tags: ["v*"]
   pull_request:
 
+# least-privilege default token; the jobs that publish release assets
+# override this with contents: write at job level
+permissions:
+  contents: read
+
 jobs:
   lint:
     runs-on: ubuntu-24.04
