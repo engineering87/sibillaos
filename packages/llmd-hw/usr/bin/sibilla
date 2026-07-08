@@ -10,6 +10,7 @@ usage: sibilla COMMAND [ARGS]
   status         health view: engine, served models, disk, GPU, gateway
   model ...      list, download, switch and remove models
   tls ...        switch the gateway between HTTP and HTTPS
+  key ...        manage the gateway API keys (list, add, revoke, rotate)
   metrics ...    Prometheus endpoint on the gateway, on or off
   webui ...      enable or disable the Open WebUI chat interface
   connect        print client configuration for editors and agents
@@ -25,6 +26,7 @@ case "$cmd" in
   status)  exec /usr/lib/llmd/sibilla-status "$@" ;;
   model)   exec sibilla-model "$@" ;;
   tls)     exec sibilla-tls "$@" ;;
+  key)     exec sibilla-key "$@" ;;
   metrics) exec sibilla-metrics "$@" ;;
   webui)   exec sibilla-webui "$@" ;;
   connect) exec sibilla-connect "$@" ;;

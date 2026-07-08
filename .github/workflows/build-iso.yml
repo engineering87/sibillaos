@@ -38,7 +38,8 @@ jobs:
           export LLMD_GATEWAY_CONF="$RUNNER_TEMP/gateway.conf"
           export LLMD_CADDYFILE="$RUNNER_TEMP/Caddyfile"
           export LLMD_ENGINE_FILE="$RUNNER_TEMP/engine"
-          export LLMD_API_KEY=lint-test-key
+          export LLMD_ACCESS_LOG="$RUNNER_TEMP/access.log"
+          export LLMD_KEYS_ALT="lintkey1|lintkey2"
           echo ollama > "$LLMD_ENGINE_FILE"
           for conf in 'MODE=http' \
                       'MODE=http\nMETRICS=on' \
@@ -471,6 +472,37 @@ jobs:
                   https://sibillaos.test:8080/metrics/gateway || true)
                 [ "$tmcode" = "200" ] || { echo "metrics lost across tls switch: $tmcode"; RC=1; }
                 $SSH "echo sibilla | sudo -S sibilla tls disable" || RC=1
+                sleep 5
+                # api key lifecycle: add, use, revoke, rotate; runs
+                # last because it rotates the default key
+                echo "--- sibilla key ---"
+                $SSH "echo sibilla | sudo -S sibilla key list" || RC=1
+                NEWKEY=$($SSH "echo sibilla | sudo -S sibilla key add ci-extra" | tail -1)
+                sleep 3
+                kc=$(curl -s -o /dev/null -w '%{http_code}' \
+                  -H "Authorization: Bearer $NEWKEY" http://127.0.0.1:8080/v1/models || true)
+                [ "$kc" = "200" ] || { echo "added key rejected: $kc"; RC=1; }
+                $SSH "echo sibilla | sudo -S sibilla key revoke ci-extra" || RC=1
+                sleep 3
+                kc=$(curl -s -o /dev/null -w '%{http_code}' \
+                  -H "Authorization: Bearer $NEWKEY" http://127.0.0.1:8080/v1/models || true)
+                [ "$kc" = "401" ] || { echo "revoked key still accepted: $kc"; RC=1; }
+                kc=$(curl -s -o /dev/null -w '%{http_code}' \
+                  -H "Authorization: Bearer $KEY" http://127.0.0.1:8080/v1/models || true)
+                [ "$kc" = "200" ] || { echo "default key broken after revoke: $kc"; RC=1; }
+                OLDKEY=$KEY
+                $SSH "echo sibilla | sudo -S sibilla key rotate" >/dev/null || RC=1
+                sleep 3
+                KEY=$($SSH "echo sibilla | sudo -S cat /etc/llmd/apikey" | tail -1)
+                kc=$(curl -s -o /dev/null -w '%{http_code}' \
+                  -H "Authorization: Bearer $OLDKEY" http://127.0.0.1:8080/v1/models || true)
+                [ "$kc" = "401" ] || { echo "old default still accepted after rotate: $kc"; RC=1; }
+                kc=$(curl -s -o /dev/null -w '%{http_code}' \
+                  -H "Authorization: Bearer $KEY" http://127.0.0.1:8080/v1/models || true)
+                [ "$kc" = "200" ] || { echo "rotated default rejected: $kc"; RC=1; }
+                # structured access log on the gateway
+                $SSH "echo sibilla | sudo -S grep -q '/v1/models' /var/log/caddy/sibilla-access.log" \
+                  || { echo "access log missing or empty"; RC=1; }
               else
                 echo "inference failed: empty or malformed response"
               fi

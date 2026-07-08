@@ -26,11 +26,15 @@ fi
 engine=$(cat /etc/llmd/engine 2>/dev/null || echo ollama)
 model=$(cat /etc/llmd/model 2>/dev/null || true)
 
-# 1. API key: stored for the admin and exported to Caddy via gateway.env
+# 1. API keys: the default key is generated here; extra keys are
+# managed later with sibilla key. llmd-keys-render turns them all
+# into the gateway.env consumed by the Caddy matcher.
 if [[ ! -s /etc/llmd/apikey ]]; then
   (umask 077; head -c32 /dev/urandom | base64 | tr -d '=+/' | cut -c1-40 > /etc/llmd/apikey)
 fi
-(umask 077; printf 'LLMD_API_KEY=%s\n' "$(cat /etc/llmd/apikey)" > /etc/llmd/gateway.env)
+mkdir -p /etc/llmd/apikeys.d
+chmod 700 /etc/llmd/apikeys.d
+/usr/lib/llmd/llmd-keys-render
 
 # 2. Model (retry with resume; both engines resume partial downloads)
 if [[ -n "$model" ]]; then
@@ -93,6 +97,12 @@ case "$engine" in
   vllm) systemctl start vllm.service ;;
   *)    systemctl enable --now ollama.service ;;
 esac
+# access log directory: the caddy user only exists after its package
+# is installed, so the ownership cannot be fixed in a deb
+mkdir -p /var/log/caddy
+if id caddy >/dev/null 2>&1; then
+  chown caddy:caddy /var/log/caddy
+fi
 # caddy is already running with the stock config from the Ubuntu package,
 # so enable --now would be a no-op: an explicit restart loads our gateway
 # config and the API key environment
