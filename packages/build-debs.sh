@@ -62,11 +62,16 @@ EOF
     mkdir -p "$staging/usr/share/keyrings" "$staging/etc/apt/sources.list.d"
     gpg --dearmor -o "$staging/usr/share/keyrings/sibillaos-archive-keyring.gpg" \
       < "$DIR/../apt/sibillaos-archive-key.asc"
+    # shipped DISABLED: the repository goes live with the first tagged
+    # release, and an unreachable source would fail the installer's
+    # final apt-get update; llmd-firstboot enables it after checking
+    # that the repository answers
     cat > "$staging/etc/apt/sources.list.d/sibillaos.sources" <<'SRC'
 Types: deb
 URIs: https://engineering87.github.io/sibillaos/apt/
 Suites: ./
 Signed-By: /usr/share/keyrings/sibillaos-archive-keyring.gpg
+Enabled: no
 SRC
   fi
   # the hardened ollama unit lists this path in ReadWritePaths: it must

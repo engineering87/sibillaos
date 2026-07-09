@@ -117,7 +117,21 @@ fi
 systemctl enable caddy.service
 systemctl restart caddy.service
 
-# 5. Firewall: default-closed, only SSH and the gateway port open.
+# 5. SibillaOS apt source: shipped disabled because an unreachable
+# repository would break the installer's final apt-get update (the
+# repo goes live with the first tagged release). Enable it once it
+# actually answers.
+APT_SRC=/etc/apt/sources.list.d/sibillaos.sources
+if [[ -f "$APT_SRC" ]] && grep -q '^Enabled: no' "$APT_SRC"; then
+  if curl -fsS -m 10 https://engineering87.github.io/sibillaos/apt/InRelease >/dev/null 2>&1; then
+    sed -i 's/^Enabled: no/Enabled: yes/' "$APT_SRC"
+    echo "SibillaOS apt repository enabled"
+  else
+    echo "SibillaOS apt repository not reachable yet, source left disabled"
+  fi
+fi
+
+# 6. Firewall: default-closed, only SSH and the gateway port open.
 # Open WebUI's port 3000 stays closed until the admin opens it
 # deliberately (sibilla webui enable prints the command).
 if command -v ufw >/dev/null 2>&1; then
