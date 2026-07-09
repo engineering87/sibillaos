@@ -261,6 +261,12 @@ jobs:
             -cdrom "$ISO" -boot d -no-reboot || RC=$?
           echo "--- install log (tail) ---"
           tail -150 install.log || true
+          # the error-commands power the VM off on failure, so a clean
+          # qemu exit is not enough: the failure marker decides
+          if grep -q "SIBILLA INSTALL FAILED" install.log; then
+            echo "installer reported failure"
+            exit 1
+          fi
           exit "$RC"
       - name: Boot installed system, probe the gateway, run inference
         run: |

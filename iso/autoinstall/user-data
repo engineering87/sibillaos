@@ -29,6 +29,16 @@ autoinstall:
   drivers:
     # Install NVIDIA drivers from the Ubuntu restricted component when detected
     install: true
+  error-commands:
+    # on install failure, surface the real error on the serial console
+    # (the subiquity summary only reports exit codes) and power off so
+    # the CI job fails fast instead of sitting until its timeout
+    - bash -c 'echo "=== SIBILLA INSTALL FAILED, diagnostics ===" > /dev/console'
+    - bash -c 'ls -la /target/etc/apt/sources.list.d/ > /dev/console 2>&1 || true'
+    - bash -c 'cat /target/etc/apt/sources.list.d/*.sources > /dev/console 2>&1 || true'
+    - bash -c 'chroot /target apt-get update 2>&1 | tail -60 > /dev/console || true'
+    - bash -c 'echo "=== end diagnostics ===" > /dev/console'
+    - poweroff
   late-commands:
     # 1. Copy the SibillaOS payload from the ISO into the target
     - cp -r /cdrom/sibilla /target/opt/sibilla
