@@ -37,7 +37,7 @@ A few practical rules that reflect lessons this project has already paid for: ne
 
 ## Model catalog
 
-Additions to `catalog/models.json` must meet all of these criteria: a permissive license (Apache-2.0, MIT or equivalent), a non-gated Hugging Face repository, single-file GGUF quantizations for Ollama entries, and a repo id you have verified to exist. State in the PR how you verified each point. Models under community licenses (Llama, Gemma and similar) are not accepted in the default catalog regardless of quality, because the project does not redistribute or endorse terms the user has not accepted.
+Additions to `catalog/models.json` must meet all of these criteria: a permissive license (Apache-2.0, MIT or equivalent), a non-gated Hugging Face repository, single-file GGUF quantizations for Ollama entries, and a repo id you have verified to exist. State in the PR how you verified each point. Where possible, record the per-quant sha256 digests (tools/update-digests.sh fetches them from the Hugging Face API). The catalog is a signed list: after any change a maintainer re-signs it (gpg --armor --detach-sign -o catalog/models.json.asc catalog/models.json), and CI rejects a catalog that does not verify once the signature exists. Models under community licenses (Llama, Gemma and similar) are not accepted in the default catalog regardless of quality, because the project does not redistribute or endorse terms the user has not accepted.
 
 ## Reporting issues
 

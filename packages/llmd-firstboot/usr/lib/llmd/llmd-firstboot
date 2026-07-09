@@ -76,6 +76,14 @@ if [[ -n "$model" ]]; then
         if ollama pull "$model"; then break; fi
         sleep 30
       done
+      # digest check against the catalog. Warn-only here: first boot
+      # must complete even if the upstream repo re-uploaded the file,
+      # but the warning lands in the journal and on the console.
+      vrc=0
+      /usr/lib/llmd/llmd-model-verify "$model" || vrc=$?
+      if [[ "$vrc" -eq 1 ]]; then
+        echo "WARNING: $model does not match the catalog digest; verify it before trusting this system (sibilla model use re-checks)"
+      fi
       ;;
     vllm)
       echo "LLMD_MODEL=$model" > /etc/llmd/vllm.env

@@ -37,9 +37,23 @@ Description: $desc
 EOF
   # executable bit for the scripts
   find "$staging/usr/lib/llmd" "$staging/usr/bin" -type f -exec chmod 755 {} + 2>/dev/null || true
-  # the curated model catalog ships with llmd-hw
+  # the curated model catalog ships with llmd-hw, with its detached
+  # signature when the maintainer has signed it; if both the project
+  # key and the signature exist, the build refuses a catalog that
+  # does not verify
   if [[ "$name" == "llmd-hw" ]]; then
     install -D -m644 "$DIR/../catalog/models.json" "$staging/usr/share/llmd/models.json"
+    if [[ -f "$DIR/../catalog/models.json.asc" ]]; then
+      if [[ -f "$DIR/../apt/sibillaos-archive-key.asc" ]]; then
+        local kr
+        kr=$(mktemp)
+        gpg --dearmor -o "$kr" < "$DIR/../apt/sibillaos-archive-key.asc"
+        gpgv --keyring "$kr" "$DIR/../catalog/models.json.asc" "$DIR/../catalog/models.json" \
+          || { echo "catalog signature does not verify, refusing to build" >&2; exit 1; }
+        rm -f "$kr"
+      fi
+      install -D -m644 "$DIR/../catalog/models.json.asc" "$staging/usr/share/llmd/models.json.asc"
+    fi
   fi
   # APT repo trust: once the project public key is committed, llmd-hw
   # ships the keyring and the sources entry, so installed systems get

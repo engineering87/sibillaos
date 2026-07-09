@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# llmd-model-verify: check a pulled ollama model against the digest
+# recorded in the catalog. Ollama stores blobs under their sha256, and
+# for hf.co pulls the GGUF blob digest equals the LFS sha256 of the
+# file on Hugging Face, so the check is a file existence test.
+# Exit codes: 0 digest verified, 1 MISMATCH (expected blob absent),
+# 2 nothing to verify (no tag, model not in catalog, or no digest
+# recorded for this quant).
+set -euo pipefail
+
+MODEL="${1:?usage: llmd-model-verify MODEL_ID[:QUANT] [CATALOG]}"
+CATALOG="${2:-/usr/share/llmd/models.json}"
+MODELS_DIR="${LLMD_MODELS_DIR:-/var/lib/llmd/models/ollama}"
+
+if [[ "$MODEL" != *:* ]]; then
+  echo "no quant tag in '$MODEL', nothing to verify" >&2
+  exit 2
+fi
+base="${MODEL%%:*}"
+quant="${MODEL##*:}"
+
+digest=$(jq -r --arg id "$base" --arg q "$quant" \
+  '.models[] | select(.id == $id) | .digests[$q]? // empty' "$CATALOG" 2>/dev/null || true)
+if [[ -z "$digest" ]]; then
+  echo "no digest recorded for $MODEL in the catalog" >&2
+  exit 2
+fi
+
+hex="${digest#sha256:}"
+if [[ -f "$MODELS_DIR/blobs/sha256-$hex" ]]; then
+  echo "digest verified: $MODEL is the reviewed artifact ($digest)"
+  exit 0
+fi
+echo "digest MISMATCH for $MODEL: expected blob sha256-$hex is not in $MODELS_DIR/blobs" >&2
+exit 1

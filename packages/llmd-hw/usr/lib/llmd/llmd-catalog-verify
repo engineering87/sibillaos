@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# llmd-catalog-verify: check the GPG signature of the model catalog.
+# Exit codes: 0 signature valid, 1 signature INVALID (tampered or
+# wrong key), 2 not signed (transitional builds without the project
+# key; callers warn and continue).
+set -euo pipefail
+
+CATALOG="${1:-/usr/share/llmd/models.json}"
+SIG="$CATALOG.asc"
+KEYRING="${LLMD_KEYRING:-/usr/share/keyrings/sibillaos-archive-keyring.gpg}"
+
+if [[ ! -f "$SIG" || ! -f "$KEYRING" ]]; then
+  echo "catalog is not signed (no signature or keyring in this build)" >&2
+  exit 2
+fi
+if ! command -v gpgv >/dev/null 2>&1; then
+  echo "gpgv not available, cannot verify the catalog" >&2
+  exit 2
+fi
+if gpgv --keyring "$KEYRING" "$SIG" "$CATALOG" >/dev/null 2>&1; then
+  exit 0
+fi
+echo "catalog signature INVALID for $CATALOG" >&2
+exit 1

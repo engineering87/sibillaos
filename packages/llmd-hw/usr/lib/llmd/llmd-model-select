@@ -19,6 +19,15 @@ done
 command -v llmfit >/dev/null 2>&1 || { echo "llmfit not found" >&2; exit 2; }
 [[ -r "$CATALOG" ]] || { echo "catalog not readable: $CATALOG" >&2; exit 2; }
 
+# catalog trust: a broken signature always aborts; unsigned builds
+# (no project key yet) warn and continue
+cvrc=0
+/usr/lib/llmd/llmd-catalog-verify "$CATALOG" >/dev/null 2>&1 || cvrc=$?
+if [[ "$cvrc" -eq 1 ]]; then
+  echo "REFUSING to use the catalog: signature verification failed" >&2
+  exit 1
+fi
+
 engine=$(cat /etc/llmd/engine 2>/dev/null || echo ollama)
 
 # llmfit recommendations (one model id per line)

@@ -21,6 +21,17 @@ EOF
 
 need_root() { [[ $EUID -eq 0 ]] || { echo "run as root (sudo)" >&2; exit 1; }; }
 
+# catalog trust: a broken signature always aborts; unsigned builds
+# (no project key yet) warn and continue
+check_catalog() {
+  local rc=0
+  /usr/lib/llmd/llmd-catalog-verify "$CATALOG" >/dev/null 2>&1 || rc=$?
+  if [[ "$rc" -eq 1 ]]; then
+    echo "REFUSING to use the catalog: signature verification failed" >&2
+    exit 1
+  fi
+}
+
 cmd_status() {
   echo "engine:  $ENGINE"
   echo "model:   ${CURRENT:-none selected}"
@@ -28,6 +39,7 @@ cmd_status() {
 }
 
 cmd_list() {
+  check_catalog
   echo "curated models for engine '$ENGINE' (current: ${CURRENT:-none}):"
   jq -r --arg e "$ENGINE" \
     '.models[] | select(.engines[]? == $e) | "  " + .id + "  [" + .family + ", " + .license + "]"' \
@@ -43,12 +55,21 @@ cmd_list() {
 
 cmd_use() {
   need_root
+  check_catalog
   local model="$1"
   # the ollama CLI panics without HOME when run over ssh/sudo
   export HOME="${HOME:-/root}"
   case "$ENGINE" in
     ollama)
       ollama pull "$model"
+      # digest check against the catalog: a recorded digest that does
+      # not match means the artifact is not the reviewed one; refuse
+      local vrc=0
+      /usr/lib/llmd/llmd-model-verify "$model" || vrc=$?
+      if [[ "$vrc" -eq 1 ]]; then
+        echo "REFUSING to serve $model: pulled artifact does not match the catalog digest" >&2
+        exit 1
+      fi
       ;;
     vllm)
       echo "LLMD_MODEL=$model" > /etc/llmd/vllm.env

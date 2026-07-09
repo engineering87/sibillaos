@@ -25,7 +25,20 @@ jobs:
             packages/llmd-gateway/usr/lib/llmd/* packages/llmd-gateway/usr/bin/* \
             packages/llmd-webui/usr/bin/*
       - name: Validate catalog JSON
-        run: jq empty catalog/models.json
+        run: |
+          jq empty catalog/models.json
+          # recorded digests must be well-formed sha256 values
+          jq -e '[.models[].digests? // {} | to_entries[] | .value
+                  | select(test("^sha256:[0-9a-f]{64}$") | not)] | length == 0' \
+            catalog/models.json >/dev/null || { echo "malformed digest in catalog"; exit 1; }
+          # when the maintainer signature and the project key exist,
+          # the catalog must verify
+          if [ -f catalog/models.json.asc ] && [ -f apt/sibillaos-archive-key.asc ]; then
+            gpg --dearmor -o /tmp/sibilla-kr.gpg apt/sibillaos-archive-key.asc
+            gpgv --keyring /tmp/sibilla-kr.gpg catalog/models.json.asc catalog/models.json
+          else
+            echo "catalog signature not present yet (transitional)"
+          fi
       - name: Validate cloud-init YAML
         run: |
           python3 -c "import yaml; yaml.safe_load(open('cloud/bake/user-data').read().replace('#cloud-config','',1))"
@@ -354,6 +367,17 @@ jobs:
                   echo "$RESP2" | jq . || echo "$RESP2"
                   RC=1
                 fi
+                # model integrity: both pulled quants must match the
+                # digests recorded in the catalog (ollama blob = GGUF
+                # sha256), and an untagged id must report rc 2
+                echo "--- model digests ---"
+                $SSH "/usr/lib/llmd/llmd-model-verify hf.co/bartowski/Qwen_Qwen3-0.6B-GGUF:Q4_K_M" \
+                  || { echo "digest check failed for Q4_K_M"; RC=1; }
+                $SSH "/usr/lib/llmd/llmd-model-verify hf.co/bartowski/Qwen_Qwen3-0.6B-GGUF:Q8_0" \
+                  || { echo "digest check failed for Q8_0"; RC=1; }
+                vrc=0
+                $SSH "/usr/lib/llmd/llmd-model-verify hf.co/bartowski/Qwen_Qwen3-0.6B-GGUF" || vrc=$?
+                [ "$vrc" = "2" ] || { echo "untagged id should be rc 2, got $vrc"; RC=1; }
                 # the connection kit must render and reference the endpoint
                 echo "--- sibilla-connect ---"
                 $SSH "echo sibilla | sudo -S sibilla-connect" > connect.out || RC=1
