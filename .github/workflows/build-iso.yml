@@ -539,6 +539,13 @@ jobs:
                 # structured access log on the gateway
                 $SSH "echo sibilla | sudo -S grep -q '/v1/models' /var/log/caddy/sibilla-access.log" \
                   || { echo "access log missing or empty"; RC=1; }
+                # supply chain inputs: the installed package inventory
+                # feeds the SBOM and CVE scan job
+                echo "--- package inventory ---"
+                $SSH "dpkg-query -W -f='\${Package}\t\${Version}\t\${Architecture}\n'" > installed-packages.tsv || RC=1
+                echo "$(wc -l < installed-packages.tsv) packages installed"
+                $SSH "cat /var/lib/dpkg/status" > dpkg-status || RC=1
+                $SSH "cat /etc/os-release" > os-release || RC=1
               else
                 echo "inference failed: empty or malformed response"
               fi
@@ -559,6 +566,77 @@ jobs:
           path: |
             install.log
             firstboot.log
+      - name: Upload installed-system inventory
+        uses: actions/upload-artifact@v4
+        with:
+          name: install-inventory
+          path: |
+            installed-packages.tsv
+            dpkg-status
+            os-release
+
+  supply-chain:
+    needs: install-test
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download installed-system inventory
+        uses: actions/download-artifact@v4
+        with:
+          name: install-inventory
+          path: inventory
+      - name: Install pinned SBOM and scan tools
+        run: |
+          mkdir -p "$HOME/bin"
+          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh \
+            | sh -s -- -b "$HOME/bin" v1.46.0
+          curl -sSfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
+            | sh -s -- -b "$HOME/bin" v0.72.0
+          echo "$HOME/bin" >> "$GITHUB_PATH"
+      - name: Generate the SBOM of the llmd packages
+        run: |
+          bash ./packages/build-debs.sh
+          syft dir:packages/dist \
+            -o spdx-json=sbom-llmd-packages.spdx.json \
+            -o cyclonedx-json=sbom-llmd-packages.cdx.json
+      - name: Scan the installed system for CVEs
+        run: |
+          # the dpkg status captured from the real installed system is
+          # the scan input: what the machine actually runs, not a guess
+          mkdir -p rootfs/var/lib/dpkg rootfs/etc
+          cp inventory/dpkg-status rootfs/var/lib/dpkg/status
+          cp inventory/os-release rootfs/etc/os-release
+          trivy fs --scanners vuln --format table rootfs || true
+          trivy fs --scanners vuln --format json -o cve-report.json rootfs
+          # triage gate (docs/supply-chain.md): CRITICAL findings WITH
+          # a fix available fail the build; unfixed ones are inherited
+          # from the base distribution and tracked, not fatal
+          fixable=$(jq '[.Results[]?.Vulnerabilities[]?
+            | select(.Severity == "CRITICAL" and (.FixedVersion // "") != "")] | length' cve-report.json)
+          echo "fixable critical vulnerabilities: $fixable"
+          if [ "$fixable" -ne 0 ]; then
+            echo "fix them or record a triaged exception in .trivyignore (see docs/supply-chain.md)"
+            exit 1
+          fi
+      - name: Upload supply chain artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: supply-chain
+          path: |
+            sbom-llmd-packages.spdx.json
+            sbom-llmd-packages.cdx.json
+            cve-report.json
+            inventory/installed-packages.tsv
+      - name: Attach to release (tags only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            sbom-llmd-packages.spdx.json
+            sbom-llmd-packages.cdx.json
+            inventory/installed-packages.tsv
 
   build-cloud:
     needs: lint
