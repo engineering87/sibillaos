@@ -41,6 +41,20 @@ EOF
   if [[ "$name" == "llmd-hw" ]]; then
     install -D -m644 "$DIR/../catalog/models.json" "$staging/usr/share/llmd/models.json"
   fi
+  # APT repo trust: once the project public key is committed, llmd-hw
+  # ships the keyring and the sources entry, so installed systems get
+  # llmd updates through plain apt
+  if [[ "$name" == "llmd-hw" && -f "$DIR/../apt/sibillaos-archive-key.asc" ]]; then
+    mkdir -p "$staging/usr/share/keyrings" "$staging/etc/apt/sources.list.d"
+    gpg --dearmor -o "$staging/usr/share/keyrings/sibillaos-archive-keyring.gpg" \
+      < "$DIR/../apt/sibillaos-archive-key.asc"
+    cat > "$staging/etc/apt/sources.list.d/sibillaos.sources" <<'SRC'
+Types: deb
+URIs: https://engineering87.github.io/sibillaos/apt/
+Suites: ./
+Signed-By: /usr/share/keyrings/sibillaos-archive-keyring.gpg
+SRC
+  fi
   # the hardened ollama unit lists this path in ReadWritePaths: it must
   # exist at unit start or systemd fails the namespace and ollama
   # crash-loops until firstboot creates it

@@ -60,6 +60,8 @@ sudo apt-get install xorriso
 
 Every push to `main` also builds the ISO in CI, boots it in QEMU and runs the automated install end to end; the image is attached to each run as an artifact.
 
+Installed systems receive llmd package updates through the project's signed [APT repository](apt/README.md), preconfigured on every image: a plain `sudo apt update && sudo apt upgrade` keeps the stack current between reinstalls.
+
 ## Repository layout
 
 ```

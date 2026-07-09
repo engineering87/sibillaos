@@ -19,7 +19,7 @@ jobs:
       - name: Shellcheck
         run: |
           sudo apt-get update && sudo apt-get install -y shellcheck
-          shellcheck iso/build.sh packages/build-debs.sh cloud/build-cloud.sh \
+          shellcheck iso/build.sh packages/build-debs.sh cloud/build-cloud.sh apt/build-repo.sh \
             packages/llmd-hw/usr/lib/llmd/* packages/llmd-hw/usr/bin/* \
             packages/llmd-firstboot/usr/lib/llmd/* \
             packages/llmd-gateway/usr/lib/llmd/* packages/llmd-gateway/usr/bin/* \
@@ -82,7 +82,13 @@ jobs:
           path: work/*.iso
           key: ubuntu-2404-live-server-amd64
       - name: Build llmd-* debs
-        run: bash ./packages/build-debs.sh
+        # on tags the deb version follows the release, so installed
+        # systems see upgrades in the APT repo
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            export LLMD_VERSION="${GITHUB_REF_NAME#v}"
+          fi
+          bash ./packages/build-debs.sh
       - name: Build ISO
         # the small-model override keeps the install test fast; it is
         # NOT applied on tag builds, so released ISOs stay clean
@@ -555,7 +561,13 @@ jobs:
           path: work-cloud/*.img
           key: ubuntu-noble-cloudimg-${{ matrix.arch }}
       - name: Build llmd-* debs
-        run: bash ./packages/build-debs.sh
+        # on tags the deb version follows the release, so installed
+        # systems see upgrades in the APT repo
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            export LLMD_VERSION="${GITHUB_REF_NAME#v}"
+          fi
+          bash ./packages/build-debs.sh
       - name: Bake cloud image
         # same small-model override as the ISO build; never on tags
         env:
