@@ -22,6 +22,11 @@ write_files:
       mount -o ro /dev/disk/by-label/CIDATA /mnt/seed \
         || mount -o ro /dev/disk/by-label/cidata /mnt/seed
       export DEBIAN_FRONTEND=noninteractive
+      # skip Translation files (pure description localization): a
+      # mid-sync mirror serving a stale one fails the whole update;
+      # the file persists so the deployed image is immune too
+      printf 'Acquire::Languages "none";\nAcquire::Retries "3";\n' \
+        > /etc/apt/apt.conf.d/90sibilla-apt-robustness
       # mirrors are sometimes caught mid-sync ("File has unexpected
       # size"): retry with a pause instead of failing the whole bake
       for i in 1 2 3 4 5; do

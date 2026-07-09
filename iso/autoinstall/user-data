@@ -30,6 +30,13 @@ autoinstall:
         uri: http://archive.ubuntu.com/ubuntu
       - arches: [default]
         uri: http://ports.ubuntu.com/ubuntu-ports
+    # Translation files are description localization with no function
+    # on a server, yet a mid-sync mirror serving a stale one fails the
+    # whole apt-get update (seen for 11+ hours on noble-security);
+    # skip them and retry transient fetch errors
+    conf: |
+      Acquire::Languages "none";
+      Acquire::Retries "3";
   packages:
     - curl
     - jq
