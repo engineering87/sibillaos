@@ -39,7 +39,7 @@ Planned, in order of appearance:
 - Automatic security updates: unattended-upgrades enabled by default for the security pocket, since an appliance that nobody patches must patch itself. Done in v0.3.
 - API key lifecycle: `sibilla key rotate`, multiple keys with per-key revocation, structured access logs; covered by the v0.4 gateway hardening item.
 - Supply chain: signed catalog, SBOM, CVE scanning with a triage policy; covered by v0.4.
-- Secure Boot: the repack keeps Ubuntu's signed shim and GRUB, but the chain has never been verified end to end on real firmware; test it and document the result (v0.4).
+- Secure Boot: the repack keeps Ubuntu's signed shim and GRUB, and CI now boots every ISO under OVMF with Secure Boot enforced and Microsoft keys enrolled, asserting that the kernel itself reports Secure Boot active; validation on physical firmware from external users remains welcome. Done in v0.4.
 - Model integrity: Ollama already verifies blob digests on pull; extend the catalog with expected digests so the model being served is provably the one that was reviewed (v0.4).
 
 ## v1.0 (general availability)

@@ -217,6 +217,47 @@ jobs:
           echo "--- UEFI serial log ---"
           cat uefi-serial.log || true
           test "$ok" -eq 1
+      - name: Boot smoke test (UEFI Secure Boot)
+        # the repack must preserve Ubuntu's signed shim/GRUB chain:
+        # boot with the secboot OVMF build and Microsoft-enrolled
+        # variables, and require the kernel itself to report that
+        # Secure Boot is active
+        run: |
+          ISO=$(ls iso/*.iso | head -1)
+          CODE=/usr/share/OVMF/OVMF_CODE_4M.secboot.fd
+          VARS=/usr/share/OVMF/OVMF_VARS_4M.ms.fd
+          if [ ! -f "$CODE" ] || [ ! -f "$VARS" ]; then
+            echo "OVMF secure boot images not found; available files:"
+            ls -la /usr/share/OVMF/
+            exit 1
+          fi
+          cp "$VARS" sb-vars.fd
+          KVM=""
+          if [ -e /dev/kvm ]; then
+            KVM="-enable-kvm -cpu host"
+          fi
+          # shellcheck disable=SC2086
+          qemu-system-x86_64 -m 2048 $KVM -display none \
+            -machine q35,smm=on \
+            -global driver=cfi.pflash01,property=secure,value=on \
+            -drive if=pflash,format=raw,unit=0,readonly=on,file="$CODE" \
+            -drive if=pflash,format=raw,unit=1,file=sb-vars.fd \
+            -serial file:sb-serial.log -cdrom "$ISO" -boot d &
+          QPID=$!
+          ok=0
+          for _ in $(seq 1 60); do
+            sleep 5
+            if grep -q "Linux version" sb-serial.log 2>/dev/null; then
+              ok=1
+              break
+            fi
+          done
+          kill "$QPID" 2>/dev/null || true
+          echo "--- Secure Boot serial log ---"
+          cat sb-serial.log || true
+          grep -qi "secure boot enabled" sb-serial.log \
+            || { echo "kernel did not report Secure Boot enabled"; exit 1; }
+          test "$ok" -eq 1
       - name: Upload boot debug artifacts
         if: always()
         uses: actions/upload-artifact@v4
@@ -225,6 +266,7 @@ jobs:
           path: |
             serial.log
             uefi-serial.log
+            sb-serial.log
             screen-*.ppm
 
   install-test:
