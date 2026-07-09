@@ -19,6 +19,17 @@ autoinstall:
   storage:
     layout:
       name: lvm
+  apt:
+    # pin the primary mirror and disable the geoip redirect: the
+    # geo CNAME (us.archive & co.) adds a resolution and a mirror
+    # that vary per runner, and the installer's final apt-get update
+    # is fatal when either misbehaves
+    geoip: false
+    primary:
+      - arches: [amd64]
+        uri: http://archive.ubuntu.com/ubuntu
+      - arches: [default]
+        uri: http://ports.ubuntu.com/ubuntu-ports
   packages:
     - curl
     - jq
@@ -36,7 +47,12 @@ autoinstall:
     - bash -c 'echo "=== SIBILLA INSTALL FAILED, diagnostics ===" > /dev/console'
     - bash -c 'ls -la /target/etc/apt/sources.list.d/ > /dev/console 2>&1 || true'
     - bash -c 'cat /target/etc/apt/sources.list.d/*.sources > /dev/console 2>&1 || true'
-    - bash -c 'chroot /target apt-get update 2>&1 | tail -60 > /dev/console || true'
+    # DNS state of the LIVE environment, to tell infrastructure
+    # trouble apart from target-only misconfiguration
+    - bash -c 'getent hosts archive.ubuntu.com > /dev/console 2>&1 || echo "live env cannot resolve archive.ubuntu.com" > /dev/console'
+    # faithful reproduction of the failing step: /run bind-mounted so
+    # the target resolv.conf stub actually points at the live resolver
+    - bash -c 'mount --bind /run /target/run 2>/dev/null || true; chroot /target apt-get update 2>&1 | tail -60 > /dev/console; umount /target/run 2>/dev/null || true'
     - bash -c 'echo "=== end diagnostics ===" > /dev/console'
     - poweroff
   late-commands:
