@@ -314,7 +314,11 @@ jobs:
         run: |
           KVM=""
           if [ -e /dev/kvm ]; then
-            KVM="-enable-kvm -cpu host"
+            # a fixed CPU model instead of -cpu host: the runner fleet
+            # is heterogeneous and llama.cpp's runtime CPU dispatch
+            # segfaulted on some newer hosts; Haswell has AVX2 and is
+            # satisfiable on every Intel and AMD runner
+            KVM="-enable-kvm -cpu Haswell-noTSX-IBRS"
           fi
           # shellcheck disable=SC2086
           qemu-system-x86_64 -m 4096 -smp 2 $KVM \
@@ -802,7 +806,9 @@ jobs:
             KVM=""
             if [ -e /dev/kvm ]; then
               sudo chmod 666 /dev/kvm
-              KVM="-enable-kvm -cpu host"
+              # fixed CPU model: same reasoning as the install test,
+              # llama.cpp segfaulted on some newer runner hosts
+              KVM="-enable-kvm -cpu Haswell-noTSX-IBRS"
             fi
           fi
           # a deployer-style NoCloud seed: own user, password ssh
