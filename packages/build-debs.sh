@@ -47,7 +47,9 @@ EOF
       if [[ -f "$DIR/../apt/sibillaos-archive-key.asc" ]]; then
         local kr
         kr=$(mktemp)
-        gpg --dearmor -o "$kr" < "$DIR/../apt/sibillaos-archive-key.asc"
+        # --batch --yes: mktemp pre-creates the file and gpg would
+        # otherwise ask for overwrite confirmation on /dev/tty
+        gpg --batch --yes --dearmor -o "$kr" < "$DIR/../apt/sibillaos-archive-key.asc"
         gpgv --keyring "$kr" "$DIR/../catalog/models.json.asc" "$DIR/../catalog/models.json" \
           || { echo "catalog signature does not verify, refusing to build" >&2; exit 1; }
         rm -f "$kr"
@@ -60,7 +62,7 @@ EOF
   # llmd updates through plain apt
   if [[ "$name" == "llmd-hw" && -f "$DIR/../apt/sibillaos-archive-key.asc" ]]; then
     mkdir -p "$staging/usr/share/keyrings" "$staging/etc/apt/sources.list.d"
-    gpg --dearmor -o "$staging/usr/share/keyrings/sibillaos-archive-keyring.gpg" \
+    gpg --batch --yes --dearmor -o "$staging/usr/share/keyrings/sibillaos-archive-keyring.gpg" \
       < "$DIR/../apt/sibillaos-archive-key.asc"
     # shipped DISABLED: the repository goes live with the first tagged
     # release, and an unreachable source would fail the installer's

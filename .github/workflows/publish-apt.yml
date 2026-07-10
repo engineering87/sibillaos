@@ -52,7 +52,7 @@ jobs:
         run: bash ./apt/build-repo.sh
       - name: Verify the repository with apt itself
         run: |
-          sudo gpg --dearmor -o /usr/share/keyrings/sibillaos-ci.gpg \
+          sudo gpg --batch --yes --dearmor -o /usr/share/keyrings/sibillaos-ci.gpg \
             apt-site/apt/sibillaos-archive-key.asc
           echo "deb [signed-by=/usr/share/keyrings/sibillaos-ci.gpg] file:$(pwd)/apt-site/apt ./" \
             | sudo tee /etc/apt/sources.list.d/sibillaos-ci.list

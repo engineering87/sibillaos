@@ -34,7 +34,7 @@ jobs:
           # when the maintainer signature and the project key exist,
           # the catalog must verify
           if [ -f catalog/models.json.asc ] && [ -f apt/sibillaos-archive-key.asc ]; then
-            gpg --dearmor -o /tmp/sibilla-kr.gpg apt/sibillaos-archive-key.asc
+            gpg --batch --yes --dearmor -o /tmp/sibilla-kr.gpg apt/sibillaos-archive-key.asc
             gpgv --keyring /tmp/sibilla-kr.gpg catalog/models.json.asc catalog/models.json
           else
             echo "catalog signature not present yet (transitional)"
