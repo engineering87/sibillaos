@@ -21,11 +21,22 @@ The release for people who run SibillaOS on real infrastructure. Release notes i
 
 The release that makes a security review pleasant. Shipped: multiple gateway API keys with per-key revocation and structured access logs (`sibilla key`; rate limiting deferred), the signed APT repository on GitHub Pages with installed systems preconfigured for plain apt upgrades, the GPG-signed model catalog with per-quant artifact digests verified after every pull, SBOM generation and CVE scanning with a written triage policy (docs/supply-chain.md), and Secure Boot verified in CI on every ISO. Release notes in [docs/releases/v0.4.0.md](docs/releases/v0.4.0.md).
 
-## v0.5 (scope open)
+## v0.5 (adoption and feedback)
 
+Four cycles added features; the remaining distance to v1.0 is validation with real users, not more surface. With v0.4 published and the project being shared, this cycle is deliberately lighter and driven by what early users hit.
+
+- First-run experience: a sharper quick start (from download to first token in the README), clearer install-time messages, and fast turnaround on issues reported against the published images. The issue templates are already in place.
+- Manual validation of Open WebUI, carried since v0.2: actually install, `sibilla webui enable`, log in and chat, then record the result. It is a v1.0 criterion and cannot be automated (the image is too heavy for CI).
 - Air-gapped install profile, moved from v0.4: a companion payload (model files plus engine images on a second USB drive) for environments with no outbound network, which is where the on-premise pitch matters most.
 - Gateway rate limiting, the one piece of the v0.4 gateway hardening item deliberately left out.
-- Further scope to be chosen when the cycle opens.
+
+## Toward v1.0: open validation debts
+
+Tracked here so they are not lost between feature cycles, because each is a v1.0 criterion that no amount of new code satisfies:
+
+- vLLM on physical datacenter GPUs: implemented and gated in CI, but never run on real hardware. Needs a machine or an external tester.
+- Open WebUI web interface: packaged and CI-exercised around the container, the login-and-chat flow never validated by hand (folded into v0.5 above).
+- A release cycle with external users and no critical install bugs: only starts counting once people install the published images.
 
 ## Security track (cross-version)
 
@@ -52,7 +63,7 @@ Ideas that look promising but need a use case or a champion:
 
 - Speech endpoints: whisper.cpp for transcription behind the same gateway.
 - ds4 (DwarfStar) as a third engine for high-memory unified-RAM machines (DGX Spark, Strix Halo, 96 GB and up): a narrow native engine for DeepSeek V4 Flash/PRO with an HTTP API and SSD streaming for models larger than RAM. Philosophically close to this project, but explicitly beta today and with a deliberately volatile model-support policy (upstream may drop a model when a better one appears), which conflicts with our pinning discipline. Revisit when it stabilizes; track upstream at github.com/antirez/ds4.
-- MCP server exposure, so agent frameworks can discover the local models as tools.
+- MCP server exposure, so agent frameworks can discover the local models as tools. Increasingly requested as the Model Context Protocol becomes a common integration point; a strong candidate for promotion out of exploratory in a future cycle.
 - LDAP or OIDC authentication on the gateway for team deployments.
 - A Debian stable base variant for shops that prefer it over Ubuntu.
 

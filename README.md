@@ -9,6 +9,7 @@
 [![License](https://img.shields.io/badge/license-Apache--2.0-2e9e63.svg)](LICENSE)
 [![Base](https://img.shields.io/badge/base-Ubuntu%2024.04%20LTS-e95420.svg)](https://ubuntu.com)
 [![Build](https://github.com/engineering87/sibillaos/actions/workflows/build-iso.yml/badge.svg?branch=main)](https://github.com/engineering87/sibillaos/actions/workflows/build-iso.yml)
+[![Release](https://img.shields.io/github/v/release/engineering87/sibillaos?color=3ddc84&label=release)](https://github.com/engineering87/sibillaos/releases)
 [![Status](https://img.shields.io/badge/status-proof%20of%20concept-3ddc84.svg)](docs/architecture.md)
 
 </div>
@@ -19,11 +20,50 @@ Running a local LLM still means picking an engine, matching a model to your VRAM
 
 ```console
 $ curl http://myserver:8080/v1/chat/completions \
-    -H "Authorization: Bearer $(cat /etc/llmd/apikey)" \
-    -d '{"model": "default", "messages": [{"role": "user", "content": "hello"}]}'
+    -H "Authorization: Bearer $(sudo cat /etc/llmd/apikey)" \
+    -d "{\"model\": \"$(sudo cat /etc/llmd/model)\", \"messages\": [{\"role\": \"user\", \"content\": \"hello\"}]}"
 ```
 
 <br/>
+
+## Quick start
+
+Two paths to a running API; both end at the same place.
+
+**Cloud image (fastest, no USB).** Download the qcow2 for your architecture from [Releases](https://github.com/engineering87/sibillaos/releases), verify it against `SHA256SUMS-cloud-<arch>`, and boot it in your hypervisor with a cloud-init user-data that sets your user and SSH key, exactly as you would any Ubuntu cloud image.
+
+**ISO (bare metal or VM).** Download the `.part` files and `SHA256SUMS` from Releases, reassemble and verify, write to a USB drive, boot it and pick "Install SibillaOS (automated)":
+
+```console
+$ cat sibillaos-*-amd64.iso.part* > sibillaos.iso
+$ sha256sum -c SHA256SUMS
+$ sudo dd if=sibillaos.iso of=/dev/sdX bs=4M status=progress
+```
+
+Either way, first boot detects the hardware, picks the engine and a fitting model, downloads it and brings up the API. Then, on the machine:
+
+```console
+$ sibilla status
+engine:  ollama (active)
+model:   hf.co/bartowski/Qwen_Qwen3-4B-GGUF
+api:     http://192.168.1.50:8080 (key in /etc/llmd/apikey)
+
+$ KEY=$(sudo cat /etc/llmd/apikey)
+$ MODEL=$(sudo cat /etc/llmd/model)
+$ curl http://localhost:8080/v1/chat/completions \
+    -H "Authorization: Bearer $KEY" \
+    -H "Content-Type: application/json" \
+    -d "{\"model\": \"$MODEL\", \"messages\": [{\"role\": \"user\", \"content\": \"hello\"}]}"
+```
+
+From another machine, swap `localhost` for the address `sibilla status` prints and copy the key from `/etc/llmd/apikey`.
+
+Where to go next:
+
+- switch model: `sudo sibilla model use ID` (`sibilla model list` shows what fits your machine)
+- HTTPS: `sudo sibilla tls enable myserver.lan` (add `--acme you@example.org` for a public hostname)
+- editor and agent config: `sudo sibilla connect`
+- chat interface: `sudo sibilla webui enable` (Open WebUI on port 3000)
 
 ## How it works
 
@@ -44,13 +84,40 @@ The installer detects your hardware and makes the decisions a human would otherw
 
 The base install is a headless server; a desktop variant is on the roadmap.
 
-## Getting started
+## Architecture at a glance
 
-The easiest path is a prebuilt ISO from [Releases](https://github.com/engineering87/sibillaos/releases), verified against its `SHA256SUMS`. GitHub caps release assets at 2 GiB, so the ISO ships in parts: `cat sibillaos-*.iso.part* > sibillaos.iso` reassembles it.
+```
+      client (curl, VS Code, aider, Open WebUI)
+                       |
+                       v
+   +-----------------------------------------------+
+   |  llmd-gateway (Caddy) on :8080                 |
+   |  one OpenAI-compatible API                     |
+   |  bearer-token auth, optional TLS and metrics   |
+   +-----------------------+-----------------------+
+                           |  loopback only
+             +-------------+-------------+
+             v                           v
+   +--------------------+      +--------------------+
+   |  Ollama  :11434    |      |  vLLM  :8000       |
+   |  systemd service   |      |  podman (Quadlet)  |
+   +--------------------+      +--------------------+
+             |                           |
+             +-------------+-------------+
+                           v
+   +-----------------------------------------------+
+   |  llmd-hw: hardware detection + llmfit          |
+   |  picks the engine and a fitting model          |
+   +-----------------------------------------------+
+   |  Ubuntu 24.04 LTS (ISO or cloud image)         |
+   +-----------------------------------------------+
+```
 
-For virtual machines there is also a qcow2 cloud image, published for amd64 and arm64: attach your own cloud-init user-data (user, SSH keys) as on any Ubuntu cloud image, and the LLM stack configures itself at first boot, detecting the hardware it landed on. Works with Proxmox, libvirt, arm64 cloud instances (Ampere, Graviton) and anything that speaks cloud-init.
+The engines never listen off-host: the gateway is the only door in. The full decision log is in [docs/architecture.md](docs/architecture.md).
 
-To build from source you only need `xorriso` and `curl` (no root). The build downloads the official Ubuntu 24.04 live-server ISO, verifies its checksum and repacks it with the SibillaOS autoinstall, packages and branding:
+## Building from source
+
+Prebuilt images are the quick path above; to build your own you only need `xorriso` and `curl` (no root). The build downloads the official Ubuntu 24.04 live-server ISO, verifies its checksum and repacks it with the SibillaOS autoinstall, packages and branding:
 
 ```bash
 sudo apt-get install xorriso
