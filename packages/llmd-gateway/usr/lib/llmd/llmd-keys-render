@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+# llmd-keys-render: writes /etc/llmd/gateway.env from the key files.
+# The gateway authorizes any configured key through a regex
+# alternation, expanded into the Caddyfile matcher from the
+# LLMD_KEYS_ALT environment variable at config load.
+# Keys: /etc/llmd/apikey (default) plus one file per extra key in
+# /etc/llmd/apikeys.d, managed by sibilla key.
+set -euo pipefail
+
+KEYS_DIR="${LLMD_KEYS_DIR:-/etc/llmd/apikeys.d}"
+DEFAULT_KEY="${LLMD_DEFAULT_KEY:-/etc/llmd/apikey}"
+ENV_FILE="${LLMD_GATEWAY_ENV:-/etc/llmd/gateway.env}"
+
+alt=""
+count=0
+add_key() {
+  local k="$1" src="$2"
+  # keys are generated alphanumeric; anything else cannot be safely
+  # embedded in the matcher regex and is refused loudly
+  if [[ ! "$k" =~ ^[A-Za-z0-9]+$ ]]; then
+    echo "refusing malformed key in $src" >&2
+    exit 1
+  fi
+  if [[ -n "$alt" ]]; then
+    alt="$alt|$k"
+  else
+    alt="$k"
+  fi
+  count=$((count + 1))
+}
+
+if [[ -s "$DEFAULT_KEY" ]]; then
+  add_key "$(cat "$DEFAULT_KEY")" "$DEFAULT_KEY"
+fi
+if [[ -d "$KEYS_DIR" ]]; then
+  for f in "$KEYS_DIR"/*; do
+    [[ -f "$f" && -s "$f" ]] || continue
+    add_key "$(cat "$f")" "$f"
+  done
+fi
+
+[[ "$count" -gt 0 ]] || { echo "no api keys found" >&2; exit 1; }
+(umask 077; printf 'LLMD_KEYS_ALT=%s\n' "$alt" > "$ENV_FILE")
+echo "gateway keys rendered: $count key(s)"

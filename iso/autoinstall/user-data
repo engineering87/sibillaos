@@ -19,6 +19,24 @@ autoinstall:
   storage:
     layout:
       name: lvm
+  apt:
+    # pin the primary mirror and disable the geoip redirect: the
+    # geo CNAME (us.archive & co.) adds a resolution and a mirror
+    # that vary per runner, and the installer's final apt-get update
+    # is fatal when either misbehaves
+    geoip: false
+    primary:
+      - arches: [amd64]
+        uri: http://archive.ubuntu.com/ubuntu
+      - arches: [default]
+        uri: http://ports.ubuntu.com/ubuntu-ports
+    # Translation files are description localization with no function
+    # on a server, yet a mid-sync mirror serving a stale one fails the
+    # whole apt-get update (seen for 11+ hours on noble-security);
+    # skip them and retry transient fetch errors
+    conf: |
+      Acquire::Languages "none";
+      Acquire::Retries "3";
   packages:
     - curl
     - jq
@@ -29,6 +47,21 @@ autoinstall:
   drivers:
     # Install NVIDIA drivers from the Ubuntu restricted component when detected
     install: true
+  error-commands:
+    # on install failure, surface the real error on the serial console
+    # (the subiquity summary only reports exit codes) and power off so
+    # the CI job fails fast instead of sitting until its timeout
+    - bash -c 'echo "=== SIBILLA INSTALL FAILED, diagnostics ===" > /dev/console'
+    - bash -c 'ls -la /target/etc/apt/sources.list.d/ > /dev/console 2>&1 || true'
+    - bash -c 'cat /target/etc/apt/sources.list.d/*.sources > /dev/console 2>&1 || true'
+    # DNS state of the LIVE environment, to tell infrastructure
+    # trouble apart from target-only misconfiguration
+    - bash -c 'getent hosts archive.ubuntu.com > /dev/console 2>&1 || echo "live env cannot resolve archive.ubuntu.com" > /dev/console'
+    # faithful reproduction of the failing step: /run bind-mounted so
+    # the target resolv.conf stub actually points at the live resolver
+    - bash -c 'mount --bind /run /target/run 2>/dev/null || true; chroot /target apt-get update 2>&1 | tail -60 > /dev/console; umount /target/run 2>/dev/null || true'
+    - bash -c 'echo "=== end diagnostics ===" > /dev/console'
+    - poweroff
   late-commands:
     # 1. Copy the SibillaOS payload from the ISO into the target
     - cp -r /cdrom/sibilla /target/opt/sibilla

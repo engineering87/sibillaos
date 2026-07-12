@@ -26,11 +26,15 @@ fi
 engine=$(cat /etc/llmd/engine 2>/dev/null || echo ollama)
 model=$(cat /etc/llmd/model 2>/dev/null || true)
 
-# 1. API key: stored for the admin and exported to Caddy via gateway.env
+# 1. API keys: the default key is generated here; extra keys are
+# managed later with sibilla key. llmd-keys-render turns them all
+# into the gateway.env consumed by the Caddy matcher.
 if [[ ! -s /etc/llmd/apikey ]]; then
   (umask 077; head -c32 /dev/urandom | base64 | tr -d '=+/' | cut -c1-40 > /etc/llmd/apikey)
 fi
-(umask 077; printf 'LLMD_API_KEY=%s\n' "$(cat /etc/llmd/apikey)" > /etc/llmd/gateway.env)
+mkdir -p /etc/llmd/apikeys.d
+chmod 700 /etc/llmd/apikeys.d
+/usr/lib/llmd/llmd-keys-render
 
 # 2. Model (retry with resume; both engines resume partial downloads)
 if [[ -n "$model" ]]; then
@@ -72,6 +76,14 @@ if [[ -n "$model" ]]; then
         if ollama pull "$model"; then break; fi
         sleep 30
       done
+      # digest check against the catalog. Warn-only here: first boot
+      # must complete even if the upstream repo re-uploaded the file,
+      # but the warning lands in the journal and on the console.
+      vrc=0
+      /usr/lib/llmd/llmd-model-verify "$model" || vrc=$?
+      if [[ "$vrc" -eq 1 ]]; then
+        echo "WARNING: $model does not match the catalog digest; verify it before trusting this system (sibilla model use re-checks)"
+      fi
       ;;
     vllm)
       echo "LLMD_MODEL=$model" > /etc/llmd/vllm.env
@@ -93,13 +105,33 @@ case "$engine" in
   vllm) systemctl start vllm.service ;;
   *)    systemctl enable --now ollama.service ;;
 esac
+# access log directory: the caddy user only exists after its package
+# is installed, so the ownership cannot be fixed in a deb
+mkdir -p /var/log/caddy
+if id caddy >/dev/null 2>&1; then
+  chown caddy:caddy /var/log/caddy
+fi
 # caddy is already running with the stock config from the Ubuntu package,
 # so enable --now would be a no-op: an explicit restart loads our gateway
 # config and the API key environment
 systemctl enable caddy.service
 systemctl restart caddy.service
 
-# 5. Firewall: default-closed, only SSH and the gateway port open.
+# 5. SibillaOS apt source: shipped disabled because an unreachable
+# repository would break the installer's final apt-get update (the
+# repo goes live with the first tagged release). Enable it once it
+# actually answers.
+APT_SRC=/etc/apt/sources.list.d/sibillaos.sources
+if [[ -f "$APT_SRC" ]] && grep -q '^Enabled: no' "$APT_SRC"; then
+  if curl -fsS -m 10 https://engineering87.github.io/sibillaos/apt/InRelease >/dev/null 2>&1; then
+    sed -i 's/^Enabled: no/Enabled: yes/' "$APT_SRC"
+    echo "SibillaOS apt repository enabled"
+  else
+    echo "SibillaOS apt repository not reachable yet, source left disabled"
+  fi
+fi
+
+# 6. Firewall: default-closed, only SSH and the gateway port open.
 # Open WebUI's port 3000 stays closed until the admin opens it
 # deliberately (sibilla webui enable prints the command).
 if command -v ufw >/dev/null 2>&1; then

@@ -1,8 +1,20 @@
 {
-  "schema": 1,
-  "updated": "2026-07-03",
-  "note": "SibillaOS curated list. Permissively licensed (Apache-2.0/MIT) Hugging Face models only. Repo existence and license verified via web search on 2026-07-03; gating status is not re-confirmed here and is handled at install time (a gated repo fails the pull and the installer falls back to the next candidate).",
+  "schema": 2,
+  "updated": "2026-07-08",
+  "note": "SibillaOS curated list. Permissively licensed (Apache-2.0/MIT) Hugging Face models only. Repo existence and license verified via web search on 2026-07-03; gating status is not re-confirmed here and is handled at install time (a gated repo fails the pull and the installer falls back to the next candidate). Optional per-quant digests are the sha256 of the GGUF file on Hugging Face (LFS oid), which is also the ollama blob name after a pull; tools/update-digests.sh refreshes them.",
   "models": [
+    {
+      "id": "hf.co/bartowski/Qwen_Qwen3-0.6B-GGUF",
+      "family": "Qwen3 0.6B",
+      "license": "Apache-2.0",
+      "engines": ["ollama"],
+      "tier": "cpu",
+      "verified": true,
+      "digests": {
+        "Q4_K_M": "sha256:9acfc1e001311f34b4252001b626f2e466d592a42065f66571bff3790d4e1b14",
+        "Q8_0": "sha256:c159d1518f16bc42533d9a09f034eb598b670341adc2b08b9a9751614aea71eb"
+      }
+    },
     {
       "id": "hf.co/bartowski/Qwen_Qwen3-4B-GGUF",
       "family": "Qwen3 4B",

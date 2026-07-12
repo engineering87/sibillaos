@@ -11,6 +11,7 @@ set -euo pipefail
 CONF="${LLMD_GATEWAY_CONF:-/etc/llmd/gateway.conf}"
 CADDYFILE="${LLMD_CADDYFILE:-/etc/caddy/Caddyfile}"
 ENGINE_FILE="${LLMD_ENGINE_FILE:-/etc/llmd/engine}"
+ACCESS_LOG="${LLMD_ACCESS_LOG:-/var/log/caddy/sibilla-access.log}"
 MODE=http
 TLS_HOSTNAME=""
 ACME_EMAIL=""
@@ -51,15 +52,26 @@ global_block() {
 # route, /metrics/gateway would be served to unauthenticated clients.
 # route preserves the written order, so the 401 always comes first.
 #
+# Authentication accepts any configured key: llmd-keys-render builds
+# a regex alternation from /etc/llmd/apikey plus /etc/llmd/apikeys.d
+# and hands it to Caddy through the LLMD_KEYS_ALT environment
+# variable (keys are generated alphanumeric, so they are regex-safe).
+#
 # The proxied Host header is rewritten to the upstream address: ollama
 # guards against DNS rebinding (allowedHostsMiddleware in its
 # server/routes.go) and drops any non-local Host on a loopback
 # listener with an empty 403, which would break every authenticated
 # request as soon as the gateway serves a hostname.
 site_body() {
+  cat <<BLOCK
+	log {
+		output file $ACCESS_LOG
+	}
+BLOCK
   cat <<'BLOCK'
-	# API key required (generated at first boot, stored in /etc/llmd/apikey)
-	@unauthorized not header Authorization "Bearer {$LLMD_API_KEY}"
+	# API keys: default in /etc/llmd/apikey, extra keys in
+	# /etc/llmd/apikeys.d, managed by sibilla key
+	@unauthorized not header_regexp Authorization "^Bearer ({$LLMD_KEYS_ALT})$"
 BLOCK
   if [[ "$METRICS" == "on" ]]; then
     cat <<'BLOCK'

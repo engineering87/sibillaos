@@ -1,0 +1,3 @@
+# Triaged CVE exceptions (policy in docs/supply-chain.md).
+# One CVE id per line, each preceded by a comment stating the reason
+# and a review-by date. Entries without both do not pass review.

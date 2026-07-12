@@ -37,9 +37,44 @@ Description: $desc
 EOF
   # executable bit for the scripts
   find "$staging/usr/lib/llmd" "$staging/usr/bin" -type f -exec chmod 755 {} + 2>/dev/null || true
-  # the curated model catalog ships with llmd-hw
+  # the curated model catalog ships with llmd-hw, with its detached
+  # signature when the maintainer has signed it; if both the project
+  # key and the signature exist, the build refuses a catalog that
+  # does not verify
   if [[ "$name" == "llmd-hw" ]]; then
     install -D -m644 "$DIR/../catalog/models.json" "$staging/usr/share/llmd/models.json"
+    if [[ -f "$DIR/../catalog/models.json.asc" ]]; then
+      if [[ -f "$DIR/../apt/sibillaos-archive-key.asc" ]]; then
+        local kr
+        kr=$(mktemp)
+        # --batch --yes: mktemp pre-creates the file and gpg would
+        # otherwise ask for overwrite confirmation on /dev/tty
+        gpg --batch --yes --dearmor -o "$kr" < "$DIR/../apt/sibillaos-archive-key.asc"
+        gpgv --keyring "$kr" "$DIR/../catalog/models.json.asc" "$DIR/../catalog/models.json" \
+          || { echo "catalog signature does not verify, refusing to build" >&2; exit 1; }
+        rm -f "$kr"
+      fi
+      install -D -m644 "$DIR/../catalog/models.json.asc" "$staging/usr/share/llmd/models.json.asc"
+    fi
+  fi
+  # APT repo trust: once the project public key is committed, llmd-hw
+  # ships the keyring and the sources entry, so installed systems get
+  # llmd updates through plain apt
+  if [[ "$name" == "llmd-hw" && -f "$DIR/../apt/sibillaos-archive-key.asc" ]]; then
+    mkdir -p "$staging/usr/share/keyrings" "$staging/etc/apt/sources.list.d"
+    gpg --batch --yes --dearmor -o "$staging/usr/share/keyrings/sibillaos-archive-keyring.gpg" \
+      < "$DIR/../apt/sibillaos-archive-key.asc"
+    # shipped DISABLED: the repository goes live with the first tagged
+    # release, and an unreachable source would fail the installer's
+    # final apt-get update; llmd-firstboot enables it after checking
+    # that the repository answers
+    cat > "$staging/etc/apt/sources.list.d/sibillaos.sources" <<'SRC'
+Types: deb
+URIs: https://engineering87.github.io/sibillaos/apt/
+Suites: ./
+Signed-By: /usr/share/keyrings/sibillaos-archive-keyring.gpg
+Enabled: no
+SRC
   fi
   # the hardened ollama unit lists this path in ReadWritePaths: it must
   # exist at unit start or systemd fails the namespace and ollama

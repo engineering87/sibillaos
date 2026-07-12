@@ -19,13 +19,26 @@ jobs:
       - name: Shellcheck
         run: |
           sudo apt-get update && sudo apt-get install -y shellcheck
-          shellcheck iso/build.sh packages/build-debs.sh cloud/build-cloud.sh \
+          shellcheck iso/build.sh packages/build-debs.sh cloud/build-cloud.sh apt/build-repo.sh \
             packages/llmd-hw/usr/lib/llmd/* packages/llmd-hw/usr/bin/* \
             packages/llmd-firstboot/usr/lib/llmd/* \
             packages/llmd-gateway/usr/lib/llmd/* packages/llmd-gateway/usr/bin/* \
             packages/llmd-webui/usr/bin/*
       - name: Validate catalog JSON
-        run: jq empty catalog/models.json
+        run: |
+          jq empty catalog/models.json
+          # recorded digests must be well-formed sha256 values
+          jq -e '[.models[].digests? // {} | to_entries[] | .value
+                  | select(test("^sha256:[0-9a-f]{64}$") | not)] | length == 0' \
+            catalog/models.json >/dev/null || { echo "malformed digest in catalog"; exit 1; }
+          # when the maintainer signature and the project key exist,
+          # the catalog must verify
+          if [ -f catalog/models.json.asc ] && [ -f apt/sibillaos-archive-key.asc ]; then
+            gpg --batch --yes --dearmor -o /tmp/sibilla-kr.gpg apt/sibillaos-archive-key.asc
+            gpgv --keyring /tmp/sibilla-kr.gpg catalog/models.json.asc catalog/models.json
+          else
+            echo "catalog signature not present yet (transitional)"
+          fi
       - name: Validate cloud-init YAML
         run: |
           python3 -c "import yaml; yaml.safe_load(open('cloud/bake/user-data').read().replace('#cloud-config','',1))"
@@ -38,7 +51,8 @@ jobs:
           export LLMD_GATEWAY_CONF="$RUNNER_TEMP/gateway.conf"
           export LLMD_CADDYFILE="$RUNNER_TEMP/Caddyfile"
           export LLMD_ENGINE_FILE="$RUNNER_TEMP/engine"
-          export LLMD_API_KEY=lint-test-key
+          export LLMD_ACCESS_LOG="$RUNNER_TEMP/access.log"
+          export LLMD_KEYS_ALT="lintkey1|lintkey2"
           echo ollama > "$LLMD_ENGINE_FILE"
           for conf in 'MODE=http' \
                       'MODE=http\nMETRICS=on' \
@@ -81,7 +95,13 @@ jobs:
           path: work/*.iso
           key: ubuntu-2404-live-server-amd64
       - name: Build llmd-* debs
-        run: bash ./packages/build-debs.sh
+        # on tags the deb version follows the release, so installed
+        # systems see upgrades in the APT repo
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            export LLMD_VERSION="${GITHUB_REF_NAME#v}"
+          fi
+          bash ./packages/build-debs.sh
       - name: Build ISO
         # the small-model override keeps the install test fast; it is
         # NOT applied on tag builds, so released ISOs stay clean
@@ -197,6 +217,47 @@ jobs:
           echo "--- UEFI serial log ---"
           cat uefi-serial.log || true
           test "$ok" -eq 1
+      - name: Boot smoke test (UEFI Secure Boot)
+        # the repack must preserve Ubuntu's signed shim/GRUB chain:
+        # boot with the secboot OVMF build and Microsoft-enrolled
+        # variables, and require the kernel itself to report that
+        # Secure Boot is active
+        run: |
+          ISO=$(ls iso/*.iso | head -1)
+          CODE=/usr/share/OVMF/OVMF_CODE_4M.secboot.fd
+          VARS=/usr/share/OVMF/OVMF_VARS_4M.ms.fd
+          if [ ! -f "$CODE" ] || [ ! -f "$VARS" ]; then
+            echo "OVMF secure boot images not found; available files:"
+            ls -la /usr/share/OVMF/
+            exit 1
+          fi
+          cp "$VARS" sb-vars.fd
+          KVM=""
+          if [ -e /dev/kvm ]; then
+            KVM="-enable-kvm -cpu host"
+          fi
+          # shellcheck disable=SC2086
+          qemu-system-x86_64 -m 2048 $KVM -display none \
+            -machine q35,smm=on \
+            -global driver=cfi.pflash01,property=secure,value=on \
+            -drive if=pflash,format=raw,unit=0,readonly=on,file="$CODE" \
+            -drive if=pflash,format=raw,unit=1,file=sb-vars.fd \
+            -serial file:sb-serial.log -cdrom "$ISO" -boot d &
+          QPID=$!
+          ok=0
+          for _ in $(seq 1 60); do
+            sleep 5
+            if grep -q "Linux version" sb-serial.log 2>/dev/null; then
+              ok=1
+              break
+            fi
+          done
+          kill "$QPID" 2>/dev/null || true
+          echo "--- Secure Boot serial log ---"
+          cat sb-serial.log || true
+          grep -qi "secure boot enabled" sb-serial.log \
+            || { echo "kernel did not report Secure Boot enabled"; exit 1; }
+          test "$ok" -eq 1
       - name: Upload boot debug artifacts
         if: always()
         uses: actions/upload-artifact@v4
@@ -205,6 +266,7 @@ jobs:
           path: |
             serial.log
             uefi-serial.log
+            sb-serial.log
             screen-*.ppm
 
   install-test:
@@ -241,12 +303,22 @@ jobs:
             -cdrom "$ISO" -boot d -no-reboot || RC=$?
           echo "--- install log (tail) ---"
           tail -150 install.log || true
+          # the error-commands power the VM off on failure, so a clean
+          # qemu exit is not enough: the failure marker decides
+          if grep -q "SIBILLA INSTALL FAILED" install.log; then
+            echo "installer reported failure"
+            exit 1
+          fi
           exit "$RC"
       - name: Boot installed system, probe the gateway, run inference
         run: |
           KVM=""
           if [ -e /dev/kvm ]; then
-            KVM="-enable-kvm -cpu host"
+            # a fixed CPU model instead of -cpu host: the runner fleet
+            # is heterogeneous and llama.cpp's runtime CPU dispatch
+            # segfaulted on some newer hosts; Haswell has AVX2 and is
+            # satisfiable on every Intel and AMD runner
+            KVM="-enable-kvm -cpu Haswell-noTSX-IBRS"
           fi
           # shellcheck disable=SC2086
           qemu-system-x86_64 -m 4096 -smp 2 $KVM \
@@ -347,6 +419,17 @@ jobs:
                   echo "$RESP2" | jq . || echo "$RESP2"
                   RC=1
                 fi
+                # model integrity: both pulled quants must match the
+                # digests recorded in the catalog (ollama blob = GGUF
+                # sha256), and an untagged id must report rc 2
+                echo "--- model digests ---"
+                $SSH "/usr/lib/llmd/llmd-model-verify hf.co/bartowski/Qwen_Qwen3-0.6B-GGUF:Q4_K_M" \
+                  || { echo "digest check failed for Q4_K_M"; RC=1; }
+                $SSH "/usr/lib/llmd/llmd-model-verify hf.co/bartowski/Qwen_Qwen3-0.6B-GGUF:Q8_0" \
+                  || { echo "digest check failed for Q8_0"; RC=1; }
+                vrc=0
+                $SSH "/usr/lib/llmd/llmd-model-verify hf.co/bartowski/Qwen_Qwen3-0.6B-GGUF" || vrc=$?
+                [ "$vrc" = "2" ] || { echo "untagged id should be rc 2, got $vrc"; RC=1; }
                 # the connection kit must render and reference the endpoint
                 echo "--- sibilla-connect ---"
                 $SSH "echo sibilla | sudo -S sibilla-connect" > connect.out || RC=1
@@ -471,6 +554,44 @@ jobs:
                   https://sibillaos.test:8080/metrics/gateway || true)
                 [ "$tmcode" = "200" ] || { echo "metrics lost across tls switch: $tmcode"; RC=1; }
                 $SSH "echo sibilla | sudo -S sibilla tls disable" || RC=1
+                sleep 5
+                # api key lifecycle: add, use, revoke, rotate; runs
+                # last because it rotates the default key
+                echo "--- sibilla key ---"
+                $SSH "echo sibilla | sudo -S sibilla key list" || RC=1
+                NEWKEY=$($SSH "echo sibilla | sudo -S sibilla key add ci-extra" | tail -1)
+                sleep 3
+                kc=$(curl -s -o /dev/null -w '%{http_code}' \
+                  -H "Authorization: Bearer $NEWKEY" http://127.0.0.1:8080/v1/models || true)
+                [ "$kc" = "200" ] || { echo "added key rejected: $kc"; RC=1; }
+                $SSH "echo sibilla | sudo -S sibilla key revoke ci-extra" || RC=1
+                sleep 3
+                kc=$(curl -s -o /dev/null -w '%{http_code}' \
+                  -H "Authorization: Bearer $NEWKEY" http://127.0.0.1:8080/v1/models || true)
+                [ "$kc" = "401" ] || { echo "revoked key still accepted: $kc"; RC=1; }
+                kc=$(curl -s -o /dev/null -w '%{http_code}' \
+                  -H "Authorization: Bearer $KEY" http://127.0.0.1:8080/v1/models || true)
+                [ "$kc" = "200" ] || { echo "default key broken after revoke: $kc"; RC=1; }
+                OLDKEY=$KEY
+                $SSH "echo sibilla | sudo -S sibilla key rotate" >/dev/null || RC=1
+                sleep 3
+                KEY=$($SSH "echo sibilla | sudo -S cat /etc/llmd/apikey" | tail -1)
+                kc=$(curl -s -o /dev/null -w '%{http_code}' \
+                  -H "Authorization: Bearer $OLDKEY" http://127.0.0.1:8080/v1/models || true)
+                [ "$kc" = "401" ] || { echo "old default still accepted after rotate: $kc"; RC=1; }
+                kc=$(curl -s -o /dev/null -w '%{http_code}' \
+                  -H "Authorization: Bearer $KEY" http://127.0.0.1:8080/v1/models || true)
+                [ "$kc" = "200" ] || { echo "rotated default rejected: $kc"; RC=1; }
+                # structured access log on the gateway
+                $SSH "echo sibilla | sudo -S grep -q '/v1/models' /var/log/caddy/sibilla-access.log" \
+                  || { echo "access log missing or empty"; RC=1; }
+                # supply chain inputs: the installed package inventory
+                # feeds the SBOM and CVE scan job
+                echo "--- package inventory ---"
+                $SSH "dpkg-query -W -f='\${Package}\t\${Version}\t\${Architecture}\n'" > installed-packages.tsv || RC=1
+                echo "$(wc -l < installed-packages.tsv) packages installed"
+                $SSH "cat /var/lib/dpkg/status" > dpkg-status || RC=1
+                $SSH "cat /etc/os-release" > os-release || RC=1
               else
                 echo "inference failed: empty or malformed response"
               fi
@@ -491,6 +612,77 @@ jobs:
           path: |
             install.log
             firstboot.log
+      - name: Upload installed-system inventory
+        uses: actions/upload-artifact@v4
+        with:
+          name: install-inventory
+          path: |
+            installed-packages.tsv
+            dpkg-status
+            os-release
+
+  supply-chain:
+    needs: install-test
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download installed-system inventory
+        uses: actions/download-artifact@v4
+        with:
+          name: install-inventory
+          path: inventory
+      - name: Install pinned SBOM and scan tools
+        run: |
+          mkdir -p "$HOME/bin"
+          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh \
+            | sh -s -- -b "$HOME/bin" v1.46.0
+          curl -sSfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
+            | sh -s -- -b "$HOME/bin" v0.72.0
+          echo "$HOME/bin" >> "$GITHUB_PATH"
+      - name: Generate the SBOM of the llmd packages
+        run: |
+          bash ./packages/build-debs.sh
+          syft dir:packages/dist \
+            -o spdx-json=sbom-llmd-packages.spdx.json \
+            -o cyclonedx-json=sbom-llmd-packages.cdx.json
+      - name: Scan the installed system for CVEs
+        run: |
+          # the dpkg status captured from the real installed system is
+          # the scan input: what the machine actually runs, not a guess
+          mkdir -p rootfs/var/lib/dpkg rootfs/etc
+          cp inventory/dpkg-status rootfs/var/lib/dpkg/status
+          cp inventory/os-release rootfs/etc/os-release
+          trivy fs --scanners vuln --format table rootfs || true
+          trivy fs --scanners vuln --format json -o cve-report.json rootfs
+          # triage gate (docs/supply-chain.md): CRITICAL findings WITH
+          # a fix available fail the build; unfixed ones are inherited
+          # from the base distribution and tracked, not fatal
+          fixable=$(jq '[.Results[]?.Vulnerabilities[]?
+            | select(.Severity == "CRITICAL" and (.FixedVersion // "") != "")] | length' cve-report.json)
+          echo "fixable critical vulnerabilities: $fixable"
+          if [ "$fixable" -ne 0 ]; then
+            echo "fix them or record a triaged exception in .trivyignore (see docs/supply-chain.md)"
+            exit 1
+          fi
+      - name: Upload supply chain artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: supply-chain
+          path: |
+            sbom-llmd-packages.spdx.json
+            sbom-llmd-packages.cdx.json
+            cve-report.json
+            inventory/installed-packages.tsv
+      - name: Attach to release (tags only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            sbom-llmd-packages.spdx.json
+            sbom-llmd-packages.cdx.json
+            inventory/installed-packages.tsv
 
   build-cloud:
     needs: lint
@@ -523,7 +715,13 @@ jobs:
           path: work-cloud/*.img
           key: ubuntu-noble-cloudimg-${{ matrix.arch }}
       - name: Build llmd-* debs
-        run: bash ./packages/build-debs.sh
+        # on tags the deb version follows the release, so installed
+        # systems see upgrades in the APT repo
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            export LLMD_VERSION="${GITHUB_REF_NAME#v}"
+          fi
+          bash ./packages/build-debs.sh
       - name: Bake cloud image
         # same small-model override as the ISO build; never on tags
         env:
@@ -608,7 +806,9 @@ jobs:
             KVM=""
             if [ -e /dev/kvm ]; then
               sudo chmod 666 /dev/kvm
-              KVM="-enable-kvm -cpu host"
+              # fixed CPU model: same reasoning as the install test,
+              # llama.cpp segfaulted on some newer runner hosts
+              KVM="-enable-kvm -cpu Haswell-noTSX-IBRS"
             fi
           fi
           # a deployer-style NoCloud seed: own user, password ssh

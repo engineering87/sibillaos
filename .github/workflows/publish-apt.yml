@@ -1,0 +1,82 @@
+name: Publish APT repository
+
+on:
+  push:
+    branches: ["release/*"]
+    tags: ["v*"]
+  pull_request:
+
+# least-privilege default; the deploy job overrides with the Pages
+# permissions it needs
+permissions:
+  contents: read
+
+jobs:
+  build-repo:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Import or generate the signing key
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.SIBILLA_GPG_PRIVATE_KEY }}
+        run: |
+          if [ -n "$GPG_PRIVATE_KEY" ]; then
+            echo "$GPG_PRIVATE_KEY" | gpg --batch --import
+            echo "imported the project signing key"
+          else
+            if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+              echo "SIBILLA_GPG_PRIVATE_KEY secret is required for tag builds" >&2
+              exit 1
+            fi
+            # branch and PR builds: throwaway key, the pipeline and the
+            # apt verification are exercised end to end anyway
+            # (batch generation needs the explicit empty passphrase or
+            # gpg fails silently)
+            gpg --batch --pinentry-mode loopback --passphrase '' \
+              --quick-generate-key \
+              "SibillaOS CI throwaway <ci@sibillaos.invalid>" ed25519 sign 1d
+            echo "generated a throwaway key (project secret not available)"
+          fi
+          gpg --list-secret-keys --with-colons \
+            | awk -F: '/^sec/{print "SIBILLA_GPG_KEY_ID="$5; exit}' >> "$GITHUB_ENV"
+      - name: Build debs for both architectures
+        run: |
+          # llmfit is the only arch-specific package and its build is a
+          # verified download, so one runner can produce both
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            export LLMD_VERSION="${GITHUB_REF_NAME#v}"
+          fi
+          SIBILLA_DEB_ARCH=amd64 bash ./packages/build-debs.sh
+          SIBILLA_DEB_ARCH=arm64 bash ./packages/build-debs.sh
+      - name: Build and sign the repository
+        run: bash ./apt/build-repo.sh
+      - name: Verify the repository with apt itself
+        run: |
+          sudo gpg --batch --yes --dearmor -o /usr/share/keyrings/sibillaos-ci.gpg \
+            apt-site/apt/sibillaos-archive-key.asc
+          echo "deb [signed-by=/usr/share/keyrings/sibillaos-ci.gpg] file:$(pwd)/apt-site/apt ./" \
+            | sudo tee /etc/apt/sources.list.d/sibillaos-ci.list
+          sudo apt-get update
+          apt-cache policy llmd-hw llmd-gateway llmd-llmfit
+          # a simulated install must resolve our packages from the repo
+          apt-get install -s llmd-hw llmd-gateway llmd-firstboot \
+            | grep -E "^Inst llmd-" || { echo "packages not installable from the repo"; exit 1; }
+      - name: Upload Pages artifact (tags only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: apt-site
+
+  deploy:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build-repo
+    runs-on: ubuntu-24.04
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

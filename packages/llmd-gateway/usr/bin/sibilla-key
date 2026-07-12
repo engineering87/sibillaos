@@ -1,0 +1,100 @@
+#!/usr/bin/env bash
+# sibilla-key: manage the gateway API keys.
+set -euo pipefail
+
+KEYS_DIR=/etc/llmd/apikeys.d
+DEFAULT_KEY=/etc/llmd/apikey
+
+usage() {
+  cat <<USAGE
+usage: sibilla-key COMMAND
+
+  list           show configured keys (names and prefixes, not keys)
+  add NAME       create an extra key; prints it once, on the last line
+  revoke NAME    remove an extra key (rotate the default instead)
+  rotate [NAME]  replace a key; default key when NAME is omitted;
+                 prints the new key once, on the last line
+
+Every change takes effect immediately: clients using a revoked or
+rotated key get 401 on their next request.
+USAGE
+  exit 1
+}
+
+need_root() { [[ $EUID -eq 0 ]] || { echo "run as root (sudo)" >&2; exit 1; }; }
+
+gen_key() { head -c32 /dev/urandom | base64 | tr -d '=+/' | cut -c1-40; }
+
+valid_name() { [[ "$1" =~ ^[a-z0-9][a-z0-9-]{0,31}$ ]]; }
+
+render_restart() {
+  /usr/lib/llmd/llmd-keys-render
+  systemctl restart caddy.service
+}
+
+prefix_of() { cut -c1-6 "$1" 2>/dev/null || true; }
+
+cmd_list() {
+  need_root
+  if [[ -s "$DEFAULT_KEY" ]]; then
+    echo "default  $(prefix_of "$DEFAULT_KEY")... (in $DEFAULT_KEY)"
+  fi
+  if [[ -d "$KEYS_DIR" ]]; then
+    local f
+    for f in "$KEYS_DIR"/*; do
+      [[ -f "$f" ]] || continue
+      echo "$(basename "$f")  $(prefix_of "$f")..."
+    done
+  fi
+}
+
+cmd_add() {
+  need_root
+  local name="$1"
+  valid_name "$name" || { echo "invalid name (lowercase, digits, dashes)" >&2; exit 1; }
+  [[ "$name" != "default" ]] || { echo "'default' is reserved; use rotate" >&2; exit 1; }
+  [[ ! -e "$KEYS_DIR/$name" ]] || { echo "key '$name' already exists" >&2; exit 1; }
+  mkdir -p "$KEYS_DIR"
+  chmod 700 "$KEYS_DIR"
+  local key
+  key=$(gen_key)
+  (umask 077; printf '%s\n' "$key" > "$KEYS_DIR/$name")
+  render_restart
+  echo "key '$name' added; store it now, it will not be shown again:"
+  echo "$key"
+}
+
+cmd_revoke() {
+  need_root
+  local name="$1"
+  [[ "$name" != "default" ]] || { echo "the default key cannot be revoked, rotate it" >&2; exit 1; }
+  [[ -f "$KEYS_DIR/$name" ]] || { echo "no key named '$name'" >&2; exit 1; }
+  rm -f "$KEYS_DIR/$name"
+  render_restart
+  echo "key '$name' revoked"
+}
+
+cmd_rotate() {
+  need_root
+  local name="$1"
+  local target key
+  if [[ "$name" == "default" ]]; then
+    target="$DEFAULT_KEY"
+  else
+    target="$KEYS_DIR/$name"
+    [[ -f "$target" ]] || { echo "no key named '$name'" >&2; exit 1; }
+  fi
+  key=$(gen_key)
+  (umask 077; printf '%s\n' "$key" > "$target")
+  render_restart
+  echo "key '$name' rotated; the old key is rejected from now on:"
+  echo "$key"
+}
+
+case "${1:-}" in
+  list)   cmd_list ;;
+  add)    [[ $# -ge 2 ]] || usage; cmd_add "$2" ;;
+  revoke) [[ $# -ge 2 ]] || usage; cmd_revoke "$2" ;;
+  rotate) cmd_rotate "${2:-default}" ;;
+  *)      usage ;;
+esac
