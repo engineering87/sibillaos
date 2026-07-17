@@ -16,6 +16,9 @@ usage: sibilla COMMAND [ARGS]
   metrics ...    Prometheus endpoint on the gateway, on or off
   webui ...      enable or disable the Open WebUI chat interface
   connect        print client configuration for editors and agents
+                 (--write places the Continue config, with backup)
+  doctor         paste-ready diagnostic report, no secrets included
+  remove         clean teardown: only what SibillaOS installed goes
 
 Run a command without arguments for its own usage.
 USAGE
@@ -33,5 +36,7 @@ case "$cmd" in
   metrics) exec sibilla-metrics "$@" ;;
   webui)   exec sibilla-webui "$@" ;;
   connect) exec sibilla-connect "$@" ;;
+  doctor)  exec /usr/lib/llmd/sibilla-doctor "$@" ;;
+  remove)  exec /usr/lib/llmd/sibilla-remove "$@" ;;
   *)       usage ;;
 esac

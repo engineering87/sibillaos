@@ -54,6 +54,10 @@ echo "engine: $engine"
 # installed here; vLLM runs as a container brought up by its unit.
 if [[ "$engine" == "ollama" ]] && ! command -v ollama >/dev/null 2>&1; then
   echo "installing ollama (pinned $OLLAMA_VERSION)"
+  # remember that WE installed it: sibilla remove only uninstalls
+  # ollama when this marker exists, a pre-existing ollama is not ours
+  mkdir -p /var/lib/llmd
+  touch /var/lib/llmd/setup-installed-ollama
   curl -fsSL https://ollama.com/install.sh | OLLAMA_VERSION="$OLLAMA_VERSION" sh
 fi
 
@@ -66,7 +70,16 @@ elif [[ ! -s /etc/llmd/model ]]; then
 fi
 echo "model: $(cat /etc/llmd/model 2>/dev/null || echo '(none selected)')"
 
-# 4. Run the shared first-boot logic: it generates the API key, pulls
+# 4. Preserve a pre-existing Caddy configuration before the gateway
+# render replaces it; sibilla remove restores it. Our own rendered
+# file mentions /etc/llmd, which tells the two apart.
+if [[ -f /etc/caddy/Caddyfile && ! -f /etc/caddy/Caddyfile.pre-sibilla ]] \
+    && ! grep -q "/etc/llmd" /etc/caddy/Caddyfile; then
+  cp -a /etc/caddy/Caddyfile /etc/caddy/Caddyfile.pre-sibilla
+  echo "existing Caddy configuration saved as Caddyfile.pre-sibilla"
+fi
+
+# 5. Run the shared first-boot logic: it generates the API key, pulls
 # the model, renders the gateway and starts the services. Idempotent,
 # so re-running sibilla setup is safe; clear the marker so it runs now.
 rm -f /var/lib/llmd/firstboot.done

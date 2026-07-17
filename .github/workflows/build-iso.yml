@@ -682,6 +682,37 @@ jobs:
           echo "--- sibilla status ---"
           sibilla status || RC=1
           exit "$RC"
+      - name: Doctor, connect --write, then a clean removal
+        run: |
+          RC=0
+          # doctor: complete and secret-free
+          sudo sibilla doctor > doctor.out || RC=1
+          grep -q "engine:" doctor.out || { echo "doctor missing engine section"; RC=1; }
+          grep -q "end of report" doctor.out || { echo "doctor report truncated"; RC=1; }
+          KEY=$(sudo cat /etc/llmd/apikey)
+          if grep -q "$KEY" doctor.out; then
+            echo "doctor leaked the api key"
+            RC=1
+          fi
+          # connect --write places the Continue config for the sudo user
+          sudo sibilla connect --write || RC=1
+          test -f "$HOME/.continue/config.yaml" || { echo "connect --write wrote nothing"; RC=1; }
+          grep -q "apiBase" "$HOME/.continue/config.yaml" || { echo "written config incomplete"; RC=1; }
+          # remove: a full, verifiable teardown
+          sudo sibilla remove --yes || RC=1
+          dpkg -l 2>/dev/null | grep -E '^ii +llmd' && { echo "llmd packages survived"; RC=1; } || true
+          [ ! -e /etc/llmd ] || { echo "/etc/llmd survived"; RC=1; }
+          [ ! -e /var/lib/llmd ] || { echo "/var/lib/llmd survived"; RC=1; }
+          if command -v ollama >/dev/null 2>&1; then
+            echo "ollama survived (setup installed it, remove must take it)"
+            RC=1
+          fi
+          code=$(curl -s -o /dev/null -w '%{http_code}' -m 5 http://127.0.0.1:8080/v1/models || true)
+          if [ "$code" = "401" ] || [ "$code" = "200" ]; then
+            echo "gateway still answering after removal"
+            RC=1
+          fi
+          exit "$RC"
 
   supply-chain:
     needs: install-test
