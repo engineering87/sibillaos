@@ -691,7 +691,8 @@ jobs:
           grep -q "end of report" doctor.out || { echo "doctor report truncated"; RC=1; }
           KEY=$(sudo cat /etc/llmd/apikey)
           if grep -q "$KEY" doctor.out; then
-            echo "doctor leaked the api key"
+            echo "doctor leaked the api key; offending lines (masked):"
+            grep -F "$KEY" doctor.out | sed "s/$KEY/[REDACTED]/g" | head -5
             RC=1
           fi
           # connect --write places the Continue config for the sudo user

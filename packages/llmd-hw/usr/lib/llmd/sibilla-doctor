@@ -1,10 +1,16 @@
 #!/usr/bin/env bash
 # sibilla-doctor: one paste-ready diagnostic report for bug reports.
-# Contains no secrets: API keys are never printed, only their paths.
+# Contains no secrets: API keys are never printed, only their paths,
+# and the whole report is scrubbed of every configured key before it
+# reaches the terminal. The scrub is not paranoia: the packaged caddy
+# unit starts with "caddy run --environ", which dumps the process
+# environment (LLMD_KEYS_ALT included, keys and all) into the journal
+# on every start, so quoted service logs would leak them.
 set -uo pipefail
 
 line() { echo "----------------------------------------------------------"; }
 
+report() {
 echo "SibillaOS doctor report"
 echo "generated: $(date -u +%Y-%m-%dT%H:%M:%SZ) (no secrets included)"
 line
@@ -78,3 +84,23 @@ else
 fi
 line
 echo "end of report; paste it inside a code block in your issue"
+}
+
+# Replace every configured API key with [REDACTED] wherever it shows
+# up in the report. Keys are generated alphanumeric (sibilla key
+# enforces it), so they are safe inside a sed expression.
+redact() {
+  local args=() f k
+  for f in /etc/llmd/apikey /etc/llmd/apikeys.d/*; do
+    [[ -f "$f" && -r "$f" ]] || continue
+    k=$(tr -d '[:space:]' < "$f")
+    [[ -n "$k" ]] && args+=(-e "s/$k/[REDACTED]/g")
+  done
+  if [[ ${#args[@]} -gt 0 ]]; then
+    sed "${args[@]}"
+  else
+    cat
+  fi
+}
+
+report | redact
