@@ -26,6 +26,8 @@ The release that makes a security review pleasant. Shipped: multiple gateway API
 Four cycles added features; the remaining distance to v1.0 is validation with real users, not more surface. With v0.4 published and the project being shared, this cycle is deliberately lighter and driven by what early users hit.
 
 - First-run experience: a sharper quick start (from download to first token in the README), clearer install-time messages, and fast turnaround on issues reported against the published images. The issue templates are already in place.
+- Zero-reinstall path: `apt install llmd` plus `sibilla setup` turns an existing Ubuntu 24.04 machine into the appliance, staying a good guest (no firewall takeover, no source flips; appliance behavior stays behind the image marker). In progress on the branch, proven by a dedicated CI job.
+- The full good-guest lifecycle around that path: `sibilla remove` for a clean teardown (services, models, config, packages) so trying SibillaOS is provably reversible; `sibilla doctor` to collect versions, unit states, recent logs and hardware in one paste-ready report for issues; `sibilla connect --write` to place the editor configurations instead of printing them.
 - Manual validation of Open WebUI, carried since v0.2: actually install, `sibilla webui enable`, log in and chat, then record the result. It is a v1.0 criterion and cannot be automated (the image is too heavy for CI).
 - Air-gapped install profile, moved from v0.4: a companion payload (model files plus engine images on a second USB drive) for environments with no outbound network, which is where the on-premise pitch matters most.
 - Gateway rate limiting, the one piece of the v0.4 gateway hardening item deliberately left out.
