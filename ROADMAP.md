@@ -21,13 +21,15 @@ The release for people who run SibillaOS on real infrastructure. Release notes i
 
 The release that makes a security review pleasant. Shipped: multiple gateway API keys with per-key revocation and structured access logs (`sibilla key`; rate limiting deferred), the signed APT repository on GitHub Pages with installed systems preconfigured for plain apt upgrades, the GPG-signed model catalog with per-quant artifact digests verified after every pull, SBOM generation and CVE scanning with a written triage policy (docs/supply-chain.md), and Secure Boot verified in CI on every ISO. Release notes in [docs/releases/v0.4.0.md](docs/releases/v0.4.0.md).
 
-## v0.5 (adoption and feedback)
+## v0.5 (released)
 
-Four cycles added features; the remaining distance to v1.0 is validation with real users, not more surface. With v0.4 published and the project being shared, this cycle is deliberately lighter and driven by what early users hit.
+The adoption release: trying SibillaOS no longer costs a reinstall, and walking away is provably clean. Shipped: the zero-reinstall path (`apt install llmd` plus `sibilla setup` on an existing Ubuntu 24.04 machine, staying a good guest: no firewall takeover, no source flips, appliance behavior kept behind the image marker), `sibilla remove` for a verified reversible teardown that takes only what SibillaOS installed and restores what it displaced, `sibilla doctor` for a paste-ready secret-free diagnostic report (every configured API key scrubbed by construction, asserted in CI), `sibilla connect --write` to place the Continue configuration with backup, and the README overhaul with the two-command quick start. The whole lifecycle, install through verified-clean removal, runs in CI on every push. Release notes in [docs/releases/v0.5.0.md](docs/releases/v0.5.0.md).
 
-- First-run experience: a sharper quick start (from download to first token in the README), clearer install-time messages, and fast turnaround on issues reported against the published images. The issue templates are already in place.
-- Zero-reinstall path: `apt install llmd` plus `sibilla setup` turns an existing Ubuntu 24.04 machine into the appliance, staying a good guest (no firewall takeover, no source flips; appliance behavior stays behind the image marker). In progress on the branch, proven by a dedicated CI job.
-- The full good-guest lifecycle around that path: `sibilla remove` for a clean teardown (services, models, config, packages) so trying SibillaOS is provably reversible; `sibilla doctor` to collect versions, unit states, recent logs and hardware in one paste-ready report for issues; `sibilla connect --write` to place the editor configurations instead of printing them.
+## v0.6 (feedback driven)
+
+Deliberately light, shaped by what early users of the published images and the apt path report. Carried items with a committed shape:
+
+- First-run experience: clearer install-time messages and fast turnaround on issues reported against the published images; `sibilla doctor` now gives reporters something precise to paste into the templates.
 - Manual validation of Open WebUI, carried since v0.2: actually install, `sibilla webui enable`, log in and chat, then record the result. It is a v1.0 criterion and cannot be automated (the image is too heavy for CI).
 - Air-gapped install profile, moved from v0.4: a companion payload (model files plus engine images on a second USB drive) for environments with no outbound network, which is where the on-premise pitch matters most.
 - Gateway rate limiting, the one piece of the v0.4 gateway hardening item deliberately left out.
@@ -37,7 +39,7 @@ Four cycles added features; the remaining distance to v1.0 is validation with re
 Tracked here so they are not lost between feature cycles, because each is a v1.0 criterion that no amount of new code satisfies:
 
 - vLLM on physical datacenter GPUs: implemented and gated in CI, but never run on real hardware. Needs a machine or an external tester.
-- Open WebUI web interface: packaged and CI-exercised around the container, the login-and-chat flow never validated by hand (folded into v0.5 above).
+- Open WebUI web interface: packaged and CI-exercised around the container, the login-and-chat flow never validated by hand (folded into v0.6 above).
 - A release cycle with external users and no critical install bugs: only starts counting once people install the published images.
 
 ## Security track (cross-version)
@@ -50,7 +52,7 @@ Planned, in order of appearance:
 - Default firewall profile: ufw enabled at first boot with only SSH and the gateway port open; Open WebUI listens on all interfaces (host networking), so its port stays closed until the user opens it deliberately, and `sibilla tls --acme` opens 80/443 itself. Done in v0.3.
 - Sandboxing extended to every llmd unit and the containers (NoNewPrivileges, kernel and realtime restrictions), with a CI check that asserts the directives on the installed system; capability drops on the containers deferred until their runtime can be exercised in CI. Done in v0.3.
 - Automatic security updates: unattended-upgrades enabled by default for the security pocket, since an appliance that nobody patches must patch itself. Done in v0.3.
-- API key lifecycle: `sibilla key` with add, revoke and rotate, multiple keys folded into the gateway matcher, structured JSON access logs. Done in v0.4 (rate limiting deferred to v0.5).
+- API key lifecycle: `sibilla key` with add, revoke and rotate, multiple keys folded into the gateway matcher, structured JSON access logs. Done in v0.4 (rate limiting deferred to v0.6).
 - Supply chain: signed catalog, SBOM in SPDX and CycloneDX attached to releases, CVE scanning of the actually installed system with a written triage policy and expiring exceptions. Done in v0.4.
 - Secure Boot: the repack keeps Ubuntu's signed shim and GRUB, and CI now boots every ISO under OVMF with Secure Boot enforced and Microsoft keys enrolled, asserting that the kernel itself reports Secure Boot active; validation on physical firmware from external users remains welcome. Done in v0.4.
 - Model integrity: catalog entries carry per-quant sha256 digests (the ollama blob name after a pull); `sibilla model use` fails closed on a mismatch, first boot warns loudly. Done in v0.4.

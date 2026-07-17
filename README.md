@@ -47,7 +47,7 @@ $ sudo apt update && sudo apt install llmd
 $ sudo sibilla setup
 ```
 
-`sibilla setup` detects the hardware, installs the engine if it is missing, pulls a fitting model and serves the API on port 8080. It is a good guest: it does not touch your firewall or your other package sources.
+`sibilla setup` detects the hardware, installs the engine if it is missing, pulls a fitting model and serves the API on port 8080. It is a good guest: it does not touch your firewall or your other package sources, and trying it is reversible: `sudo sibilla remove` takes out everything it installed, restores what it displaced and leaves the machine as it found it (CI verifies exactly that on every push).
 
 For a whole machine or a VM from scratch, install one of the images instead. Two paths, both end at the same place.
 
@@ -83,8 +83,9 @@ Where to go next:
 
 - switch model: `sudo sibilla model use ID` (`sibilla model list` shows what fits your machine)
 - HTTPS: `sudo sibilla tls enable myserver.lan` (add `--acme you@example.org` for a public hostname)
-- editor and agent config: `sudo sibilla connect`
+- editor and agent config: `sudo sibilla connect` (`--write` places the Continue config for you)
 - chat interface: `sudo sibilla webui enable` (Open WebUI on port 3000)
+- something wrong: `sudo sibilla doctor` produces a paste-ready report for your issue, secrets excluded
 
 ## How it works
 
