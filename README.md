@@ -16,6 +16,14 @@
 
 <br/>
 
+<p align="center">
+<img src="branding/demo-quickstart.svg" alt="Example SibillaOS session: sibilla status, then a chat completion through the gateway" width="760"/>
+<br/>
+<sub>Example session: the commands are exact, the output is representative.</sub>
+</p>
+
+<br/>
+
 Running a local LLM still means picking an engine, matching a model to your VRAM, choosing a quantization and wiring up a service. SibillaOS does all of that for you. Boot the ISO, walk through the standard Ubuntu screens (locale, network, disk, your user), and the first thing your machine does after installing is serve an OpenAI-compatible API.
 
 ```console
@@ -28,7 +36,20 @@ $ curl http://myserver:8080/v1/chat/completions \
 
 ## Quick start
 
-Two paths to a running API; both end at the same place.
+Already on Ubuntu 24.04? You do not have to reinstall anything. Add the repository and turn the box into an LLM appliance:
+
+```console
+$ curl -fsSL https://engineering87.github.io/sibillaos/apt/sibillaos-archive-key.asc \
+    | sudo gpg --dearmor -o /usr/share/keyrings/sibillaos-archive-keyring.gpg
+$ printf 'Types: deb\nURIs: https://engineering87.github.io/sibillaos/apt/\nSuites: ./\nSigned-By: /usr/share/keyrings/sibillaos-archive-keyring.gpg\n' \
+    | sudo tee /etc/apt/sources.list.d/sibillaos.sources
+$ sudo apt update && sudo apt install llmd
+$ sudo sibilla setup
+```
+
+`sibilla setup` detects the hardware, installs the engine if it is missing, pulls a fitting model and serves the API on port 8080. It is a good guest: it does not touch your firewall or your other package sources.
+
+For a whole machine or a VM from scratch, install one of the images instead. Two paths, both end at the same place.
 
 **Cloud image (fastest, no USB).** Download the qcow2 for your architecture from [Releases](https://github.com/engineering87/sibillaos/releases), verify it against `SHA256SUMS-cloud-<arch>`, and boot it in your hypervisor with a cloud-init user-data that sets your user and SSH key, exactly as you would any Ubuntu cloud image.
 
@@ -86,32 +107,7 @@ The base install is a headless server; a desktop variant is on the roadmap.
 
 ## Architecture at a glance
 
-```
-      client (curl, VS Code, aider, Open WebUI)
-                       |
-                       v
-   +-----------------------------------------------+
-   |  llmd-gateway (Caddy) on :8080                 |
-   |  one OpenAI-compatible API                     |
-   |  bearer-token auth, optional TLS and metrics   |
-   +-----------------------+-----------------------+
-                           |  loopback only
-             +-------------+-------------+
-             v                           v
-   +--------------------+      +--------------------+
-   |  Ollama  :11434    |      |  vLLM  :8000       |
-   |  systemd service   |      |  podman (Quadlet)  |
-   +--------------------+      +--------------------+
-             |                           |
-             +-------------+-------------+
-                           v
-   +-----------------------------------------------+
-   |  llmd-hw: hardware detection + llmfit          |
-   |  picks the engine and a fitting model          |
-   +-----------------------------------------------+
-   |  Ubuntu 24.04 LTS (ISO or cloud image)         |
-   +-----------------------------------------------+
-```
+<p align="center"><img src="branding/architecture.svg" alt="SibillaOS architecture: clients reach one authenticated gateway on port 8080; Ollama and vLLM stay on loopback; llmd-hw and llmfit pick the engine and model; Ubuntu 24.04 underneath" width="760"/></p>
 
 The engines never listen off-host: the gateway is the only door in. The full decision log is in [docs/architecture.md](docs/architecture.md).
 

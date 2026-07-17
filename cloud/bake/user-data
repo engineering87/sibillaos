@@ -50,6 +50,7 @@ write_files:
         # llmd setup is deferred to the first boot
         install -D -m644 /mnt/seed/ci-model /etc/llmd/model
       fi
+      install -D -m644 /dev/null /etc/llmd/appliance
       systemctl enable llmd-firstboot.service
       umount /mnt/seed
       # reseal: wipe cloud-init state and the machine identity so

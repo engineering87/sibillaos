@@ -78,6 +78,9 @@ autoinstall:
     #    CI only: a /sibilla/ci-model file on the ISO overrides the pick
     #    with a small model to keep the pipeline fast (absent in releases)
     - curtin in-target -- bash -c 'test -f /opt/sibilla/ci-model && install -m644 /opt/sibilla/ci-model /etc/llmd/model || true'
+    #    appliance marker: firstboot manages firewall and the apt
+    #    source only on the images, not on `sibilla setup` installs
+    - curtin in-target -- install -D -m644 /dev/null /etc/llmd/appliance
     - curtin in-target -- systemctl enable llmd-firstboot.service
     # 5. Branding and serial console on the installed system
     - curtin in-target -- bash -c 'install -D -m644 /opt/sibilla/wallpaper.png /usr/share/backgrounds/sibillaos/wallpaper.png || true'
