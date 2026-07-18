@@ -130,4 +130,29 @@ EOF
 }
 build_llmfit
 
+# llmd: metapackage so "apt install llmd" pulls the whole stack onto an
+# existing Ubuntu; `sibilla setup` then turns it into an appliance
+build_meta() {
+  local staging
+  staging=$(mktemp -d)
+  mkdir -p "$staging/DEBIAN"
+  cat > "$staging/DEBIAN/control" <<EOF
+Package: llmd
+Version: $VERSION
+Section: admin
+Priority: optional
+Architecture: all
+Depends: llmd-hw, llmd-engine-ollama, llmd-engine-vllm, llmd-gateway, llmd-firstboot, llmd-webui, llmd-llmfit
+Maintainer: SibillaOS contributors
+Description: SibillaOS LLM stack (metapackage)
+ Pulls the SibillaOS components onto an existing Ubuntu system. After
+ installing, run 'sudo sibilla setup' to detect the hardware, install
+ the inference engine and serve an OpenAI-compatible API.
+EOF
+  dpkg-deb --build --root-owner-group "$staging" "$DIST/llmd_${VERSION}_all.deb"
+  rm -rf "$staging"
+  echo "OK llmd (metapackage)"
+}
+build_meta
+
 echo "packages in $DIST"

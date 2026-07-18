@@ -1,7 +1,15 @@
 #!/usr/bin/env bash
 # sibilla-connect: print ready-to-paste configuration for coding tools on
-# your workstation, pointed at this SibillaOS machine.
+# your workstation, pointed at this SibillaOS machine. With --write the
+# Continue configuration is written in place (existing file backed up).
 set -euo pipefail
+
+WRITE=0
+case "${1:-}" in
+  --write) WRITE=1 ;;
+  "") ;;
+  *) echo "usage: sibilla connect [--write]"; exit 1 ;;
+esac
 
 [[ $EUID -eq 0 ]] || { echo "run as root (sudo): the API key lives in /etc/llmd/apikey" >&2; exit 1; }
 
@@ -65,4 +73,36 @@ your workstation (on this machine:
 /var/lib/caddy/.local/share/caddy/pki/authorities/local/root.crt) or
 configure the client to skip TLS verification for this host.
 NOTE
+fi
+
+# --write: place the Continue configuration for the invoking user
+# (the one behind sudo), backing up whatever was there before
+if [[ "$WRITE" -eq 1 ]]; then
+  target_user="${SUDO_USER:-root}"
+  target_home=$(getent passwd "$target_user" | cut -d: -f6)
+  [[ -n "$target_home" ]] || { echo "cannot resolve home for $target_user" >&2; exit 1; }
+  cfg_dir="$target_home/.continue"
+  cfg="$cfg_dir/config.yaml"
+  mkdir -p "$cfg_dir"
+  if [[ -f "$cfg" && ! -f "$cfg.pre-sibilla" ]]; then
+    cp -a "$cfg" "$cfg.pre-sibilla"
+    echo
+    echo "existing Continue config backed up as config.yaml.pre-sibilla"
+  fi
+  cat > "$cfg" <<CFG
+# written by sibilla connect --write
+models:
+  - name: SibillaOS
+    provider: openai
+    model: $MODEL
+    apiBase: $BASE
+    apiKey: $KEY
+    roles:
+      - chat
+      - edit
+CFG
+  chown -R "$target_user:" "$cfg_dir" 2>/dev/null || true
+  chmod 600 "$cfg"
+  echo
+  echo "wrote $cfg for user $target_user (Continue picks it up on reload)"
 fi

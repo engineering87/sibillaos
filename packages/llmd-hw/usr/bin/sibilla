@@ -7,6 +7,8 @@ usage() {
   cat <<USAGE
 usage: sibilla COMMAND [ARGS]
 
+  setup          turn this Ubuntu machine into an LLM appliance:
+                 detect hardware, install the engine, serve the API
   status         health view: engine, served models, disk, GPU, gateway
   model ...      list, download, switch and remove models
   tls ...        switch the gateway between HTTP and HTTPS
@@ -14,6 +16,9 @@ usage: sibilla COMMAND [ARGS]
   metrics ...    Prometheus endpoint on the gateway, on or off
   webui ...      enable or disable the Open WebUI chat interface
   connect        print client configuration for editors and agents
+                 (--write places the Continue config, with backup)
+  doctor         paste-ready diagnostic report, no secrets included
+  remove         clean teardown: only what SibillaOS installed goes
 
 Run a command without arguments for its own usage.
 USAGE
@@ -23,6 +28,7 @@ USAGE
 cmd="${1:-}"
 [[ $# -gt 0 ]] && shift
 case "$cmd" in
+  setup)   exec /usr/lib/llmd/sibilla-setup "$@" ;;
   status)  exec /usr/lib/llmd/sibilla-status "$@" ;;
   model)   exec sibilla-model "$@" ;;
   tls)     exec sibilla-tls "$@" ;;
@@ -30,5 +36,7 @@ case "$cmd" in
   metrics) exec sibilla-metrics "$@" ;;
   webui)   exec sibilla-webui "$@" ;;
   connect) exec sibilla-connect "$@" ;;
+  doctor)  exec /usr/lib/llmd/sibilla-doctor "$@" ;;
+  remove)  exec /usr/lib/llmd/sibilla-remove "$@" ;;
   *)       usage ;;
 esac

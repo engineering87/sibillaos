@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 560" font-family="'DejaVu Sans','Segoe UI',Arial,sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#3ddc84"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="760" height="560" rx="12" fill="#081b11"/>
+
+  <!-- clients -->
+  <g font-size="14" fill="#a8e063" text-anchor="middle">
+    <rect x="130" y="26" width="110" height="34" rx="17" fill="#0e2a1c" stroke="#2e9e63"/>
+    <text x="185" y="48">curl / SDKs</text>
+    <rect x="256" y="26" width="110" height="34" rx="17" fill="#0e2a1c" stroke="#2e9e63"/>
+    <text x="311" y="48">VS Code</text>
+    <rect x="382" y="26" width="110" height="34" rx="17" fill="#0e2a1c" stroke="#2e9e63"/>
+    <text x="437" y="48">aider</text>
+    <rect x="508" y="26" width="120" height="34" rx="17" fill="#0e2a1c" stroke="#2e9e63"/>
+    <text x="568" y="48">Open WebUI</text>
+  </g>
+
+  <!-- arrow clients -> gateway -->
+  <line x1="380" y1="66" x2="380" y2="102" stroke="#3ddc84" stroke-width="2.5" marker-end="url(#arr)"/>
+  <text x="396" y="90" font-size="12.5" fill="#7fbf9a">:8080</text>
+
+  <!-- gateway -->
+  <rect x="90" y="108" width="580" height="74" rx="10" fill="#0e2a1c" stroke="#3ddc84" stroke-width="2"/>
+  <text x="380" y="139" font-size="17" font-weight="bold" fill="#3ddc84" text-anchor="middle">llmd-gateway (Caddy)</text>
+  <text x="380" y="164" font-size="13" fill="#9fc7b2" text-anchor="middle">one OpenAI-compatible API &#183; bearer keys &#183; TLS &#183; metrics &#183; access logs</text>
+
+  <!-- gateway is the only door -->
+  <text x="380" y="205" font-size="12.5" fill="#f5c542" text-anchor="middle">the gateway is the only door in</text>
+
+  <!-- loopback boundary -->
+  <rect x="90" y="220" width="580" height="130" rx="10" fill="none" stroke="#2e9e63" stroke-width="1.5" stroke-dasharray="7 5"/>
+  <text x="108" y="243" font-size="12.5" fill="#7fbf9a">loopback only</text>
+
+  <!-- arrows gateway -> engines -->
+  <line x1="240" y1="182" x2="240" y2="256" stroke="#3ddc84" stroke-width="2" marker-end="url(#arr)"/>
+  <line x1="520" y1="182" x2="520" y2="256" stroke="#3ddc84" stroke-width="2" marker-end="url(#arr)"/>
+
+  <!-- engines -->
+  <rect x="130" y="260" width="220" height="70" rx="10" fill="#0e2a1c" stroke="#2e9e63" stroke-width="1.5"/>
+  <text x="240" y="289" font-size="15.5" font-weight="bold" fill="#a8e063" text-anchor="middle">Ollama&#160;&#160;:11434</text>
+  <text x="240" y="312" font-size="12.5" fill="#9fc7b2" text-anchor="middle">systemd service, hardened</text>
+
+  <rect x="410" y="260" width="220" height="70" rx="10" fill="#0e2a1c" stroke="#2e9e63" stroke-width="1.5"/>
+  <text x="520" y="289" font-size="15.5" font-weight="bold" fill="#a8e063" text-anchor="middle">vLLM&#160;&#160;:8000</text>
+  <text x="520" y="312" font-size="12.5" fill="#9fc7b2" text-anchor="middle">OCI container (podman Quadlet)</text>
+
+  <!-- picks label between boundary and hw -->
+  <line x1="380" y1="350" x2="380" y2="388" stroke="#3ddc84" stroke-width="2" marker-end="url(#arr)"/>
+  <text x="396" y="374" font-size="12.5" fill="#7fbf9a">picked at install / first boot</text>
+
+  <!-- hw layer -->
+  <rect x="90" y="394" width="580" height="64" rx="10" fill="#0e2a1c" stroke="#2e9e63" stroke-width="1.5"/>
+  <text x="380" y="421" font-size="15.5" font-weight="bold" fill="#a8e063" text-anchor="middle">llmd-hw + llmfit</text>
+  <text x="380" y="444" font-size="12.5" fill="#9fc7b2" text-anchor="middle">detects the hardware &#183; picks the engine and a model that fits &#183; signed catalog</text>
+
+  <!-- base layer -->
+  <rect x="90" y="474" width="580" height="60" rx="10" fill="#0e2a1c" stroke="#f5c542" stroke-width="1.5"/>
+  <text x="380" y="500" font-size="15.5" font-weight="bold" fill="#f5c542" text-anchor="middle">Ubuntu 24.04 LTS</text>
+  <text x="380" y="522" font-size="12.5" fill="#9fc7b2" text-anchor="middle">ISO &#183; cloud image (amd64 / arm64) &#183; apt install llmd on an existing system</text>
+</svg>

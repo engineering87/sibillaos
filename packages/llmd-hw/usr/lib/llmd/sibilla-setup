@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+# sibilla-setup: turn an already-installed Ubuntu machine into a
+# SibillaOS LLM appliance, without reinstalling the OS. Detects the
+# hardware, installs the inference engine if missing, selects a model
+# and brings up the authenticated gateway, reusing the same first-boot
+# logic the ISO and cloud images run.
+#
+# Unlike the appliance images, this path is a guest on someone else's
+# system: it does not touch the firewall and does not enable the apt
+# source on its own.
+set -euo pipefail
+
+OLLAMA_VERSION="0.31.1"
+MODEL=""
+ENGINE=""
+
+usage() {
+  cat <<USAGE
+usage: sibilla setup [--model MODEL_ID] [--engine ollama|vllm]
+
+  Detect the hardware, install the engine if needed, pull a model and
+  serve an OpenAI-compatible API on port 8080. Run as root.
+
+  --model MODEL_ID   use this model instead of the auto-selected one
+                     (see 'sibilla model list' for the curated set)
+  --engine NAME      force the engine instead of auto-detecting it
+USAGE
+  exit 1
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --model)  MODEL="$2"; shift 2 ;;
+    --engine) ENGINE="$2"; shift 2 ;;
+    -h|--help) usage ;;
+    *) echo "unknown argument: $1" >&2; usage ;;
+  esac
+done
+
+[[ $EUID -eq 0 ]] || { echo "run as root (sudo sibilla setup)" >&2; exit 1; }
+
+mkdir -p /etc/llmd
+
+# 1. Engine: honor --engine, else an existing choice, else detect it
+if [[ -n "$ENGINE" ]]; then
+  echo "$ENGINE" > /etc/llmd/engine
+elif [[ ! -s /etc/llmd/engine ]]; then
+  /usr/lib/llmd/llmd-hw-detect --write /etc/llmd/engine
+fi
+engine=$(cat /etc/llmd/engine)
+echo "engine: $engine"
+
+# 2. Install the engine if it is not already present. Only ollama is
+# installed here; vLLM runs as a container brought up by its unit.
+if [[ "$engine" == "ollama" ]] && ! command -v ollama >/dev/null 2>&1; then
+  echo "installing ollama (pinned $OLLAMA_VERSION)"
+  # remember that WE installed it: sibilla remove only uninstalls
+  # ollama when this marker exists, a pre-existing ollama is not ours
+  mkdir -p /var/lib/llmd
+  touch /var/lib/llmd/setup-installed-ollama
+  curl -fsSL https://ollama.com/install.sh | OLLAMA_VERSION="$OLLAMA_VERSION" sh
+fi
+
+# 3. Model: honor --model, else keep an existing pick, else select one
+if [[ -n "$MODEL" ]]; then
+  echo "$MODEL" > /etc/llmd/model
+elif [[ ! -s /etc/llmd/model ]]; then
+  /usr/lib/llmd/llmd-model-select --auto \
+    --catalog /usr/share/llmd/models.json --out /etc/llmd/model || true
+fi
+echo "model: $(cat /etc/llmd/model 2>/dev/null || echo '(none selected)')"
+
+# 4. Preserve a pre-existing Caddy configuration before the gateway
+# render replaces it; sibilla remove restores it. Our own rendered
+# file mentions /etc/llmd, which tells the two apart.
+if [[ -f /etc/caddy/Caddyfile && ! -f /etc/caddy/Caddyfile.pre-sibilla ]] \
+    && ! grep -q "/etc/llmd" /etc/caddy/Caddyfile; then
+  cp -a /etc/caddy/Caddyfile /etc/caddy/Caddyfile.pre-sibilla
+  echo "existing Caddy configuration saved as Caddyfile.pre-sibilla"
+fi
+
+# 5. Run the shared first-boot logic: it generates the API key, pulls
+# the model, renders the gateway and starts the services. Idempotent,
+# so re-running sibilla setup is safe; clear the marker so it runs now.
+rm -f /var/lib/llmd/firstboot.done
+/usr/lib/llmd/llmd-firstboot
+
+echo
+echo "done. Check it with: sibilla status"

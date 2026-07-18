@@ -621,6 +621,100 @@ jobs:
             dpkg-status
             os-release
 
+  apt-install-test:
+    needs: lint
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build debs and a local apt repo
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y apt-utils jq
+          bash ./packages/build-debs.sh
+          mkdir -p localrepo
+          cp packages/dist/*.deb localrepo/
+          ( cd localrepo && apt-ftparchive packages . > Packages && apt-ftparchive release . > Release )
+      - name: Install llmd like a user on an existing Ubuntu box
+        run: |
+          echo "deb [trusted=yes] file://$(pwd)/localrepo ./" \
+            | sudo tee /etc/apt/sources.list.d/sibillaos-local.list
+          sudo apt-get update
+          sudo apt-get install -y llmd
+          command -v sibilla
+      - name: sibilla setup, then a real request through the gateway
+        run: |
+          RC=0
+          sudo sibilla setup --model hf.co/bartowski/Qwen_Qwen3-0.6B-GGUF:Q4_K_M
+          # the gateway must answer on the existing box, no reinstall
+          up=0
+          for _ in $(seq 1 40); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/v1/models || true)
+            if [ "$code" = "401" ]; then up=1; break; fi
+            sleep 3
+          done
+          [ "$up" = 1 ] || { echo "gateway never came up"; exit 1; }
+          KEY=$(sudo cat /etc/llmd/apikey)
+          MODEL=$(sudo cat /etc/llmd/model)
+          [ -n "$KEY" ] && [ -n "$MODEL" ] || { echo "missing key or model"; exit 1; }
+          # API surface is asserted
+          acode=$(curl -s -o /dev/null -w '%{http_code}' \
+            -H "Authorization: Bearer $KEY" http://127.0.0.1:8080/v1/models || true)
+          [ "$acode" = "200" ] || { echo "authenticated models call was $acode"; RC=1; }
+          # inference is best-effort here (native runner CPU); assert it
+          # when it works, report otherwise, do not fail the guest test
+          RESP=$(curl -s -m 300 http://127.0.0.1:8080/v1/chat/completions \
+            -H "Authorization: Bearer $KEY" -H "Content-Type: application/json" \
+            -d "{\"model\": \"$MODEL\", \"messages\": [{\"role\": \"user\", \"content\": \"Say ok.\"}], \"max_tokens\": 50}") || true
+          if echo "$RESP" | jq -e '.choices[0].message | ((.content // "") + (.reasoning // "")) | length > 0' >/dev/null 2>&1; then
+            echo "SETUP INFERENCE OK"
+          else
+            echo "inference not asserted on this box:"; echo "$RESP" | head -c 300; echo
+          fi
+          # good-guest behavior: setup must not act like an appliance
+          [ ! -e /etc/llmd/appliance ] || { echo "setup wrongly created the appliance marker"; RC=1; }
+          if command -v ufw >/dev/null 2>&1; then
+            sudo ufw status | grep -qi "Status: active" && { echo "setup enabled the firewall"; RC=1; } || true
+          fi
+          if [ -f /etc/apt/sources.list.d/sibillaos.sources ]; then
+            grep -q '^Enabled: no' /etc/apt/sources.list.d/sibillaos.sources \
+              || { echo "setup flipped the apt source on"; RC=1; }
+          fi
+          echo "--- sibilla status ---"
+          sibilla status || RC=1
+          exit "$RC"
+      - name: Doctor, connect --write, then a clean removal
+        run: |
+          RC=0
+          # doctor: complete and secret-free
+          sudo sibilla doctor > doctor.out || RC=1
+          grep -q "engine:" doctor.out || { echo "doctor missing engine section"; RC=1; }
+          grep -q "end of report" doctor.out || { echo "doctor report truncated"; RC=1; }
+          KEY=$(sudo cat /etc/llmd/apikey)
+          if grep -q "$KEY" doctor.out; then
+            echo "doctor leaked the api key; offending lines (masked):"
+            grep -F "$KEY" doctor.out | sed "s/$KEY/[REDACTED]/g" | head -5
+            RC=1
+          fi
+          # connect --write places the Continue config for the sudo user
+          sudo sibilla connect --write || RC=1
+          test -f "$HOME/.continue/config.yaml" || { echo "connect --write wrote nothing"; RC=1; }
+          grep -q "apiBase" "$HOME/.continue/config.yaml" || { echo "written config incomplete"; RC=1; }
+          # remove: a full, verifiable teardown
+          sudo sibilla remove --yes || RC=1
+          dpkg -l 2>/dev/null | grep -E '^ii +llmd' && { echo "llmd packages survived"; RC=1; } || true
+          [ ! -e /etc/llmd ] || { echo "/etc/llmd survived"; RC=1; }
+          [ ! -e /var/lib/llmd ] || { echo "/var/lib/llmd survived"; RC=1; }
+          if command -v ollama >/dev/null 2>&1; then
+            echo "ollama survived (setup installed it, remove must take it)"
+            RC=1
+          fi
+          code=$(curl -s -o /dev/null -w '%{http_code}' -m 5 http://127.0.0.1:8080/v1/models || true)
+          if [ "$code" = "401" ] || [ "$code" = "200" ]; then
+            echo "gateway still answering after removal"
+            RC=1
+          fi
+          exit "$RC"
+
   supply-chain:
     needs: install-test
     runs-on: ubuntu-24.04

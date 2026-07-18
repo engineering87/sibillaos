@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+# sibilla-remove: clean, reversible teardown of the SibillaOS stack.
+# Removes only what SibillaOS put on the machine: a pre-existing
+# ollama is left alone (sibilla setup records what it installed) and
+# a Caddy configuration saved at setup time is restored.
+set -euo pipefail
+
+YES=0
+case "${1:-}" in
+  --yes|-y) YES=1 ;;
+  "") ;;
+  *) echo "usage: sibilla remove [--yes]"; exit 1 ;;
+esac
+
+[[ $EUID -eq 0 ]] || { echo "run as root (sudo sibilla remove)" >&2; exit 1; }
+
+REMOVE_OLLAMA=0
+[[ -f /var/lib/llmd/setup-installed-ollama ]] && REMOVE_OLLAMA=1
+model_size=$(du -sh /var/lib/llmd/models 2>/dev/null | cut -f1 || true)
+
+echo "This removes the SibillaOS stack from this machine:"
+echo "  - the llmd packages and their configuration"
+echo "  - keys and settings in /etc/llmd"
+echo "  - downloaded models in /var/lib/llmd (${model_size:-nothing downloaded})"
+if [[ "$REMOVE_OLLAMA" -eq 1 ]]; then
+  echo "  - ollama (it was installed by sibilla setup)"
+else
+  echo "  - ollama stays: it was not installed by sibilla setup"
+fi
+if [[ -f /etc/caddy/Caddyfile.pre-sibilla ]]; then
+  echo "  - the previous Caddy configuration is restored"
+fi
+
+if [[ "$YES" -ne 1 ]]; then
+  read -r -p "proceed? [y/N] " answer
+  [[ "$answer" =~ ^[yY] ]] || { echo "aborted, nothing changed"; exit 1; }
+fi
+
+# 1. Stop the SibillaOS services (the containers are gated units)
+systemctl stop vllm.service webui.service 2>/dev/null || true
+
+# 2. Caddy: restore the saved configuration, or clear ours and stop
+# the service (it only existed for the gateway)
+if [[ -f /etc/caddy/Caddyfile.pre-sibilla ]]; then
+  mv /etc/caddy/Caddyfile.pre-sibilla /etc/caddy/Caddyfile
+  systemctl restart caddy.service 2>/dev/null || true
+  echo "previous Caddy configuration restored"
+else
+  rm -f /etc/caddy/Caddyfile
+  systemctl disable --now caddy.service 2>/dev/null || true
+fi
+rm -f /var/log/caddy/sibilla-access.log
+
+# 3. ollama, only if sibilla setup installed it
+if [[ "$REMOVE_OLLAMA" -eq 1 ]]; then
+  systemctl disable --now ollama.service 2>/dev/null || true
+  rm -f /etc/systemd/system/ollama.service
+  rm -rf /usr/local/lib/ollama /usr/share/ollama
+  rm -f /usr/local/bin/ollama
+  userdel ollama 2>/dev/null || true
+  groupdel ollama 2>/dev/null || true
+  echo "ollama removed"
+fi
+
+# 4. SibillaOS state: keys, settings, models
+rm -rf /etc/llmd /var/lib/llmd
+systemctl daemon-reload
+
+echo "purging the llmd packages"
+echo "SibillaOS removed. Dependencies pulled in by the install (caddy,"
+echo "podman, ...) can be cleared with: sudo apt-get autoremove --purge"
+
+# 5. Purge the packages LAST: this very script belongs to llmd-hw and
+# bash keeps reading it from the open file descriptor after unlink
+exec apt-get purge -y \
+  llmd llmd-hw llmd-engine-ollama llmd-engine-vllm \
+  llmd-gateway llmd-firstboot llmd-webui llmd-llmfit

@@ -117,28 +117,35 @@ fi
 systemctl enable caddy.service
 systemctl restart caddy.service
 
-# 5. SibillaOS apt source: shipped disabled because an unreachable
-# repository would break the installer's final apt-get update (the
-# repo goes live with the first tagged release). Enable it once it
-# actually answers.
-APT_SRC=/etc/apt/sources.list.d/sibillaos.sources
-if [[ -f "$APT_SRC" ]] && grep -q '^Enabled: no' "$APT_SRC"; then
-  if curl -fsS -m 10 https://engineering87.github.io/sibillaos/apt/InRelease >/dev/null 2>&1; then
-    sed -i 's/^Enabled: no/Enabled: yes/' "$APT_SRC"
-    echo "SibillaOS apt repository enabled"
-  else
-    echo "SibillaOS apt repository not reachable yet, source left disabled"
+# Steps 5 and 6 are appliance behavior: they reconfigure the whole
+# machine (firewall, package source) and only make sense on the ISO
+# and cloud images, which set /etc/llmd/appliance. On an existing
+# system set up with `sibilla setup` the marker is absent and we stay
+# a good guest: no firewall takeover, no apt source flip.
+if [[ -e /etc/llmd/appliance ]]; then
+  # 5. SibillaOS apt source: shipped disabled because an unreachable
+  # repository would break the installer's final apt-get update (the
+  # repo goes live with the first tagged release). Enable it once it
+  # actually answers.
+  APT_SRC=/etc/apt/sources.list.d/sibillaos.sources
+  if [[ -f "$APT_SRC" ]] && grep -q '^Enabled: no' "$APT_SRC"; then
+    if curl -fsS -m 10 https://engineering87.github.io/sibillaos/apt/InRelease >/dev/null 2>&1; then
+      sed -i 's/^Enabled: no/Enabled: yes/' "$APT_SRC"
+      echo "SibillaOS apt repository enabled"
+    else
+      echo "SibillaOS apt repository not reachable yet, source left disabled"
+    fi
   fi
-fi
 
-# 6. Firewall: default-closed, only SSH and the gateway port open.
-# Open WebUI's port 3000 stays closed until the admin opens it
-# deliberately (sibilla webui enable prints the command).
-if command -v ufw >/dev/null 2>&1; then
-  ufw allow OpenSSH >/dev/null 2>&1 || ufw allow 22/tcp >/dev/null
-  ufw allow 8080/tcp >/dev/null
-  ufw --force enable
-  echo "firewall enabled: only SSH and the gateway port are open"
+  # 6. Firewall: default-closed, only SSH and the gateway port open.
+  # Open WebUI's port 3000 stays closed until the admin opens it
+  # deliberately (sibilla webui enable prints the command).
+  if command -v ufw >/dev/null 2>&1; then
+    ufw allow OpenSSH >/dev/null 2>&1 || ufw allow 22/tcp >/dev/null
+    ufw allow 8080/tcp >/dev/null
+    ufw --force enable
+    echo "firewall enabled: only SSH and the gateway port are open"
+  fi
 fi
 
 touch "$STATE"

@@ -1,0 +1,106 @@
+#!/usr/bin/env bash
+# sibilla-doctor: one paste-ready diagnostic report for bug reports.
+# Contains no secrets: API keys are never printed, only their paths,
+# and the whole report is scrubbed of every configured key before it
+# reaches the terminal. The scrub is not paranoia: the packaged caddy
+# unit starts with "caddy run --environ", which dumps the process
+# environment (LLMD_KEYS_ALT included, keys and all) into the journal
+# on every start, so quoted service logs would leak them.
+set -uo pipefail
+
+line() { echo "----------------------------------------------------------"; }
+
+report() {
+echo "SibillaOS doctor report"
+echo "generated: $(date -u +%Y-%m-%dT%H:%M:%SZ) (no secrets included)"
+line
+
+echo "[system]"
+# shellcheck disable=SC1091
+. /etc/os-release 2>/dev/null && echo "os:        ${PRETTY_NAME:-unknown}"
+echo "kernel:    $(uname -r) ($(uname -m))"
+echo "cpu:       $(nproc) cores"
+echo "memory:    $(free -h 2>/dev/null | awk '/^Mem:/{print $2}')"
+if command -v nvidia-smi >/dev/null 2>&1; then
+  nvidia-smi --query-gpu=name,memory.total --format=csv,noheader 2>/dev/null \
+    | sed 's/^/gpu:       /' || echo "gpu:       nvidia-smi present but not responding"
+else
+  echo "gpu:       none detected"
+fi
+line
+
+echo "[packages]"
+dpkg-query -W -f='${Package} ${Version}\n' 'llmd*' 2>/dev/null || echo "no llmd packages found"
+ollama --version 2>/dev/null | head -1 || echo "ollama: not installed"
+line
+
+echo "[configuration]"
+echo "engine:    $(cat /etc/llmd/engine 2>/dev/null || echo '(unset)')"
+echo "model:     $(cat /etc/llmd/model 2>/dev/null || echo '(unset)')"
+echo "appliance: $([ -e /etc/llmd/appliance ] && echo yes || echo "no (sibilla setup path)")"
+if [[ -r /etc/llmd/gateway.conf ]]; then
+  # the conf holds no secrets (keys live in their own files)
+  sed 's/^/gateway:   /' /etc/llmd/gateway.conf
+else
+  echo "gateway:   (default: MODE=http)"
+fi
+echo "api key:   in /etc/llmd/apikey (not printed)"
+/usr/lib/llmd/llmd-catalog-verify >/dev/null 2>&1
+case $? in
+  0) echo "catalog:   signature valid" ;;
+  1) echo "catalog:   signature INVALID" ;;
+  *) echo "catalog:   unsigned (transitional build)" ;;
+esac
+line
+
+echo "[services]"
+for u in ollama caddy vllm webui; do
+  printf '%-8s active=%s enabled=%s\n' "$u" \
+    "$(systemctl is-active "$u.service" 2>/dev/null || echo n/a)" \
+    "$(systemctl is-enabled "$u.service" 2>/dev/null || echo n/a)"
+done
+line
+
+echo "[endpoints]"
+gw=$(curl -s -o /dev/null -w '%{http_code}' -m 5 http://127.0.0.1:8080/v1/models 2>/dev/null || echo 000)
+echo "gateway http://127.0.0.1:8080 -> $gw (401 means up and guarded)"
+eng=$(curl -s -o /dev/null -w '%{http_code}' -m 5 http://127.0.0.1:11434/ 2>/dev/null || echo 000)
+echo "ollama  http://127.0.0.1:11434 -> $eng"
+line
+
+echo "[storage]"
+du -sh /var/lib/llmd/models 2>/dev/null || echo "no model store"
+df -h --output=avail / 2>/dev/null | tail -1 | sed 's/^ */free on \/: /'
+line
+
+echo "[recent logs]"
+if [[ $EUID -eq 0 ]]; then
+  echo "-- ollama (last 15) --"
+  journalctl -u ollama -n 15 --no-pager -o short 2>/dev/null || true
+  echo "-- caddy (last 10) --"
+  journalctl -u caddy -n 10 --no-pager -o short 2>/dev/null || true
+else
+  echo "(run with sudo to include service logs)"
+fi
+line
+echo "end of report; paste it inside a code block in your issue"
+}
+
+# Replace every configured API key with [REDACTED] wherever it shows
+# up in the report. Keys are generated alphanumeric (sibilla key
+# enforces it), so they are safe inside a sed expression.
+redact() {
+  local args=() f k
+  for f in /etc/llmd/apikey /etc/llmd/apikeys.d/*; do
+    [[ -f "$f" && -r "$f" ]] || continue
+    k=$(tr -d '[:space:]' < "$f")
+    [[ -n "$k" ]] && args+=(-e "s/$k/[REDACTED]/g")
+  done
+  if [[ ${#args[@]} -gt 0 ]]; then
+    sed "${args[@]}"
+  else
+    cat
+  fi
+}
+
+report | redact

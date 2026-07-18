@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 372" font-family="'DejaVu Sans Mono','Menlo','Consolas',monospace" font-size="14">
+  <rect x="0" y="0" width="760" height="372" rx="10" fill="#081b11"/>
+  <rect x="0" y="0" width="760" height="34" rx="10" fill="#0e2a1c"/>
+  <rect x="0" y="24" width="760" height="10" fill="#0e2a1c"/>
+  <circle cx="22" cy="17" r="6" fill="#f5c542"/>
+  <circle cx="42" cy="17" r="6" fill="#3ddc84"/>
+  <circle cx="62" cy="17" r="6" fill="#2e9e63"/>
+  <text x="380" y="22" text-anchor="middle" fill="#7fbf9a" font-size="12.5">SibillaOS - from install to first token</text>
+  <text x="20" y="66" xml:space="preserve"><tspan fill="#3ddc84">$ </tspan><tspan fill="#a8e063">sibilla status</tspan></text>
+  <text x="20" y="90" xml:space="preserve" fill="#9fc7b2">engine:  ollama (active)</text>
+  <text x="20" y="112" xml:space="preserve" fill="#9fc7b2">model:   <tspan fill="#f5c542">hf.co/bartowski/Qwen_Qwen3-4B-GGUF</tspan></text>
+  <text x="20" y="134" xml:space="preserve" fill="#9fc7b2">gateway: http://192.168.1.50:8080 up (key in /etc/llmd/apikey)</text>
+  <text x="20" y="170" xml:space="preserve"><tspan fill="#3ddc84">$ </tspan><tspan fill="#a8e063">KEY=$(sudo cat /etc/llmd/apikey)  MODEL=$(sudo cat /etc/llmd/model)</tspan></text>
+  <text x="20" y="192" xml:space="preserve"><tspan fill="#3ddc84">$ </tspan><tspan fill="#a8e063">curl localhost:8080/v1/chat/completions \</tspan></text>
+  <text x="20" y="214" xml:space="preserve" fill="#a8e063">    -H "Authorization: Bearer $KEY" \</text>
+  <text x="20" y="236" xml:space="preserve" fill="#a8e063">    -d '{"model":"'"$MODEL"'","messages":</text>
+  <text x="20" y="258" xml:space="preserve" fill="#a8e063">         [{"role":"user","content":"hello"}]}'</text>
+  <text x="20" y="294" xml:space="preserve" fill="#9fc7b2">{"choices":[{"message":{"role":"assistant",</text>
+  <text x="20" y="316" xml:space="preserve" fill="#9fc7b2">  "content":<tspan fill="#3ddc84">"Hello! How can I help you today?"</tspan>}}]}</text>
+  <text x="20" y="346" xml:space="preserve"><tspan fill="#3ddc84">$ </tspan><tspan fill="#3ddc84">_</tspan></text>
+</svg>
