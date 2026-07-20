@@ -23,7 +23,8 @@ jobs:
             packages/llmd-hw/usr/lib/llmd/* packages/llmd-hw/usr/bin/* \
             packages/llmd-firstboot/usr/lib/llmd/* \
             packages/llmd-gateway/usr/lib/llmd/* packages/llmd-gateway/usr/bin/* \
-            packages/llmd-webui/usr/bin/* packages/llmd-mcp/usr/bin/*
+            packages/llmd-webui/usr/bin/* packages/llmd-mcp/usr/bin/* \
+            tools/*.sh
           # the MCP server is python: syntax-check it here too
           python3 -m py_compile packages/llmd-mcp/usr/lib/llmd/llmd-mcp-server
       - name: Validate catalog JSON
@@ -1129,3 +1130,131 @@ jobs:
         with:
           name: cloud-debug-${{ matrix.arch }}
           path: cloud.log
+
+  # The air-gapped promise, taken literally: the same cloud image
+  # boots in a VM whose network is restricted (QEMU user networking
+  # with restrict=on: SSH port forwards work, every outbound packet is
+  # dropped), with only the companion payload disk attached. The
+  # machine must come up serving the payload model.
+  airgap-test:
+    needs: build-cloud
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download cloud image
+        uses: actions/download-artifact@v4
+        with:
+          name: sibillaos-cloud-amd64
+          path: cloud-img
+      - name: Install QEMU
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-system-x86 qemu-utils xorriso sshpass jq
+      - name: Build the payload with the real tool
+        run: |
+          bash ./tools/build-airgap-payload.sh --out payload \
+            --model hf.co/bartowski/Qwen_Qwen3-0.6B-GGUF:Q4_K_M
+          test -s payload/profile
+          grep -q "MODEL=hf.co/bartowski/Qwen_Qwen3-0.6B-GGUF:Q4_K_M" payload/profile
+          # the payload disk a user would prepare: ext4, the label is
+          # what llmd-firstboot looks for
+          truncate -s 2G payload.img
+          mkfs.ext4 -F -q -L SIBILLA-AIRGAP payload.img
+          sudo mkdir -p /mnt/payload
+          sudo mount -o loop payload.img /mnt/payload
+          sudo cp -r payload/. /mnt/payload/
+          sudo umount /mnt/payload
+      - name: Deploy with no outbound network
+        run: |
+          IMG=$(ls cloud-img/*.qcow2 | head -1)
+          KVM=""
+          if [ -e /dev/kvm ]; then
+            sudo chmod 666 /dev/kvm
+            # fixed CPU model: same reasoning as the install test
+            KVM="-enable-kvm -cpu Haswell-noTSX-IBRS"
+          fi
+          mkdir seed
+          cat > seed/user-data <<'EOF'
+          #cloud-config
+          hostname: sibilla-airgap
+          ssh_pwauth: true
+          users:
+            - name: sibilla
+              plain_text_passwd: sibilla
+              lock_passwd: false
+              shell: /bin/bash
+              groups: sudo
+              sudo: ALL=(ALL) NOPASSWD:ALL
+          EOF
+          printf 'instance-id: sibilla-airgap-ci\n' > seed/meta-data
+          xorriso -as mkisofs -volid CIDATA -joliet -rock -o seed.iso seed
+          # shellcheck disable=SC2086
+          qemu-system-x86_64 $KVM -m 4096 -smp 4 \
+            -display none -serial file:airgap.log \
+            -drive "file=$IMG,format=qcow2,if=virtio" \
+            -drive "file=seed.iso,format=raw,if=virtio,readonly=on" \
+            -drive "file=payload.img,format=raw,if=virtio" \
+            -netdev user,id=n0,restrict=on,hostfwd=tcp::8080-:8080,hostfwd=tcp::2222-:22 \
+            -device virtio-net,netdev=n0 &
+          QPID=$!
+          ok=0
+          for _ in $(seq 1 120); do
+            sleep 10
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/v1/models || true)
+            if [ "$code" = "401" ]; then ok=1; break; fi
+          done
+          RC=1
+          if [ "$ok" -eq 1 ]; then
+            echo "gateway answered 401 with no outbound network"
+            SSH="sshpass -p sibilla ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p 2222 sibilla@127.0.0.1"
+            KEY=$($SSH "sudo cat /etc/llmd/apikey" | tail -1)
+            MODEL=$($SSH "sudo cat /etc/llmd/model" | tail -1)
+            echo "served model: $MODEL"
+            if [ "$MODEL" = "hf.co/bartowski/Qwen_Qwen3-0.6B-GGUF:Q4_K_M" ] && [ -n "$KEY" ]; then
+              RC=0
+              # the model must have arrived from the payload, not a pull
+              $SSH "sudo journalctl -u llmd-firstboot --no-pager" > firstboot-journal.log || true
+              grep -q "air-gapped payload detected" firstboot-journal.log \
+                || { echo "payload was not detected"; RC=1; }
+              grep -q "identified: hf.co/bartowski/Qwen_Qwen3-0.6B-GGUF:Q4_K_M" firstboot-journal.log \
+                || { echo "payload model was not imported through the digest gate"; RC=1; }
+              grep -q "model already local, skipping the network pull" firstboot-journal.log \
+                || { echo "firstboot did not skip the pull"; RC=1; }
+              # prove the isolation is real from inside the guest
+              if $SSH "curl -s -m 8 https://huggingface.co >/dev/null 2>&1"; then
+                echo "the guest reached the internet; this test proves nothing"
+                RC=1
+              else
+                echo "outbound network confirmed dead from inside the guest"
+              fi
+              # and the machine still does its job: a real completion
+              RESP=$(curl -s -m 600 http://127.0.0.1:8080/v1/chat/completions \
+                -H "Authorization: Bearer $KEY" \
+                -H "Content-Type: application/json" \
+                -d "{\"model\": \"$MODEL\", \"messages\": [{\"role\": \"user\", \"content\": \"Say ok.\"}], \"max_tokens\": 60}") || true
+              if echo "$RESP" | jq -e '.choices[0].message | ((.content // "") + (.reasoning // "")) | length > 0' >/dev/null; then
+                echo "AIRGAP INFERENCE OK"
+              else
+                echo "air-gapped inference failed"
+                echo "$RESP" | head -c 400; echo
+                RC=1
+              fi
+            else
+              echo "wrong or missing model/key (model: $MODEL)"
+              $SSH "sudo journalctl -u llmd-firstboot --no-pager | tail -60" || true
+            fi
+          else
+            echo "gateway never came up; console tail:"
+            tail -80 airgap.log || true
+          fi
+          kill "$QPID" 2>/dev/null || true
+          exit "$RC"
+      - name: Upload airgap debug artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: airgap-debug
+          path: |
+            airgap.log
+            firstboot-journal.log

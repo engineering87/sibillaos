@@ -106,6 +106,7 @@ The installer detects your hardware and makes the decisions a human would otherw
 | **Editor hookup** | `sibilla connect` prints ready-to-paste configuration for VS Code (Continue, Cline), aider and any OpenAI-compatible client. |
 | **Agent hookup** | `sibilla mcp enable` exposes the local model to MCP clients (Claude Code and other agent frameworks) as `chat` and `list_models` tools, behind the same API keys. See [docs/mcp.md](docs/mcp.md). |
 | **Config as code** | Declare the desired state (model, TLS, metrics, MCP, WebUI) in one profile file; `sibilla apply` converges the machine onto it, idempotently. `apply export` turns a configured machine into a profile; cloud-init or a fleet tool drops the file and first boot picks it up. See [docs/configuration.md](docs/configuration.md). |
+| **Air-gapped** | Machines with no outbound network install from a companion payload volume: models travel by USB stick, verified against the signed catalog digests on both ends. CI proves it on every push in a network-restricted VM. See [docs/airgap.md](docs/airgap.md). |
 
 The base install is a headless server; a desktop variant is on the roadmap.
 

@@ -11,6 +11,26 @@ export HOME="${HOME:-/root}"
 
 mkdir -p /var/lib/llmd/models /etc/llmd
 
+# Air-gapped payload: a volume labeled SIBILLA-AIRGAP carries model
+# files that will go through the same digest gate as sibilla model
+# import, and optionally a declared profile. Mounted read-only now
+# because a profile on the stick must seed the model choice below;
+# the files import further down, once the engine is up.
+AIRGAP_MNT=""
+if [[ -e /dev/disk/by-label/SIBILLA-AIRGAP ]]; then
+  AIRGAP_MNT=$(mktemp -d)
+  if mount -o ro /dev/disk/by-label/SIBILLA-AIRGAP "$AIRGAP_MNT" 2>/dev/null; then
+    echo "air-gapped payload detected"
+    if [[ -s "$AIRGAP_MNT/profile" && ! -s /etc/llmd/profile ]]; then
+      cp "$AIRGAP_MNT/profile" /etc/llmd/profile
+      echo "profile taken from the payload"
+    fi
+  else
+    rmdir "$AIRGAP_MNT" 2>/dev/null || true
+    AIRGAP_MNT=""
+  fi
+fi
+
 # A declared profile (written by cloud-init, a fleet tool or the
 # air-gapped payload) wins over auto-selection: seed the model before
 # the choice happens, so the declared one is what gets downloaded.
@@ -83,10 +103,26 @@ if [[ -n "$model" ]]; then
           sleep 3
         done
       fi
-      for _ in 1 2 3; do
-        if ollama pull "$model"; then break; fi
-        sleep 30
-      done
+      # payload files import first, through the same digest gate as
+      # sibilla model import: a file the catalog does not know stays
+      # out, and a warning is not a failed boot
+      if [[ -n "$AIRGAP_MNT" ]]; then
+        for f in "$AIRGAP_MNT"/models/*.gguf; do
+          [[ -e "$f" ]] || continue
+          sibilla-model import "$f" \
+            || echo "WARNING: payload file $(basename "$f") was not imported"
+        done
+      fi
+      # a model already local (imported from the payload, or resumed)
+      # serves without the network
+      if ollama list 2>/dev/null | awk 'NR>1{print $1}' | grep -Fxq "$model"; then
+        echo "model already local, skipping the network pull"
+      else
+        for _ in 1 2 3; do
+          if ollama pull "$model"; then break; fi
+          sleep 30
+        done
+      fi
       # digest check against the catalog. Warn-only here: first boot
       # must complete even if the upstream repo re-uploaded the file,
       # but the warning lands in the journal and on the console.
@@ -157,6 +193,12 @@ if [[ -e /etc/llmd/appliance ]]; then
     ufw --force enable
     echo "firewall enabled: only SSH and the gateway port are open"
   fi
+fi
+
+# the payload has served its purpose; leave the volume clean
+if [[ -n "$AIRGAP_MNT" ]]; then
+  umount "$AIRGAP_MNT" 2>/dev/null || true
+  rmdir "$AIRGAP_MNT" 2>/dev/null || true
 fi
 
 # 7. Declared profile: the model was seeded before selection, now the
