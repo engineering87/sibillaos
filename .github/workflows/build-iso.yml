@@ -773,6 +773,45 @@ jobs:
           sudo sibilla model use hf.co/bartowski/Qwen_Qwen3-0.6B-GGUF:Q4_K_M >/dev/null
           rm -f /tmp/reviewed.gguf /tmp/unknown.gguf
           exit "$RC"
+      - name: Declarative profile, applied and idempotent
+        run: |
+          RC=0
+          # export must reflect the machine as the previous steps left
+          # it: Q4 model served, mcp on, metrics off
+          sudo sibilla apply export | tee exported.profile
+          grep -q "MODEL=hf.co/bartowski/Qwen_Qwen3-0.6B-GGUF:Q4_K_M" exported.profile \
+            || { echo "export missed the served model"; RC=1; }
+          grep -q "MCP=on" exported.profile || { echo "export missed the mcp state"; RC=1; }
+          grep -q "METRICS=off" exported.profile || { echo "export missed the metrics state"; RC=1; }
+          grep -q "apikey" exported.profile && { echo "export leaked key material"; RC=1; } || true
+          # declare drift on two axes; the Q8 model is already local
+          # from the import step, so the switch must not pull
+          printf 'MODEL=hf.co/bartowski/Qwen_Qwen3-0.6B-GGUF:Q8_0\nMETRICS=on\nMCP=on\n' > /tmp/profile
+          sudo sibilla apply /tmp/profile | tee apply.out
+          grep -q "profile applied: 2 change(s), 1 already in place" apply.out \
+            || { echo "apply did not report the expected drift"; cat apply.out; RC=1; }
+          grep -qi "pulling" apply.out && { echo "apply pulled a local model"; RC=1; } || true
+          [ "$(sudo cat /etc/llmd/model)" = "hf.co/bartowski/Qwen_Qwen3-0.6B-GGUF:Q8_0" ] \
+            || { echo "apply did not switch the model"; RC=1; }
+          KEY=$(sudo cat /etc/llmd/apikey)
+          mcode=$(curl -s -o /dev/null -w '%{http_code}' -m 10 \
+            -H "Authorization: Bearer $KEY" http://127.0.0.1:8080/metrics/gateway || true)
+          [ "$mcode" = "200" ] || { echo "metrics endpoint after apply got $mcode"; RC=1; }
+          # a second apply of the same profile must be a no-op
+          sudo sibilla apply /tmp/profile | tee apply2.out
+          grep -q "profile applied: 0 change(s), 3 already in place" apply2.out \
+            || { echo "apply is not idempotent"; cat apply2.out; RC=1; }
+          # a broken value must abort before touching anything
+          printf 'METRICS=maybe\n' > /tmp/bad.profile
+          if sudo sibilla apply /tmp/bad.profile >bad.out 2>&1; then
+            echo "invalid profile value was accepted"; RC=1
+          else
+            grep -q "invalid METRICS value" bad.out || { echo "unexpected rejection:"; cat bad.out; RC=1; }
+          fi
+          # back to the baseline for the steps that follow
+          printf 'MODEL=hf.co/bartowski/Qwen_Qwen3-0.6B-GGUF:Q4_K_M\nMETRICS=off\n' > /tmp/profile
+          sudo sibilla apply /tmp/profile >/dev/null
+          exit "$RC"
       - name: Doctor, connect --write, then a clean removal
         run: |
           RC=0

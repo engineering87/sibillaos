@@ -16,6 +16,8 @@ usage: sibilla COMMAND [ARGS]
   metrics ...    Prometheus endpoint on the gateway, on or off
   webui ...      enable or disable the Open WebUI chat interface
   mcp ...        expose the local model to MCP clients, on or off
+  apply          reconcile the machine onto a declared profile file
+                 (apply export prints the current state as a profile)
   connect        print client configuration for editors and agents
                  (--write places the Continue config, with backup)
   doctor         paste-ready diagnostic report, no secrets included
@@ -37,6 +39,7 @@ case "$cmd" in
   metrics) exec sibilla-metrics "$@" ;;
   webui)   exec sibilla-webui "$@" ;;
   mcp)     exec sibilla-mcp "$@" ;;
+  apply)   exec /usr/lib/llmd/sibilla-apply "$@" ;;
   connect) exec sibilla-connect "$@" ;;
   doctor)  exec /usr/lib/llmd/sibilla-doctor "$@" ;;
   remove)  exec /usr/lib/llmd/sibilla-remove "$@" ;;

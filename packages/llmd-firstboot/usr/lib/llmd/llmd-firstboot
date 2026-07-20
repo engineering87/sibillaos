@@ -11,6 +11,17 @@ export HOME="${HOME:-/root}"
 
 mkdir -p /var/lib/llmd/models /etc/llmd
 
+# A declared profile (written by cloud-init, a fleet tool or the
+# air-gapped payload) wins over auto-selection: seed the model before
+# the choice happens, so the declared one is what gets downloaded.
+if [[ -s /etc/llmd/profile && ! -s /etc/llmd/model ]]; then
+  profile_model=$(sed -n 's/^MODEL=//p' /etc/llmd/profile | head -1)
+  if [[ -n "$profile_model" ]]; then
+    echo "$profile_model" > /etc/llmd/model
+    echo "model taken from the declared profile: $profile_model"
+  fi
+fi
+
 # Cloud images skip the installer: detect the engine and pick a model
 # here, at the real first boot, where the deployed hardware (and its
 # GPU, if any) is visible. No-ops on ISO installs, where the files
@@ -146,6 +157,15 @@ if [[ -e /etc/llmd/appliance ]]; then
     ufw --force enable
     echo "firewall enabled: only SSH and the gateway port are open"
   fi
+fi
+
+# 7. Declared profile: the model was seeded before selection, now the
+# rest of the declaration converges (tls, metrics, mcp, webui). Warn,
+# do not fail: first boot must end in a serving machine even if one
+# profile line cannot apply; sibilla apply re-runs idempotently.
+if [[ -s /etc/llmd/profile && -x /usr/lib/llmd/sibilla-apply ]]; then
+  /usr/lib/llmd/sibilla-apply /etc/llmd/profile \
+    || echo "WARNING: profile did not fully apply; run: sudo sibilla apply"
 fi
 
 touch "$STATE"
