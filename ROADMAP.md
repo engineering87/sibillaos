@@ -29,6 +29,7 @@ The adoption release: trying SibillaOS no longer costs a reinstall, and walking 
 
 Deliberately light, shaped by what early users of the published images and the apt path report. Carried items with a committed shape:
 
+- MCP server, promoted from exploratory: `sibilla mcp enable` exposes the local model to agent frameworks (Claude Code and any Streamable HTTP client) as `chat` and `list_models` tools at /mcp, behind the same gateway keys. A stateless dependency-free server (Python standard library, loopback only, never sees the keys), aligned with where the protocol is going. In progress on the branch, exercised end to end in CI.
 - First-run experience: clearer install-time messages and fast turnaround on issues reported against the published images; `sibilla doctor` now gives reporters something precise to paste into the templates.
 - Manual validation of Open WebUI, carried since v0.2: actually install, `sibilla webui enable`, log in and chat, then record the result. It is a v1.0 criterion and cannot be automated (the image is too heavy for CI).
 - Air-gapped install profile, moved from v0.4: a companion payload (model files plus engine images on a second USB drive) for environments with no outbound network, which is where the on-premise pitch matters most.
@@ -67,7 +68,6 @@ Ideas that look promising but need a use case or a champion:
 
 - Speech endpoints: whisper.cpp for transcription behind the same gateway.
 - ds4 (DwarfStar) as a third engine for high-memory unified-RAM machines (DGX Spark, Strix Halo, 96 GB and up): a narrow native engine for DeepSeek V4 Flash/PRO with an HTTP API and SSD streaming for models larger than RAM. Philosophically close to this project, but explicitly beta today and with a deliberately volatile model-support policy (upstream may drop a model when a better one appears), which conflicts with our pinning discipline. Revisit when it stabilizes; track upstream at github.com/antirez/ds4.
-- MCP server exposure, so agent frameworks can discover the local models as tools. Increasingly requested as the Model Context Protocol becomes a common integration point; a strong candidate for promotion out of exploratory in a future cycle.
 - LDAP or OIDC authentication on the gateway for team deployments.
 - A Debian stable base variant for shops that prefer it over Ubuntu.
 

@@ -84,6 +84,7 @@ Where to go next:
 - switch model: `sudo sibilla model use ID` (`sibilla model list` shows what fits your machine)
 - HTTPS: `sudo sibilla tls enable myserver.lan` (add `--acme you@example.org` for a public hostname)
 - editor and agent config: `sudo sibilla connect` (`--write` places the Continue config for you)
+- agents via MCP: `sudo sibilla mcp enable` serves the model as Model Context Protocol tools
 - chat interface: `sudo sibilla webui enable` (Open WebUI on port 3000)
 - something wrong: `sudo sibilla doctor` produces a paste-ready report for your issue, secrets excluded
 
@@ -103,6 +104,7 @@ The installer detects your hardware and makes the decisions a human would otherw
 | **Observability** | `sibilla metrics enable` serves Prometheus metrics behind the same API key; Grafana dashboard included in [docs/observability](docs/observability/). |
 | **Chat interface** | `sibilla webui enable` starts Open WebUI on port 3000 as an opt-in container, wired to the local engine. |
 | **Editor hookup** | `sibilla connect` prints ready-to-paste configuration for VS Code (Continue, Cline), aider and any OpenAI-compatible client. |
+| **Agent hookup** | `sibilla mcp enable` exposes the local model to MCP clients (Claude Code and other agent frameworks) as `chat` and `list_models` tools, behind the same API keys. See [docs/mcp.md](docs/mcp.md). |
 
 The base install is a headless server; a desktop variant is on the roadmap.
 

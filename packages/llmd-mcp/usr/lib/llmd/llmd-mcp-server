@@ -1,0 +1,250 @@
+#!/usr/bin/env python3
+# llmd-mcp-server: a minimal Model Context Protocol server that exposes
+# the locally served model to MCP clients (Claude Code, editors, agent
+# frameworks) as tools: `chat` delegates a prompt to the local engine
+# through its OpenAI-compatible API, `list_models` reports what is
+# served. Python standard library only, by design: the appliance ships
+# no pip dependencies and pins everything else, so this server has
+# nothing to pin.
+#
+# Transport: Streamable HTTP (single /mcp endpoint, POST only), fully
+# stateless: no sessions, one JSON response per request. Statelessness
+# is not a shortcut, it is where the protocol itself is going (the
+# 2026-07-28 revision removes protocol-level sessions entirely).
+# Supported protocol revisions: 2025-03-26, 2025-06-18, 2025-11-25.
+#
+# Security: this process listens on loopback only and never reads the
+# API keys; authentication happens at the gateway (Caddy), which is
+# the only network entry point, exactly as for the API itself.
+
+import json
+import os
+import urllib.request
+import urllib.error
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+ADDR = os.environ.get("LLMD_MCP_ADDR", "127.0.0.1")
+PORT = int(os.environ.get("LLMD_MCP_PORT", "8765"))
+ENGINE_FILE = os.environ.get("LLMD_ENGINE_FILE", "/etc/llmd/engine")
+MODEL_FILE = os.environ.get("LLMD_MODEL_FILE", "/etc/llmd/model")
+
+SUPPORTED_VERSIONS = ("2025-03-26", "2025-06-18", "2025-11-25")
+DEFAULT_VERSION = "2025-06-18"
+SERVER_INFO = {"name": "sibillaos", "version": "1"}
+INSTRUCTIONS = (
+    "Tools served by a SibillaOS machine: `chat` runs a prompt on the "
+    "locally hosted model (data never leaves the machine), "
+    "`list_models` shows which models are available."
+)
+
+TOOLS = [
+    {
+        "name": "chat",
+        "description": (
+            "Ask the LLM hosted on this SibillaOS machine. The model "
+            "runs locally: nothing in the prompt or the answer leaves "
+            "the machine. Suited for drafting, summarizing and "
+            "questions over sensitive material."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "prompt": {
+                    "type": "string",
+                    "description": "The user prompt to answer",
+                },
+                "system": {
+                    "type": "string",
+                    "description": "Optional system prompt",
+                },
+                "max_tokens": {
+                    "type": "integer",
+                    "description": "Cap on generated tokens (default 1024)",
+                },
+                "temperature": {
+                    "type": "number",
+                    "description": "Sampling temperature (default 0.7)",
+                },
+            },
+            "required": ["prompt"],
+        },
+    },
+    {
+        "name": "list_models",
+        "description": (
+            "List the models served by this SibillaOS machine and "
+            "which one answers `chat` by default."
+        ),
+        "inputSchema": {"type": "object", "properties": {}},
+    },
+]
+
+
+def read_first_line(path, fallback):
+    try:
+        with open(path, encoding="ascii") as f:
+            value = f.readline().strip()
+            return value or fallback
+    except OSError:
+        return fallback
+
+
+def upstream_base():
+    # Same engine-to-port mapping as llmd-gateway-render; both engines
+    # speak the OpenAI API on loopback.
+    engine = read_first_line(ENGINE_FILE, "ollama")
+    port = "8000" if engine == "vllm" else "11434"
+    return "http://127.0.0.1:%s/v1" % port
+
+
+def engine_request(path, payload, timeout):
+    data = json.dumps(payload).encode() if payload is not None else None
+    req = urllib.request.Request(
+        upstream_base() + path,
+        data=data,
+        headers={"Content-Type": "application/json"},
+        method="POST" if data else "GET",
+    )
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        return json.load(resp)
+
+
+def tool_chat(args):
+    prompt = args.get("prompt")
+    if not isinstance(prompt, str) or not prompt:
+        return "the `prompt` argument is required", True
+    model = read_first_line(MODEL_FILE, "")
+    if not model:
+        return "no model configured; run `sudo sibilla setup` first", True
+    messages = []
+    if isinstance(args.get("system"), str) and args["system"]:
+        messages.append({"role": "system", "content": args["system"]})
+    messages.append({"role": "user", "content": prompt})
+    body = {
+        "model": model,
+        "messages": messages,
+        "max_tokens": int(args.get("max_tokens", 1024)),
+        "temperature": float(args.get("temperature", 0.7)),
+    }
+    try:
+        reply = engine_request("/chat/completions", body, timeout=300)
+        message = reply["choices"][0]["message"]
+        # some models put everything in a reasoning field
+        text = message.get("content") or message.get("reasoning") or ""
+        if not text:
+            return "the engine returned an empty answer", True
+        return text, False
+    except Exception as exc:  # urllib, JSON shape, timeout: report, never crash
+        return "engine request failed: %s" % exc, True
+
+
+def tool_list_models(_args):
+    default = read_first_line(MODEL_FILE, "(none configured)")
+    try:
+        served = engine_request("/models", None, timeout=10)
+        ids = [m.get("id", "?") for m in served.get("data", [])]
+    except Exception as exc:
+        return "engine request failed: %s" % exc, True
+    lines = ["default model (used by `chat`): %s" % default, "served models:"]
+    lines += ["  - %s" % i for i in ids] if ids else ["  (none)"]
+    return "\n".join(lines), False
+
+
+def handle_rpc(msg):
+    """Returns the JSON-RPC response object, or None for notifications."""
+    method = msg.get("method", "")
+    params = msg.get("params") or {}
+    msg_id = msg.get("id")
+    if msg_id is None:  # notification (initialized, cancelled, ...)
+        return None
+    if method == "initialize":
+        asked = params.get("protocolVersion", "")
+        version = asked if asked in SUPPORTED_VERSIONS else DEFAULT_VERSION
+        result = {
+            "protocolVersion": version,
+            "capabilities": {"tools": {}},
+            "serverInfo": SERVER_INFO,
+            "instructions": INSTRUCTIONS,
+        }
+    elif method == "ping":
+        result = {}
+    elif method == "tools/list":
+        result = {"tools": TOOLS}
+    elif method == "tools/call":
+        name = params.get("name")
+        args = params.get("arguments") or {}
+        if name == "chat":
+            text, is_error = tool_chat(args)
+        elif name == "list_models":
+            text, is_error = tool_list_models(args)
+        else:
+            return {
+                "jsonrpc": "2.0",
+                "id": msg_id,
+                "error": {"code": -32602, "message": "unknown tool: %s" % name},
+            }
+        result = {"content": [{"type": "text", "text": text}], "isError": is_error}
+    else:
+        return {
+            "jsonrpc": "2.0",
+            "id": msg_id,
+            "error": {"code": -32601, "message": "method not found: %s" % method},
+        }
+    return {"jsonrpc": "2.0", "id": msg_id, "result": result}
+
+
+class Handler(BaseHTTPRequestHandler):
+    protocol_version = "HTTP/1.1"
+
+    def log_message(self, fmt, *args):
+        pass  # request logging belongs to the gateway access log
+
+    def _send(self, code, body=None):
+        payload = json.dumps(body).encode() if body is not None else b""
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(payload)))
+        self.end_headers()
+        if payload:
+            self.wfile.write(payload)
+
+    def do_GET(self):
+        # no server-initiated stream: this server never pushes
+        self._send(405)
+
+    def do_DELETE(self):
+        self._send(405)  # stateless: there is no session to terminate
+
+    def do_POST(self):
+        if self.path.rstrip("/") not in ("/mcp", ""):
+            self._send(404)
+            return
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+            msg = json.loads(self.rfile.read(length))
+        except (ValueError, json.JSONDecodeError):
+            self._send(400, {"jsonrpc": "2.0", "id": None,
+                             "error": {"code": -32700, "message": "parse error"}})
+            return
+        if isinstance(msg, list):
+            # JSON-RPC batching was removed from the protocol in the
+            # 2025-06-18 revision; refuse it uniformly
+            self._send(400, {"jsonrpc": "2.0", "id": None,
+                             "error": {"code": -32600,
+                                       "message": "batching is not supported"}})
+            return
+        response = handle_rpc(msg)
+        if response is None:
+            self._send(202)
+        else:
+            self._send(200, response)
+
+
+def main():
+    server = ThreadingHTTPServer((ADDR, PORT), Handler)
+    print("llmd-mcp-server listening on %s:%d" % (ADDR, PORT), flush=True)
+    server.serve_forever()
+
+
+if __name__ == "__main__":
+    main()

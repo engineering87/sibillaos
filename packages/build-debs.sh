@@ -37,6 +37,8 @@ Description: $desc
 EOF
   # executable bit for the scripts
   find "$staging/usr/lib/llmd" "$staging/usr/bin" -type f -exec chmod 755 {} + 2>/dev/null || true
+  # a local py_compile (the lint job runs one) must never ship
+  find "$staging" -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
   # the curated model catalog ships with llmd-hw, with its detached
   # signature when the maintainer has signed it; if both the project
   # key and the signature exist, the build refuses a catalog that
@@ -96,6 +98,7 @@ build_pkg llmd-engine-vllm   "vLLM OCI container (podman Quadlet)"              
 build_pkg llmd-gateway       "Unified OpenAI-compatible gateway (Caddy)"              "caddy"
 build_pkg llmd-firstboot     "First boot model download and service setup"            "llmd-hw, jq, curl"
 build_pkg llmd-webui         "Open WebUI chat interface (opt-in container)"           "podman (>= 4.4)"
+build_pkg llmd-mcp           "Model Context Protocol server (opt-in, sibilla mcp)"    "python3, llmd-gateway"
 
 # llmfit is repackaged from the pinned upstream release so the ISO does
 # not depend on external installers at install time; the tarball is
@@ -142,7 +145,7 @@ Version: $VERSION
 Section: admin
 Priority: optional
 Architecture: all
-Depends: llmd-hw, llmd-engine-ollama, llmd-engine-vllm, llmd-gateway, llmd-firstboot, llmd-webui, llmd-llmfit
+Depends: llmd-hw, llmd-engine-ollama, llmd-engine-vllm, llmd-gateway, llmd-firstboot, llmd-webui, llmd-mcp, llmd-llmfit
 Maintainer: SibillaOS contributors
 Description: SibillaOS LLM stack (metapackage)
  Pulls the SibillaOS components onto an existing Ubuntu system. After

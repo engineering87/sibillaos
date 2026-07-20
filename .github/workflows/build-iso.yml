@@ -23,7 +23,9 @@ jobs:
             packages/llmd-hw/usr/lib/llmd/* packages/llmd-hw/usr/bin/* \
             packages/llmd-firstboot/usr/lib/llmd/* \
             packages/llmd-gateway/usr/lib/llmd/* packages/llmd-gateway/usr/bin/* \
-            packages/llmd-webui/usr/bin/*
+            packages/llmd-webui/usr/bin/* packages/llmd-mcp/usr/bin/*
+          # the MCP server is python: syntax-check it here too
+          python3 -m py_compile packages/llmd-mcp/usr/lib/llmd/llmd-mcp-server
       - name: Validate catalog JSON
         run: |
           jq empty catalog/models.json
@@ -52,8 +54,10 @@ jobs:
           export LLMD_CADDYFILE="$RUNNER_TEMP/Caddyfile"
           export LLMD_ENGINE_FILE="$RUNNER_TEMP/engine"
           export LLMD_ACCESS_LOG="$RUNNER_TEMP/access.log"
+          export LLMD_MCP_FILE="$RUNNER_TEMP/mcp"
           export LLMD_KEYS_ALT="lintkey1|lintkey2"
           echo ollama > "$LLMD_ENGINE_FILE"
+          echo off > "$LLMD_MCP_FILE"
           for conf in 'MODE=http' \
                       'MODE=http\nMETRICS=on' \
                       'MODE=internal\nTLS_HOSTNAME=sibillaos.test' \
@@ -63,6 +67,16 @@ jobs:
             bash packages/llmd-gateway/usr/lib/llmd/llmd-gateway-render
             caddy validate --adapter caddyfile --config "$LLMD_CADDYFILE"
           done
+          # the MCP route must render, validate, and sit inside the
+          # route block (behind the 401), never before it
+          echo on > "$LLMD_MCP_FILE"
+          printf 'MODE=http\nMETRICS=on\n' > "$LLMD_GATEWAY_CONF"
+          bash packages/llmd-gateway/usr/lib/llmd/llmd-gateway-render
+          caddy validate --adapter caddyfile --config "$LLMD_CADDYFILE"
+          grep -q "reverse_proxy /mcp 127.0.0.1:8765" "$LLMD_CADDYFILE"
+          awk '/route \{/{r=1} /respond @unauthorized/{if(r)a=NR} /reverse_proxy \/mcp/{m=NR}
+               END{exit !(a && m && m > a)}' "$LLMD_CADDYFILE" \
+            || { echo "MCP route is not behind the 401"; exit 1; }
       - name: Validate Quadlet units
         # dry-run the podman systemd generator against our .container
         # files; a unit that fails to convert would be silently absent
@@ -682,6 +696,52 @@ jobs:
           echo "--- sibilla status ---"
           sibilla status || RC=1
           exit "$RC"
+      - name: MCP endpoint through the gateway
+        run: |
+          RC=0
+          sudo sibilla mcp enable
+          KEY=$(sudo cat /etc/llmd/apikey)
+          # unauthenticated requests must die at the gateway, before
+          # ever reaching the MCP server
+          code=$(curl -s -o /dev/null -w '%{http_code}' -m 10 -X POST http://127.0.0.1:8080/mcp \
+            -H 'Content-Type: application/json' \
+            -d '{"jsonrpc":"2.0","id":0,"method":"initialize","params":{}}' || true)
+          [ "$code" = "401" ] || { echo "unauthenticated MCP request got $code"; RC=1; }
+          mcp() {
+            curl -s -m 330 -X POST http://127.0.0.1:8080/mcp \
+              -H "Authorization: Bearer $KEY" \
+              -H 'Content-Type: application/json' \
+              -H 'Accept: application/json, text/event-stream' \
+              -d "$1"
+          }
+          INIT=$(mcp '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"sibillaos-ci","version":"0"}}}')
+          echo "$INIT" | jq -e '.result.protocolVersion == "2025-06-18" and .result.capabilities.tools != null' >/dev/null \
+            || { echo "initialize failed: $INIT"; RC=1; }
+          TOOLS=$(mcp '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}')
+          echo "$TOOLS" | jq -e '[.result.tools[].name] | (index("chat") != null) and (index("list_models") != null)' >/dev/null \
+            || { echo "tools/list failed: $TOOLS"; RC=1; }
+          LM=$(mcp '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"list_models","arguments":{}}}')
+          echo "$LM" | jq -e '.result.isError == false and (.result.content[0].text | contains("default model"))' >/dev/null \
+            || { echo "list_models call failed: $LM"; RC=1; }
+          # chat delegates to the engine: same best-effort policy as
+          # the direct inference check above (native runner CPU)
+          CH=$(mcp '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"chat","arguments":{"prompt":"Say ok.","max_tokens":50}}}')
+          if echo "$CH" | jq -e '.result.isError == false and (.result.content[0].text | length > 0)' >/dev/null 2>&1; then
+            echo "MCP CHAT OK"
+          else
+            echo "mcp chat not asserted on this box:"; echo "$CH" | head -c 300; echo
+          fi
+          # disable must close the endpoint again
+          sudo sibilla mcp disable
+          code=$(curl -s -o /dev/null -w '%{http_code}' -m 10 -X POST http://127.0.0.1:8080/mcp \
+            -H "Authorization: Bearer $KEY" \
+            -H 'Content-Type: application/json' \
+            -d '{"jsonrpc":"2.0","id":5,"method":"ping","params":{}}' || true)
+          # with the route gone the request falls through to the engine,
+          # which does not serve /mcp: anything but a 200 proves closure
+          [ "$code" != "200" ] || { echo "MCP still answering after disable"; RC=1; }
+          sudo sibilla mcp enable
+          exit "$RC"
       - name: Doctor, connect --write, then a clean removal
         run: |
           RC=0
@@ -713,6 +773,8 @@ jobs:
             echo "gateway still answering after removal"
             RC=1
           fi
+          code=$(curl -s -o /dev/null -w '%{http_code}' -m 5 -X POST http://127.0.0.1:8765/mcp || true)
+          [ "$code" = "000" ] || { echo "mcp server still answering after removal"; RC=1; }
           exit "$RC"
 
   supply-chain:

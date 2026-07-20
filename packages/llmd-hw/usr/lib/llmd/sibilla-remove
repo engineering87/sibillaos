@@ -38,6 +38,7 @@ fi
 
 # 1. Stop the SibillaOS services (the containers are gated units)
 systemctl stop vllm.service webui.service 2>/dev/null || true
+systemctl disable --now llmd-mcp.service 2>/dev/null || true
 
 # 2. Caddy: restore the saved configuration, or clear ours and stop
 # the service (it only existed for the gateway)
@@ -74,4 +75,4 @@ echo "podman, ...) can be cleared with: sudo apt-get autoremove --purge"
 # bash keeps reading it from the open file descriptor after unlink
 exec apt-get purge -y \
   llmd llmd-hw llmd-engine-ollama llmd-engine-vllm \
-  llmd-gateway llmd-firstboot llmd-webui llmd-llmfit
+  llmd-gateway llmd-firstboot llmd-webui llmd-mcp llmd-llmfit
