@@ -813,6 +813,21 @@ jobs:
           printf 'MODEL=hf.co/bartowski/Qwen_Qwen3-0.6B-GGUF:Q4_K_M\nMETRICS=off\n' > /tmp/profile
           sudo sibilla apply /tmp/profile >/dev/null
           exit "$RC"
+      - name: Bench renders a shareable table
+        run: |
+          # same policy as inference on this runner: asserted when the
+          # engine generates, tolerated when it cannot
+          if sudo sibilla bench > bench.out 2>bench.err; then
+            cat bench.out
+            grep -q "## SibillaOS bench" bench.out || { echo "no bench header"; exit 1; }
+            grep -q "time to first token" bench.out || { echo "no ttft row"; exit 1; }
+            grep -Eq "\| generation \| [0-9]+\.[0-9] tok/s" bench.out || { echo "no generation row"; exit 1; }
+            KEY=$(sudo cat /etc/llmd/apikey)
+            grep -q "$KEY" bench.out && { echo "bench leaked the api key"; exit 1; } || true
+            echo "BENCH OK"
+          else
+            echo "bench not asserted on this box:"; cat bench.err; true
+          fi
       - name: Doctor, connect --write, then a clean removal
         run: |
           RC=0
@@ -846,6 +861,75 @@ jobs:
           fi
           code=$(curl -s -o /dev/null -w '%{http_code}' -m 5 -X POST http://127.0.0.1:8765/mcp || true)
           [ "$code" = "000" ] || { echo "mcp server still answering after removal"; RC=1; }
+          exit "$RC"
+
+  # "Installed systems receive llmd updates through plain apt" is a
+  # promise from v0.4: this job proves it holds against every change.
+  # It installs the latest published release from the live Pages repo,
+  # upgrades to the branch packages with the exact command the docs
+  # give the user, and requires the serving machine to survive.
+  upgrade-test:
+    needs: lint
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install the published release, like a user did yesterday
+        run: |
+          curl -fsSL https://engineering87.github.io/sibillaos/apt/sibillaos-archive-key.asc \
+            | sudo gpg --batch --yes --dearmor -o /usr/share/keyrings/sibillaos-archive-keyring.gpg
+          printf 'Types: deb\nURIs: https://engineering87.github.io/sibillaos/apt/\nSuites: ./\nSigned-By: /usr/share/keyrings/sibillaos-archive-keyring.gpg\n' \
+            | sudo tee /etc/apt/sources.list.d/sibillaos.sources
+          sudo apt-get update
+          sudo apt-get install -y llmd jq
+          RELEASED=$(dpkg-query -W -f='${Version}' llmd)
+          echo "released version installed: $RELEASED"
+          echo "RELEASED=$RELEASED" >> "$GITHUB_ENV"
+          sudo sibilla setup --model hf.co/bartowski/Qwen_Qwen3-0.6B-GGUF:Q4_K_M
+          up=0
+          for _ in $(seq 1 40); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/v1/models || true)
+            if [ "$code" = "401" ]; then up=1; break; fi
+            sleep 3
+          done
+          [ "$up" = 1 ] || { echo "released gateway never came up"; exit 1; }
+          sudo cp /etc/llmd/apikey /tmp/key-before-upgrade
+      - name: Upgrade to the branch packages with the documented command
+        run: |
+          # the branch debs must version above the release for apt to
+          # see them as an upgrade
+          export LLMD_VERSION="${RELEASED}+ci1"
+          bash ./packages/build-debs.sh
+          mkdir -p localrepo && cp packages/dist/*.deb localrepo/
+          ( cd localrepo && apt-ftparchive packages . > Packages && apt-ftparchive release . > Release )
+          echo "deb [trusted=yes] file://$(pwd)/localrepo ./" \
+            | sudo tee /etc/apt/sources.list.d/sibillaos-branch.list
+          # the exact commands the README gives the user; `apt upgrade`
+          # (not apt-get) installs the new dependencies a grown
+          # metapackage brings in, e.g. llmd-mcp
+          sudo apt update
+          sudo DEBIAN_FRONTEND=noninteractive apt upgrade -y
+          NOW=$(dpkg-query -W -f='${Version}' llmd)
+          echo "upgraded to: $NOW"
+          [ "$NOW" = "${RELEASED}+ci1" ] || { echo "llmd did not upgrade (still $NOW)"; exit 1; }
+      - name: The serving machine must have survived the upgrade
+        run: |
+          RC=0
+          # the key is the contract with every configured client:
+          # an upgrade that rotates it breaks them all
+          sudo cmp -s /tmp/key-before-upgrade /etc/llmd/apikey \
+            || { echo "the upgrade changed the api key"; RC=1; }
+          KEY=$(sudo cat /etc/llmd/apikey)
+          MODEL=$(sudo cat /etc/llmd/model)
+          [ "$MODEL" = "hf.co/bartowski/Qwen_Qwen3-0.6B-GGUF:Q4_K_M" ] \
+            || { echo "the upgrade changed the served model: $MODEL"; RC=1; }
+          code=$(curl -s -o /dev/null -w '%{http_code}' -m 10 \
+            -H "Authorization: Bearer $KEY" http://127.0.0.1:8080/v1/models || true)
+          [ "$code" = "200" ] || { echo "gateway after upgrade answered $code"; RC=1; }
+          sibilla status || RC=1
+          # new subcommands shipped by the branch must exist post-upgrade
+          sibilla mcp status || RC=1
+          sudo sibilla apply export >/dev/null || RC=1
           exit "$RC"
 
   supply-chain:

@@ -87,6 +87,7 @@ Where to go next:
 - agents via MCP: `sudo sibilla mcp enable` serves the model as Model Context Protocol tools
 - chat interface: `sudo sibilla webui enable` (Open WebUI on port 3000)
 - something wrong: `sudo sibilla doctor` produces a paste-ready report for your issue, secrets excluded
+- how fast is my machine: `sudo sibilla bench` measures first-token latency and tokens/s, in a table worth sharing
 
 ## How it works
 

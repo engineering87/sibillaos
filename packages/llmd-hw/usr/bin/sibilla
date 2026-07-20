@@ -20,6 +20,7 @@ usage: sibilla COMMAND [ARGS]
                  (apply export prints the current state as a profile)
   connect        print client configuration for editors and agents
                  (--write places the Continue config, with backup)
+  bench          measure this machine: first token latency, tokens/s
   doctor         paste-ready diagnostic report, no secrets included
   remove         clean teardown: only what SibillaOS installed goes
 
@@ -41,6 +42,7 @@ case "$cmd" in
   mcp)     exec sibilla-mcp "$@" ;;
   apply)   exec /usr/lib/llmd/sibilla-apply "$@" ;;
   connect) exec sibilla-connect "$@" ;;
+  bench)   exec /usr/lib/llmd/sibilla-bench "$@" ;;
   doctor)  exec /usr/lib/llmd/sibilla-doctor "$@" ;;
   remove)  exec /usr/lib/llmd/sibilla-remove "$@" ;;
   *)       usage ;;
