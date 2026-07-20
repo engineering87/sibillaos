@@ -25,22 +25,22 @@ The release that makes a security review pleasant. Shipped: multiple gateway API
 
 The adoption release: trying SibillaOS no longer costs a reinstall, and walking away is provably clean. Shipped: the zero-reinstall path (`apt install llmd` plus `sibilla setup` on an existing Ubuntu 24.04 machine, staying a good guest: no firewall takeover, no source flips, appliance behavior kept behind the image marker), `sibilla remove` for a verified reversible teardown that takes only what SibillaOS installed and restores what it displaced, `sibilla doctor` for a paste-ready secret-free diagnostic report (every configured API key scrubbed by construction, asserted in CI), `sibilla connect --write` to place the Continue configuration with backup, and the README overhaul with the two-command quick start. The whole lifecycle, install through verified-clean removal, runs in CI on every push. Release notes in [docs/releases/v0.5.0.md](docs/releases/v0.5.0.md).
 
-## v0.6 (feedback driven)
+## v0.6 (agents and the road off the network)
 
-Deliberately light, shaped by what early users of the published images and the apt path report. Carried items with a committed shape:
+Two audiences this cycle: agent users who want a local model their frameworks can discover, and the on-premise deployments where the network is not a given.
 
-- MCP server, promoted from exploratory: `sibilla mcp enable` exposes the local model to agent frameworks (Claude Code and any Streamable HTTP client) as `chat` and `list_models` tools at /mcp, behind the same gateway keys. A stateless dependency-free server (Python standard library, loopback only, never sees the keys), aligned with where the protocol is going. In progress on the branch, exercised end to end in CI.
-- First-run experience: clearer install-time messages and fast turnaround on issues reported against the published images; `sibilla doctor` now gives reporters something precise to paste into the templates.
-- Manual validation of Open WebUI, carried since v0.2: actually install, `sibilla webui enable`, log in and chat, then record the result. It is a v1.0 criterion and cannot be automated (the image is too heavy for CI).
-- Air-gapped install profile, moved from v0.4: a companion payload (model files plus engine images on a second USB drive) for environments with no outbound network, which is where the on-premise pitch matters most.
-- Gateway rate limiting, the one piece of the v0.4 gateway hardening item deliberately left out.
+- MCP server, promoted from exploratory: `sibilla mcp enable` exposes the local model to agent frameworks (Claude Code and any Streamable HTTP client) as `chat` and `list_models` tools at /mcp, behind the same gateway keys. A stateless dependency-free server (Python standard library, loopback only, never sees the keys), aligned with where the protocol is going. Done, exercised end to end in CI.
+- Air-gapped foundation, moved from v0.4 and built in bricks. First brick: `sibilla model import FILE` brings a model in from a file instead of the network, verified against the per-quant sha256 digests of the signed catalog before it is accepted (the same fail-closed policy as `model use`), so a USB stick becomes a legitimate, reviewable delivery channel. Next bricks: the companion payload builder (model files plus engine bits on a second drive) and its detection at install/first boot, until a machine with no outbound network installs and serves end to end.
+- Gateway rate limiting, re-scoped after hitting an upstream packaging fact: Caddy's rate-limit handler is a separate plugin requiring a custom binary, and a custom binary would trade away the automatic security updates the appliance gets from the Ubuntu caddy package, which is the worse deal. The committed baseline is kernel-level per-IP limiting against unauthenticated floods; per-key fairness limiting is deferred until a real deployment asks for it, with the options recorded (own limiter on the data path, or the plugin once it reaches a distribution build).
+- Manual validation of Open WebUI, carried since v0.2: the step-by-step checklist lives in [docs/validation/webui.md](docs/validation/webui.md); execute it on a real machine, record the result there. It is a v1.0 criterion and cannot be automated (the image is too heavy for CI).
+- First-run experience: clearer install-time messages and fast turnaround on issues reported against the published images; `sibilla doctor` gives reporters something precise to paste into the templates.
 
 ## Toward v1.0: open validation debts
 
 Tracked here so they are not lost between feature cycles, because each is a v1.0 criterion that no amount of new code satisfies:
 
 - vLLM on physical datacenter GPUs: implemented and gated in CI, but never run on real hardware. Needs a machine or an external tester.
-- Open WebUI web interface: packaged and CI-exercised around the container, the login-and-chat flow never validated by hand (folded into v0.6 above).
+- Open WebUI web interface: packaged and CI-exercised around the container, the login-and-chat flow never validated by hand (folded into v0.6 above; checklist in docs/validation/webui.md).
 - A release cycle with external users and no critical install bugs: only starts counting once people install the published images.
 
 ## Security track (cross-version)
@@ -53,7 +53,7 @@ Planned, in order of appearance:
 - Default firewall profile: ufw enabled at first boot with only SSH and the gateway port open; Open WebUI listens on all interfaces (host networking), so its port stays closed until the user opens it deliberately, and `sibilla tls --acme` opens 80/443 itself. Done in v0.3.
 - Sandboxing extended to every llmd unit and the containers (NoNewPrivileges, kernel and realtime restrictions), with a CI check that asserts the directives on the installed system; capability drops on the containers deferred until their runtime can be exercised in CI. Done in v0.3.
 - Automatic security updates: unattended-upgrades enabled by default for the security pocket, since an appliance that nobody patches must patch itself. Done in v0.3.
-- API key lifecycle: `sibilla key` with add, revoke and rotate, multiple keys folded into the gateway matcher, structured JSON access logs. Done in v0.4 (rate limiting deferred to v0.6).
+- API key lifecycle: `sibilla key` with add, revoke and rotate, multiple keys folded into the gateway matcher, structured JSON access logs. Done in v0.4 (rate limiting re-scoped in v0.6: see there for the packaging constraint).
 - Supply chain: signed catalog, SBOM in SPDX and CycloneDX attached to releases, CVE scanning of the actually installed system with a written triage policy and expiring exceptions. Done in v0.4.
 - Secure Boot: the repack keeps Ubuntu's signed shim and GRUB, and CI now boots every ISO under OVMF with Secure Boot enforced and Microsoft keys enrolled, asserting that the kernel itself reports Secure Boot active; validation on physical firmware from external users remains welcome. Done in v0.4.
 - Model integrity: catalog entries carry per-quant sha256 digests (the ollama blob name after a pull); `sibilla model use` fails closed on a mismatch, first boot warns loudly. Done in v0.4.

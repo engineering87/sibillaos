@@ -13,6 +13,9 @@ usage: sibilla-model COMMAND
   status         show engine, current model and API endpoint
   list           curated models for this machine, plus llmfit picks
   use MODEL_ID   download MODEL_ID and make it the served model
+  import FILE    bring a model in from a GGUF file instead of the
+                 network (USB stick, shared drive); the file must
+                 match a digest in the signed catalog. --use serves it
   rm MODEL_ID    remove a downloaded model (refuses the served one)
   prune          remove every downloaded model except the served one
 EOF
@@ -61,7 +64,14 @@ cmd_use() {
   export HOME="${HOME:-/root}"
   case "$ENGINE" in
     ollama)
-      ollama pull "$model"
+      # a model already in the local store (brought in by sibilla
+      # model import on an air-gapped machine, or pulled earlier)
+      # serves without touching the network; refreshing a pinned,
+      # digest-checked artifact is not something a pull should do
+      # silently anyway
+      if ! ollama list 2>/dev/null | awk 'NR>1{print $1}' | grep -Fxq "$model"; then
+        ollama pull "$model"
+      fi
       # digest check against the catalog: a recorded digest that does
       # not match means the artifact is not the reviewed one; refuse
       local vrc=0
@@ -78,6 +88,62 @@ cmd_use() {
   esac
   echo "$model" > /etc/llmd/model
   echo "now serving: $model"
+}
+
+# Offline model delivery: identify the file by its sha256 against the
+# per-quant digests in the signed catalog, and refuse anything the
+# catalog does not know. The whole point of the air-gapped path is
+# that a USB stick is a reviewable delivery channel: identification
+# and integrity come from the same signed record, so there is nothing
+# to take on faith and no --force to bypass it.
+cmd_import() {
+  need_root
+  check_catalog
+  local file="$1" serve="${2:-}"
+  [[ -f "$file" ]] || { echo "no such file: $file" >&2; exit 1; }
+  # the FROM in the temporary Modelfile resolves relative paths
+  # against the Modelfile's own directory, so make the path absolute
+  file=$(realpath "$file")
+  [[ "$ENGINE" == "ollama" ]] || {
+    echo "import supports the ollama engine; vllm models are directories, not single files" >&2
+    exit 1
+  }
+  echo "hashing $(du -h "$file" | cut -f1) ..."
+  local hex match
+  hex=$(sha256sum "$file" | cut -d' ' -f1)
+  match=$(jq -r --arg d "sha256:$hex" \
+    '.models[] | .id as $id | (.digests // {}) | to_entries[] | select(.value == $d) | $id + ":" + .key' \
+    "$CATALOG")
+  if [[ -z "$match" ]]; then
+    echo "REFUSING to import: sha256:$hex matches no digest in the catalog." >&2
+    echo "Only reviewed artifacts are importable. If this is a legitimate" >&2
+    echo "catalog model, refresh the digests (tools/update-digests.sh) and" >&2
+    echo "update the machine; otherwise download through: sibilla model use" >&2
+    exit 1
+  fi
+  echo "identified: $match"
+  # the ollama CLI panics without HOME when run over ssh/sudo
+  export HOME="${HOME:-/root}"
+  local modelfile
+  modelfile=$(mktemp)
+  printf 'FROM %s\n' "$file" > "$modelfile"
+  ollama create "$match" -f "$modelfile"
+  rm -f "$modelfile"
+  # ollama stores blobs content-addressed, so the imported blob must
+  # now sit under the very digest that identified the file; anything
+  # else means the import mangled the artifact
+  /usr/lib/llmd/llmd-model-verify "$match" || {
+    echo "REFUSING to keep the import: stored blob does not match the catalog digest" >&2
+    ollama rm "$match" 2>/dev/null || true
+    exit 1
+  }
+  echo "imported: $match"
+  if [[ "$serve" == "--use" ]]; then
+    echo "$match" > /etc/llmd/model
+    echo "now serving: $match"
+  else
+    echo "serve it with: sibilla model use $match (already local, no download)"
+  fi
 }
 
 cmd_rm() {
@@ -134,6 +200,7 @@ case "${1:-}" in
   status) cmd_status ;;
   list)   cmd_list ;;
   use)    [[ $# -ge 2 ]] || usage; cmd_use "$2" ;;
+  import) [[ $# -ge 2 ]] || usage; cmd_import "$2" "${3:-}" ;;
   rm)     [[ $# -ge 2 ]] || usage; cmd_rm "$2" ;;
   prune)  cmd_prune ;;
   *)      usage ;;

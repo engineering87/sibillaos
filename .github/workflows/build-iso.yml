@@ -742,6 +742,37 @@ jobs:
           [ "$code" != "200" ] || { echo "MCP still answering after disable"; RC=1; }
           sudo sibilla mcp enable
           exit "$RC"
+      - name: Offline model import, gated by the signed catalog
+        run: |
+          RC=0
+          # a user on a connected machine prepares the file a USB stick
+          # would carry to an air-gapped one
+          curl -fL --retry 3 -o /tmp/reviewed.gguf \
+            "https://huggingface.co/bartowski/Qwen_Qwen3-0.6B-GGUF/resolve/main/Qwen_Qwen3-0.6B-Q8_0.gguf"
+          sudo sibilla model import /tmp/reviewed.gguf | tee import.out
+          grep -q "identified: hf.co/bartowski/Qwen_Qwen3-0.6B-GGUF:Q8_0" import.out \
+            || { echo "import did not identify the artifact from its digest"; RC=1; }
+          grep -q "digest verified" import.out \
+            || { echo "import did not verify the stored blob"; RC=1; }
+          sudo HOME=/root ollama list | grep -q "Qwen_Qwen3-0.6B-GGUF:Q8_0" \
+            || { echo "imported model is not in the store"; RC=1; }
+          # serving an imported model must not touch the network: an
+          # ollama pull would print its manifest/layer progress
+          sudo sibilla model use hf.co/bartowski/Qwen_Qwen3-0.6B-GGUF:Q8_0 | tee use.out
+          grep -q "now serving" use.out || { echo "use after import failed"; RC=1; }
+          grep -qi "pulling" use.out && { echo "use after import pulled from the network"; RC=1; } || true
+          # an artifact the catalog does not know must be refused
+          head -c 1048576 /dev/urandom > /tmp/unknown.gguf
+          if sudo sibilla model import /tmp/unknown.gguf >unknown.out 2>&1; then
+            echo "an unreviewed artifact was accepted"; cat unknown.out; RC=1
+          else
+            grep -q "REFUSING to import" unknown.out \
+              || { echo "unexpected refusal path:"; cat unknown.out; RC=1; }
+          fi
+          # back to the setup model for the steps that follow
+          sudo sibilla model use hf.co/bartowski/Qwen_Qwen3-0.6B-GGUF:Q4_K_M >/dev/null
+          rm -f /tmp/reviewed.gguf /tmp/unknown.gguf
+          exit "$RC"
       - name: Doctor, connect --write, then a clean removal
         run: |
           RC=0

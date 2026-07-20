@@ -10,7 +10,7 @@ usage: sibilla COMMAND [ARGS]
   setup          turn this Ubuntu machine into an LLM appliance:
                  detect hardware, install the engine, serve the API
   status         health view: engine, served models, disk, GPU, gateway
-  model ...      list, download, switch and remove models
+  model ...      list, download, import from file, switch and remove
   tls ...        switch the gateway between HTTP and HTTPS
   key ...        manage the gateway API keys (list, add, revoke, rotate)
   metrics ...    Prometheus endpoint on the gateway, on or off
