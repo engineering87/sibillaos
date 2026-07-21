@@ -13,6 +13,8 @@ usage: sibilla-model COMMAND
   status         show engine, current model and API endpoint
   list           curated models for this machine, plus llmfit picks
   use MODEL_ID   download MODEL_ID and make it the served model
+  pull MODEL_ID  download and verify MODEL_ID without switching
+                 (embedding models are served this way)
   import FILE    bring a model in from a GGUF file instead of the
                  network (USB stick, shared drive); the file must
                  match a digest in the signed catalog. --use serves it
@@ -45,8 +47,17 @@ cmd_list() {
   check_catalog
   echo "curated models for engine '$ENGINE' (current: ${CURRENT:-none}):"
   jq -r --arg e "$ENGINE" \
-    '.models[] | select(.engines[]? == $e) | "  " + .id + "  [" + .family + ", " + .license + "]"' \
+    '.models[] | select(.engines[]? == $e) | select(.role? != "embedding") | "  " + .id + "  [" + .family + ", " + .license + "]"' \
     "$CATALOG"
+  if jq -e --arg e "$ENGINE" \
+       '[.models[] | select(.engines[]? == $e) | select(.role? == "embedding")] | length > 0' \
+       "$CATALOG" >/dev/null; then
+    echo
+    echo "embedding models (serve /v1/embeddings; get one with: sibilla model pull ID:QUANT):"
+    jq -r --arg e "$ENGINE" \
+      '.models[] | select(.engines[]? == $e) | select(.role? == "embedding") | "  " + .id + "  [" + .family + ", " + .license + "]"' \
+      "$CATALOG"
+  fi
   if command -v llmfit >/dev/null 2>&1; then
     echo
     echo "llmfit recommendations for this hardware:"
@@ -60,6 +71,17 @@ cmd_use() {
   need_root
   check_catalog
   local model="$1"
+  # embedding models answer /v1/embeddings; serving one as the chat
+  # default would give every client an API that cannot chat
+  local role
+  role=$(jq -r --arg id "${model%%:*}" \
+    '.models[] | select(.id == $id) | .role? // empty' "$CATALOG")
+  if [[ "$role" == "embedding" ]]; then
+    echo "$model is an embedding model and cannot be the served chat model." >&2
+    echo "download it with: sibilla model pull $model" >&2
+    echo "then call /v1/embeddings with it; the chat model stays in place" >&2
+    exit 1
+  fi
   # the ollama CLI panics without HOME when run over ssh/sudo
   export HOME="${HOME:-/root}"
   case "$ENGINE" in
@@ -88,6 +110,33 @@ cmd_use() {
   esac
   echo "$model" > /etc/llmd/model
   echo "now serving: $model"
+}
+
+# Download and verify without switching what is served: how embedding
+# models arrive, and useful to pre-stage a chat model before a switch.
+cmd_pull() {
+  need_root
+  check_catalog
+  local model="$1"
+  [[ "$ENGINE" == "ollama" ]] || {
+    echo "pull supports the ollama engine; vllm downloads at container start" >&2
+    exit 1
+  }
+  # the ollama CLI panics without HOME when run over ssh/sudo
+  export HOME="${HOME:-/root}"
+  if ollama list 2>/dev/null | awk 'NR>1{print $1}' | grep -Fxq "$model"; then
+    echo "already local: $model"
+  else
+    ollama pull "$model"
+  fi
+  local vrc=0
+  /usr/lib/llmd/llmd-model-verify "$model" || vrc=$?
+  if [[ "$vrc" -eq 1 ]]; then
+    echo "REFUSING to keep $model: pulled artifact does not match the catalog digest" >&2
+    ollama rm "$model" 2>/dev/null || true
+    exit 1
+  fi
+  echo "pulled: $model (the served chat model is unchanged: ${CURRENT:-none})"
 }
 
 # Offline model delivery: identify the file by its sha256 against the
@@ -200,6 +249,7 @@ case "${1:-}" in
   status) cmd_status ;;
   list)   cmd_list ;;
   use)    [[ $# -ge 2 ]] || usage; cmd_use "$2" ;;
+  pull)   [[ $# -ge 2 ]] || usage; cmd_pull "$2" ;;
   import) [[ $# -ge 2 ]] || usage; cmd_import "$2" "${3:-}" ;;
   rm)     [[ $# -ge 2 ]] || usage; cmd_rm "$2" ;;
   prune)  cmd_prune ;;

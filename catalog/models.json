@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "updated": "2026-07-08",
-  "note": "SibillaOS curated list. Permissively licensed (Apache-2.0/MIT) Hugging Face models only. Repo existence and license verified via web search on 2026-07-03; gating status is not re-confirmed here and is handled at install time (a gated repo fails the pull and the installer falls back to the next candidate). Optional per-quant digests are the sha256 of the GGUF file on Hugging Face (LFS oid), which is also the ollama blob name after a pull; tools/update-digests.sh refreshes them.",
+  "updated": "2026-07-20",
+  "note": "SibillaOS curated list. Permissively licensed (Apache-2.0/MIT) Hugging Face models only. Repo existence and license verified via web search on 2026-07-03; gating status is not re-confirmed here and is handled at install time (a gated repo fails the pull and the installer falls back to the next candidate). Optional per-quant digests are the sha256 of the GGUF file on Hugging Face (LFS oid), which is also the ollama blob name after a pull; tools/update-digests.sh refreshes them. Entries with role=embedding serve /v1/embeddings and are never selected as the chat default.",
   "models": [
     {
       "id": "hf.co/bartowski/Qwen_Qwen3-0.6B-GGUF",
@@ -56,6 +56,18 @@
       "engines": ["ollama"],
       "tier": "consumer-gpu",
       "verified": true
+    },
+    {
+      "id": "hf.co/nomic-ai/nomic-embed-text-v1.5-GGUF",
+      "family": "nomic-embed-text v1.5",
+      "license": "Apache-2.0",
+      "engines": ["ollama"],
+      "tier": "cpu",
+      "role": "embedding",
+      "verified": true,
+      "digests": {
+        "Q8_0": "sha256:3e24342164b3d94991ba9692fdc0dd08e3fd7362e0aacc396a9a5c54a544c3b7"
+      }
     },
     {
       "id": "Qwen/Qwen3-32B",

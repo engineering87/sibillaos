@@ -828,6 +828,31 @@ jobs:
           else
             echo "bench not asserted on this box:"; cat bench.err; true
           fi
+      - name: Embeddings through the gateway
+        run: |
+          RC=0
+          KEY=$(sudo cat /etc/llmd/apikey)
+          sudo sibilla model pull hf.co/nomic-ai/nomic-embed-text-v1.5-GGUF:Q8_0 | tee pull.out
+          grep -q "digest verified" pull.out || { echo "embedding model not digest-verified"; RC=1; }
+          # pulling must not touch the served chat model
+          [ "$(sudo cat /etc/llmd/model)" = "hf.co/bartowski/Qwen_Qwen3-0.6B-GGUF:Q4_K_M" ] \
+            || { echo "pull changed the served model"; RC=1; }
+          EMB=$(curl -s -m 300 http://127.0.0.1:8080/v1/embeddings \
+            -H "Authorization: Bearer $KEY" -H "Content-Type: application/json" \
+            -d '{"model":"hf.co/nomic-ai/nomic-embed-text-v1.5-GGUF:Q8_0","input":"the lighthouse keeps its own hours"}')
+          echo "$EMB" | jq -e '.data[0].embedding | length >= 256' >/dev/null \
+            || { echo "no embedding vector came back:"; echo "$EMB" | head -c 300; echo; RC=1; }
+          # an embedding model must never become the chat default
+          if sudo sibilla model use hf.co/nomic-ai/nomic-embed-text-v1.5-GGUF:Q8_0 >use-emb.out 2>&1; then
+            echo "an embedding model was accepted as the chat default"; RC=1
+          else
+            grep -q "embedding model" use-emb.out || { echo "unexpected refusal:"; cat use-emb.out; RC=1; }
+          fi
+          # nor be a candidate for auto-selection
+          if sudo /usr/lib/llmd/llmd-model-select | grep -q nomic; then
+            echo "the selector lists the embedding model as a chat candidate"; RC=1
+          fi
+          exit "$RC"
       - name: Doctor, connect --write, then a clean removal
         run: |
           RC=0
