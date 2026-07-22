@@ -310,18 +310,51 @@ jobs:
           qemu-img create -f qcow2 disk.qcow2 25G
           # -no-reboot: QEMU exits when the installer reboots, which marks
           # the end of the install phase
+          #
+          # The guard distinguishes slow from stuck. The installer
+          # always applies the day's security updates (subiquity
+          # run_unattended_upgrades; autoinstall has no off switch for
+          # it), so total time varies with patch volume: a slow day
+          # gets a generous 75 minutes. A STALLED install - the serial
+          # log not growing for 15 minutes, the July-9-style CDN
+          # failure mode - dies fast instead, with the last log line
+          # as the diagnosis.
           RC=0
-          # 3900s: the installer applies the day's security updates
-          # (subiquity run_unattended_upgrades), whose volume is out of
-          # our hands - a heavy patch day once pushed a healthy install
-          # past the old 2700s guard. The job budget still bounds the
-          # whole run.
           # shellcheck disable=SC2086
-          timeout 3900 qemu-system-x86_64 -m 4096 -smp 2 $KVM \
+          qemu-system-x86_64 -m 4096 -smp 2 $KVM \
             -display none \
             -serial file:install.log \
             -drive file=disk.qcow2,format=qcow2,if=virtio \
-            -cdrom "$ISO" -boot d -no-reboot || RC=$?
+            -cdrom "$ISO" -boot d -no-reboot &
+          QPID=$!
+          start=$(date +%s); last_size=-1; last_change=$start
+          while kill -0 "$QPID" 2>/dev/null; do
+            sleep 30
+            now=$(date +%s)
+            size=$(stat -c %s install.log 2>/dev/null || echo 0)
+            if [ "$size" != "$last_size" ]; then
+              last_size=$size
+              last_change=$now
+            fi
+            if [ $((now - last_change)) -ge 900 ]; then
+              echo "install STALLED: no serial output for 15 minutes; last lines:"
+              tail -5 install.log || true
+              kill "$QPID" 2>/dev/null
+              RC=124
+              break
+            fi
+            if [ $((now - start)) -ge 4500 ]; then
+              echo "install exceeded the 75 minute cap"
+              kill "$QPID" 2>/dev/null
+              RC=124
+              break
+            fi
+          done
+          if [ "$RC" -eq 0 ]; then
+            wait "$QPID" || RC=$?
+          else
+            wait "$QPID" 2>/dev/null || true
+          fi
           echo "--- install log (tail) ---"
           tail -150 install.log || true
           # the error-commands power the VM off on failure, so a clean
