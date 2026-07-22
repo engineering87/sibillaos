@@ -31,11 +31,13 @@ The release for three audiences: agent users, the network-less on-premise, and w
 
 ## v0.7 (feedback driven)
 
-Shaped by what users of the published images, the apt path and the MCP endpoint report.
+Shaped by what users of the published images, the apt path and the MCP endpoint report. Two standing debts get owners this cycle instead of floating between releases.
 
-- Engine pin refresh, promoted from exploratory: a considered ollama (and vLLM) bump with digests re-verified and the whole fourteen-job pipeline as the safety net. High value for model freshness and upstream fixes; risky enough to deserve opening a fresh cycle rather than closing one.
+- Supply freshness, opening the cycle: a considered engine pin refresh (ollama, and the vLLM container tag) with the whole fourteen-job pipeline as the safety net, plus sha256 digests recorded for every entry of the catalog, not just the CI-verified ones (tools/update-digests.sh exists for exactly this) - closing a limitation every release note has repeated - and any new model families the refreshed engine enables.
+- vLLM on physical datacenter GPUs, with a plan instead of a hope: either a rented GPU instance for a few hours (full control, bounded cost) or a recruited tester armed with a dedicated validation guide. It is a v1.0 criterion that has floated in the debts section for three cycles; even a failed attempt produces information, the absence of one does not.
+- Deeper developer integration, building on the v0.6 kit: the remote-workstation command that configures the developer machine (Continue, aider, .env) against a SibillaOS box, with the key prompted on stdin so it never crosses the shell history; broader `connect --write` coverage where tools accept config files (Zed and OpenAI-compatible CLIs are the candidates to survey); project scaffolding (a directory-level .env plus workspace editor config); and framework quickstarts for LangChain and LlamaIndex on top of the embeddings endpoint.
 - Manual validation of Open WebUI, carried since v0.2: the step-by-step checklist lives in [docs/validation/webui.md](docs/validation/webui.md); execute it on a real machine, record the result there. It is a v1.0 criterion and cannot be automated (the image is too heavy for CI).
-- Remote-workstation developer kit: one command that configures the developer machine (Continue, aider, .env) against a SibillaOS box. Deferred from v0.6 because the key crossing the shell history deserves design, not haste.
+- Distribution push, declared as work because otherwise it does not happen: the v0.6 story published (LinkedIn, Discord, r/LocalLLaMA or a Show HN) with `sibilla bench` as the call to action - try it for ten minutes, post your table. Feedback-driven cycles need feedback, and feedback needs users.
 - First-run experience: clearer install-time messages and fast turnaround on issues reported against the published images; `sibilla doctor` gives reporters something precise to paste into the templates.
 
 ## Toward v1.0: open validation debts

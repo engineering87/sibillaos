@@ -287,7 +287,8 @@ jobs:
   install-test:
     needs: build
     runs-on: ubuntu-24.04
-    timeout-minutes: 90
+    # 65min install guard + boot, firstboot wait and the probe battery
+    timeout-minutes: 105
     steps:
       - name: Download ISO artifact
         uses: actions/download-artifact@v4
@@ -310,8 +311,13 @@ jobs:
           # -no-reboot: QEMU exits when the installer reboots, which marks
           # the end of the install phase
           RC=0
+          # 3900s: the installer applies the day's security updates
+          # (subiquity run_unattended_upgrades), whose volume is out of
+          # our hands - a heavy patch day once pushed a healthy install
+          # past the old 2700s guard. The job budget still bounds the
+          # whole run.
           # shellcheck disable=SC2086
-          timeout 2700 qemu-system-x86_64 -m 4096 -smp 2 $KVM \
+          timeout 3900 qemu-system-x86_64 -m 4096 -smp 2 $KVM \
             -display none \
             -serial file:install.log \
             -drive file=disk.qcow2,format=qcow2,if=virtio \
