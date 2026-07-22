@@ -522,7 +522,9 @@ jobs:
                 grep -q "3000" ufw.out && { echo "webui port open by default"; RC=1; }
                 # the per-IP gateway rate limit: written to the rules
                 # file AND loaded in the kernel
-                $SSH "grep -q sibilla-rl /etc/ufw/before.rules" \
+                # before.rules is root-readable only: sudo like the
+                # ufw status check above
+                $SSH "echo sibilla | sudo -S grep -q sibilla-rl /etc/ufw/before.rules" \
                   || { echo "rate limit rule not in before.rules"; RC=1; }
                 $SSH "echo sibilla | sudo -S iptables -S ufw-before-input" > ratelimit.out || RC=1
                 grep -q "hashlimit.*sibilla-rl-8080" ratelimit.out \
