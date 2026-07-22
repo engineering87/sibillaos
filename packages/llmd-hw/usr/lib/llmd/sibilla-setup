@@ -58,7 +58,18 @@ if [[ "$engine" == "ollama" ]] && ! command -v ollama >/dev/null 2>&1; then
   # ollama when this marker exists, a pre-existing ollama is not ours
   mkdir -p /var/lib/llmd
   touch /var/lib/llmd/setup-installed-ollama
-  curl -fsSL https://ollama.com/install.sh | OLLAMA_VERSION="$OLLAMA_VERSION" sh
+  # the installer streams a large tarball; a mid-download TCP reset
+  # must not kill the whole setup, so give it three honest attempts
+  ok=0
+  for _ in 1 2 3; do
+    if curl -fsSL https://ollama.com/install.sh | OLLAMA_VERSION="$OLLAMA_VERSION" sh; then
+      ok=1
+      break
+    fi
+    echo "ollama install failed, retrying in 15s"
+    sleep 15
+  done
+  [[ "$ok" -eq 1 ]] || { echo "ollama install failed after 3 attempts" >&2; exit 1; }
 fi
 
 # 3. Model: honor --model, else keep an existing pick, else select one

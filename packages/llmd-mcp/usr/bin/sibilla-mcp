@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+# sibilla-mcp: expose the local model to MCP clients, on or off.
+set -euo pipefail
+
+STATE=/etc/llmd/mcp
+
+usage() {
+  cat <<USAGE
+usage: sibilla-mcp COMMAND
+
+  enable    serve the Model Context Protocol endpoint at /mcp
+  disable   remove the endpoint
+  status    show whether the MCP endpoint is enabled
+
+The endpoint answers with the same bearer keys as the API and exposes
+two tools: "chat" (ask the local model) and "list_models". Client
+setup is documented in docs/mcp.md in the SibillaOS repository, e.g.:
+
+  claude mcp add --transport http sibillaos \\
+    http://HOST:8080/mcp --header "Authorization: Bearer KEY"
+USAGE
+  exit 1
+}
+
+need_root() { [[ $EUID -eq 0 ]] || { echo "run as root (sudo)" >&2; exit 1; }; }
+
+render_restart() {
+  /usr/lib/llmd/llmd-gateway-render
+  systemctl restart caddy.service
+}
+
+case "${1:-}" in
+  enable)
+    need_root
+    echo on > "$STATE"
+    systemctl enable --now llmd-mcp.service
+    render_restart
+    echo "MCP endpoint enabled at /mcp (same API keys as the API)"
+    echo "connect a client: sudo sibilla connect shows the key and address"
+    ;;
+  disable)
+    need_root
+    echo off > "$STATE"
+    systemctl disable --now llmd-mcp.service
+    render_restart
+    echo "MCP endpoint disabled"
+    ;;
+  status)
+    echo "mcp: $(cat "$STATE" 2>/dev/null || echo off)"
+    ;;
+  *) usage ;;
+esac

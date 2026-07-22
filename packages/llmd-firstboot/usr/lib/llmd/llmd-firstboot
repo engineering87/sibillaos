@@ -11,6 +11,37 @@ export HOME="${HOME:-/root}"
 
 mkdir -p /var/lib/llmd/models /etc/llmd
 
+# Air-gapped payload: a volume labeled SIBILLA-AIRGAP carries model
+# files that will go through the same digest gate as sibilla model
+# import, and optionally a declared profile. Mounted read-only now
+# because a profile on the stick must seed the model choice below;
+# the files import further down, once the engine is up.
+AIRGAP_MNT=""
+if [[ -e /dev/disk/by-label/SIBILLA-AIRGAP ]]; then
+  AIRGAP_MNT=$(mktemp -d)
+  if mount -o ro /dev/disk/by-label/SIBILLA-AIRGAP "$AIRGAP_MNT" 2>/dev/null; then
+    echo "air-gapped payload detected"
+    if [[ -s "$AIRGAP_MNT/profile" && ! -s /etc/llmd/profile ]]; then
+      cp "$AIRGAP_MNT/profile" /etc/llmd/profile
+      echo "profile taken from the payload"
+    fi
+  else
+    rmdir "$AIRGAP_MNT" 2>/dev/null || true
+    AIRGAP_MNT=""
+  fi
+fi
+
+# A declared profile (written by cloud-init, a fleet tool or the
+# air-gapped payload) wins over auto-selection: seed the model before
+# the choice happens, so the declared one is what gets downloaded.
+if [[ -s /etc/llmd/profile && ! -s /etc/llmd/model ]]; then
+  profile_model=$(sed -n 's/^MODEL=//p' /etc/llmd/profile | head -1)
+  if [[ -n "$profile_model" ]]; then
+    echo "$profile_model" > /etc/llmd/model
+    echo "model taken from the declared profile: $profile_model"
+  fi
+fi
+
 # Cloud images skip the installer: detect the engine and pick a model
 # here, at the real first boot, where the deployed hardware (and its
 # GPU, if any) is visible. No-ops on ISO installs, where the files
@@ -72,10 +103,26 @@ if [[ -n "$model" ]]; then
           sleep 3
         done
       fi
-      for _ in 1 2 3; do
-        if ollama pull "$model"; then break; fi
-        sleep 30
-      done
+      # payload files import first, through the same digest gate as
+      # sibilla model import: a file the catalog does not know stays
+      # out, and a warning is not a failed boot
+      if [[ -n "$AIRGAP_MNT" ]]; then
+        for f in "$AIRGAP_MNT"/models/*.gguf; do
+          [[ -e "$f" ]] || continue
+          sibilla-model import "$f" \
+            || echo "WARNING: payload file $(basename "$f") was not imported"
+        done
+      fi
+      # a model already local (imported from the payload, or resumed)
+      # serves without the network
+      if ollama list 2>/dev/null | awk 'NR>1{print $1}' | grep -Fxq "$model"; then
+        echo "model already local, skipping the network pull"
+      else
+        for _ in 1 2 3; do
+          if ollama pull "$model"; then break; fi
+          sleep 30
+        done
+      fi
       # digest check against the catalog. Warn-only here: first boot
       # must complete even if the upstream repo re-uploaded the file,
       # but the warning lands in the journal and on the console.
@@ -143,9 +190,42 @@ if [[ -e /etc/llmd/appliance ]]; then
   if command -v ufw >/dev/null 2>&1; then
     ufw allow OpenSSH >/dev/null 2>&1 || ufw allow 22/tcp >/dev/null
     ufw allow 8080/tcp >/dev/null
+    # Kernel-level per-IP rate limit on NEW connections to the
+    # gateway: the abuse baseline (per-key fairness is a different
+    # problem, see the roadmap). 2/s sustained with a burst of 60 per
+    # source is generous for legitimate clients, which reuse
+    # connections, and a wall for floods. Inserted before COMMIT so
+    # the loopback accept earlier in the file keeps priority; both
+    # lines carry the sibilla-rl marker so sibilla remove can strip
+    # them. The hashlimit name stays within 15 characters: the
+    # historical kernel struct bounds it by IFNAMSIZ, and the
+    # appliance firewall is no place to bet on revision negotiation.
+    BR=/etc/ufw/before.rules
+    if [[ -f "$BR" ]] && ! grep -q "sibilla-rl" "$BR"; then
+      sed -i '0,/^COMMIT/{/^COMMIT/i\
+# sibilla-rl: per-IP abuse baseline for the gateway\
+-A ufw-before-input -p tcp --dport 8080 -m conntrack --ctstate NEW -m hashlimit --hashlimit-name sibilla-rl-8080 --hashlimit-mode srcip --hashlimit-above 2/second --hashlimit-burst 60 -j DROP
+}' "$BR"
+    fi
     ufw --force enable
-    echo "firewall enabled: only SSH and the gateway port are open"
+    echo "firewall enabled: only SSH and the gateway port are open,"
+    echo "new connections to the gateway rate limited per source IP"
   fi
+fi
+
+# the payload has served its purpose; leave the volume clean
+if [[ -n "$AIRGAP_MNT" ]]; then
+  umount "$AIRGAP_MNT" 2>/dev/null || true
+  rmdir "$AIRGAP_MNT" 2>/dev/null || true
+fi
+
+# 7. Declared profile: the model was seeded before selection, now the
+# rest of the declaration converges (tls, metrics, mcp, webui). Warn,
+# do not fail: first boot must end in a serving machine even if one
+# profile line cannot apply; sibilla apply re-runs idempotently.
+if [[ -s /etc/llmd/profile && -x /usr/lib/llmd/sibilla-apply ]]; then
+  /usr/lib/llmd/sibilla-apply /etc/llmd/profile \
+    || echo "WARNING: profile did not fully apply; run: sudo sibilla apply"
 fi
 
 touch "$STATE"

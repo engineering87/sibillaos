@@ -1,0 +1,183 @@
+#!/usr/bin/env bash
+# sibilla-apply: reconcile the machine onto a declared profile.
+# The profile is a plain KEY=value file (default /etc/llmd/profile):
+#
+#   MODEL=hf.co/bartowski/Qwen_Qwen3-4B-GGUF:Q4_K_M
+#   TLS=off | internal:HOSTNAME | acme:HOSTNAME:EMAIL
+#   METRICS=on|off
+#   MCP=on|off
+#   WEBUI=on|off
+#
+# Every key is optional: absent means "leave it as it is", so partial
+# profiles compose. API keys are deliberately not part of a profile:
+# they are per-machine secrets, managed by sibilla key. The existing
+# sibilla commands are the primitives; apply only decides which of
+# them need to run, so applying a profile the machine already matches
+# does nothing at all.
+set -euo pipefail
+
+usage() {
+  cat <<USAGE
+usage: sibilla-apply [FILE]     reconcile onto FILE (default /etc/llmd/profile)
+       sibilla-apply export     print the profile of the current state
+
+Write the file by hand, with cloud-init, or from another machine's
+"sibilla apply export". On the SibillaOS images llmd-firstboot applies
+/etc/llmd/profile at first boot. Details in docs/configuration.md.
+USAGE
+  exit 1
+}
+
+# The current state is extracted with sed, never sourced: gateway.conf
+# holds a METRICS line, and sourcing it after the profile would clobber
+# the profile's own METRICS with the current value, silently hiding
+# the very drift apply exists to close.
+conf_get() {
+  # the explicit guard matters: under pipefail a sed on a missing file
+  # would fail the whole pipeline, and set -e would kill the script on
+  # any machine that has no gateway.conf yet
+  [[ -r /etc/llmd/gateway.conf ]] || return 0
+  sed -n "s/^$1=//p" /etc/llmd/gateway.conf | head -1
+}
+
+read_state() {
+  CUR_MODEL=$(cat /etc/llmd/model 2>/dev/null || true)
+  local mode host email
+  mode=$(conf_get MODE); mode=${mode:-http}
+  host=$(conf_get TLS_HOSTNAME)
+  email=$(conf_get ACME_EMAIL)
+  case "$mode" in
+    internal) CUR_TLS="internal:$host" ;;
+    acme)     CUR_TLS="acme:$host:$email" ;;
+    *)        CUR_TLS=off ;;
+  esac
+  CUR_METRICS=$(conf_get METRICS); CUR_METRICS=${CUR_METRICS:-off}
+  CUR_MCP=$(cat /etc/llmd/mcp 2>/dev/null || echo off)
+  CUR_WEBUI=off
+  # a bare `[[ ... ]] && x` as the last statement of a function makes
+  # the function fail under set -e when the condition is false
+  if [[ -e /etc/llmd/webui.enabled ]]; then
+    CUR_WEBUI=on
+  fi
+}
+
+cmd_export() {
+  read_state
+  echo "# sibilla profile, exported $(date -u +%Y-%m-%d) from $(hostname)"
+  echo "# api keys are per-machine secrets and never part of a profile"
+  if [[ -n "$CUR_MODEL" ]]; then
+    echo "MODEL=$CUR_MODEL"
+  fi
+  echo "TLS=$CUR_TLS"
+  echo "METRICS=$CUR_METRICS"
+  echo "MCP=$CUR_MCP"
+  echo "WEBUI=$CUR_WEBUI"
+}
+
+# every toggle goes through the command that owns it; a profile that
+# asks for a component that is not installed is an error, not a skip
+need_cmd() {
+  command -v "$1" >/dev/null 2>&1 \
+    || { echo "the profile needs $1, which is not installed" >&2; exit 1; }
+}
+
+cmd_apply() {
+  local file="$1"
+  [[ $EUID -eq 0 ]] || { echo "run as root (sudo)" >&2; exit 1; }
+  [[ -r "$file" ]] || { echo "no readable profile at $file" >&2; usage; }
+
+  local MODEL="" TLS="" METRICS="" MCP="" WEBUI=""
+  # shellcheck disable=SC1090
+  . "$file"
+
+  # validate everything before touching anything
+  if [[ -n "$TLS" ]] && ! [[ "$TLS" =~ ^(off|internal:[^:[:space:]]+|acme:[^:[:space:]]+:[^:[:space:]]+)$ ]]; then
+    echo "invalid TLS value '$TLS' (off, internal:HOSTNAME or acme:HOSTNAME:EMAIL)" >&2
+    exit 1
+  fi
+  local key val
+  for key in METRICS MCP WEBUI; do
+    val="${!key}"
+    if [[ -n "$val" && "$val" != on && "$val" != off ]]; then
+      echo "invalid $key value '$val' (on or off)" >&2
+      exit 1
+    fi
+  done
+
+  read_state
+  local changes=0 kept=0
+
+  if [[ -n "$MODEL" ]]; then
+    if [[ "$MODEL" == "$CUR_MODEL" ]]; then
+      echo "model:   ok ($MODEL)"
+      kept=$((kept + 1))
+    else
+      echo "model:   ${CUR_MODEL:-none} -> $MODEL"
+      sibilla-model use "$MODEL"
+      changes=$((changes + 1))
+    fi
+  fi
+
+  if [[ -n "$TLS" ]]; then
+    if [[ "$TLS" == "$CUR_TLS" ]]; then
+      echo "tls:     ok ($TLS)"
+      kept=$((kept + 1))
+    else
+      echo "tls:     $CUR_TLS -> $TLS"
+      need_cmd sibilla-tls
+      case "$TLS" in
+        off)        sibilla-tls disable ;;
+        internal:*) sibilla-tls enable "${TLS#internal:}" ;;
+        acme:*)
+          local rest="${TLS#acme:}"
+          sibilla-tls enable "${rest%%:*}" --acme "${rest#*:}"
+          ;;
+      esac
+      changes=$((changes + 1))
+    fi
+  fi
+
+  if [[ -n "$METRICS" ]]; then
+    if [[ "$METRICS" == "$CUR_METRICS" ]]; then
+      echo "metrics: ok ($METRICS)"
+      kept=$((kept + 1))
+    else
+      echo "metrics: $CUR_METRICS -> $METRICS"
+      need_cmd sibilla-metrics
+      if [[ "$METRICS" == on ]]; then sibilla-metrics enable; else sibilla-metrics disable; fi
+      changes=$((changes + 1))
+    fi
+  fi
+
+  if [[ -n "$MCP" ]]; then
+    if [[ "$MCP" == "$CUR_MCP" ]]; then
+      echo "mcp:     ok ($MCP)"
+      kept=$((kept + 1))
+    else
+      echo "mcp:     $CUR_MCP -> $MCP"
+      need_cmd sibilla-mcp
+      if [[ "$MCP" == on ]]; then sibilla-mcp enable; else sibilla-mcp disable; fi
+      changes=$((changes + 1))
+    fi
+  fi
+
+  if [[ -n "$WEBUI" ]]; then
+    if [[ "$WEBUI" == "$CUR_WEBUI" ]]; then
+      echo "webui:   ok ($WEBUI)"
+      kept=$((kept + 1))
+    else
+      echo "webui:   $CUR_WEBUI -> $WEBUI"
+      need_cmd sibilla-webui
+      if [[ "$WEBUI" == on ]]; then sibilla-webui enable; else sibilla-webui disable; fi
+      changes=$((changes + 1))
+    fi
+  fi
+
+  echo "profile applied: $changes change(s), $kept already in place"
+}
+
+case "${1:-}" in
+  export)      cmd_export ;;
+  -h|--help)   usage ;;
+  *)           cmd_apply "${1:-/etc/llmd/profile}" ;;
+esac

@@ -83,9 +83,11 @@ Where to go next:
 
 - switch model: `sudo sibilla model use ID` (`sibilla model list` shows what fits your machine)
 - HTTPS: `sudo sibilla tls enable myserver.lan` (add `--acme you@example.org` for a public hostname)
-- editor and agent config: `sudo sibilla connect` (`--write` places the Continue config for you)
+- editor and agent config: `sudo sibilla connect` (`--write` places Continue and aider configs; `--env`, `--mcp`, `--snippet python|node` emit ready-made formats for frameworks, Claude Code and SDKs)
+- agents via MCP: `sudo sibilla mcp enable` serves the model as Model Context Protocol tools
 - chat interface: `sudo sibilla webui enable` (Open WebUI on port 3000)
 - something wrong: `sudo sibilla doctor` produces a paste-ready report for your issue, secrets excluded
+- how fast is my machine: `sudo sibilla bench` measures first-token latency and tokens/s, in a table worth sharing
 
 ## How it works
 
@@ -99,10 +101,14 @@ The installer detects your hardware and makes the decisions a human would otherw
 | **Resilient download** | The model is pulled from Hugging Face during install and resumed at first boot if the connection drops. |
 | **Single endpoint** | One OpenAI-compatible API on port 8080 with mandatory bearer tokens: multiple keys with per-key revocation (`sibilla key`), structured access logs. Engines stay on loopback. `sibilla tls enable HOSTNAME` switches the gateway to HTTPS (local CA, or Let's Encrypt with `--acme`). |
 | **One CLI** | `sibilla status` is a health view of the whole stack: engine, served models, disk usage of the model store, GPU utilization, gateway reachability. |
-| **Model management** | `sibilla model list` shows what fits your machine, `sibilla model use ID` downloads and switches the served model, `rm` and `prune` reclaim disk. |
+| **Model management** | `sibilla model list` shows what fits your machine, `sibilla model use ID` downloads and switches the served model, `import FILE` brings one in from a USB stick or shared drive (accepted only if it matches the signed catalog digests), `rm` and `prune` reclaim disk. |
 | **Observability** | `sibilla metrics enable` serves Prometheus metrics behind the same API key; Grafana dashboard included in [docs/observability](docs/observability/). |
 | **Chat interface** | `sibilla webui enable` starts Open WebUI on port 3000 as an opt-in container, wired to the local engine. |
 | **Editor hookup** | `sibilla connect` prints ready-to-paste configuration for VS Code (Continue, Cline), aider and any OpenAI-compatible client. |
+| **Agent hookup** | `sibilla mcp enable` exposes the local model to MCP clients (Claude Code and other agent frameworks) as `chat` and `list_models` tools, behind the same API keys. See [docs/mcp.md](docs/mcp.md). |
+| **Config as code** | Declare the desired state (model, TLS, metrics, MCP, WebUI) in one profile file; `sibilla apply` converges the machine onto it, idempotently. `apply export` turns a configured machine into a profile; cloud-init or a fleet tool drops the file and first boot picks it up. See [docs/configuration.md](docs/configuration.md). |
+| **Air-gapped** | Machines with no outbound network install from a companion payload volume: models travel by USB stick, verified against the signed catalog digests on both ends. CI proves it on every push in a network-restricted VM. See [docs/airgap.md](docs/airgap.md). |
+| **Local RAG** | `/v1/embeddings` through the same gateway and keys: pull a catalog embedding model (`sibilla model pull`) and point any OpenAI-compatible RAG framework at this machine. See [docs/embeddings.md](docs/embeddings.md). |
 
 The base install is a headless server; a desktop variant is on the roadmap.
 

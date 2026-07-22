@@ -70,7 +70,7 @@ autoinstall:
     # 3. Inference engine, PINNED version for reproducible builds (bump
     #    deliberately; the CI install test validates it). llmfit ships as
     #    a deb in the ISO payload since v0.2.
-    - curtin in-target -- bash -c 'curl -fsSL https://ollama.com/install.sh | OLLAMA_VERSION=0.31.1 sh'
+    - curtin in-target -- bash -c 'ok=0; for i in 1 2 3; do curl -fsSL https://ollama.com/install.sh | OLLAMA_VERSION=0.31.1 sh && { ok=1; break; }; echo "ollama install failed, retrying in 15s"; sleep 15; done; [ "$ok" -eq 1 ]'
     # 4. Hardware detection and default model pick (non-fatal: firstboot
     #    still brings the gateway up without a preselected model)
     - curtin in-target -- /usr/lib/llmd/llmd-hw-detect --write /etc/llmd/engine

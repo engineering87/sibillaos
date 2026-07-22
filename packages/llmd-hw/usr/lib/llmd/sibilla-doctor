@@ -45,6 +45,8 @@ else
   echo "gateway:   (default: MODE=http)"
 fi
 echo "api key:   in /etc/llmd/apikey (not printed)"
+echo "mcp:       $(cat /etc/llmd/mcp 2>/dev/null || echo off)"
+echo "profile:   $([ -s /etc/llmd/profile ] && echo "declared in /etc/llmd/profile" || echo "none (imperative configuration)")"
 /usr/lib/llmd/llmd-catalog-verify >/dev/null 2>&1
 case $? in
   0) echo "catalog:   signature valid" ;;
@@ -54,7 +56,7 @@ esac
 line
 
 echo "[services]"
-for u in ollama caddy vllm webui; do
+for u in ollama caddy vllm webui llmd-mcp; do
   printf '%-8s active=%s enabled=%s\n' "$u" \
     "$(systemctl is-active "$u.service" 2>/dev/null || echo n/a)" \
     "$(systemctl is-enabled "$u.service" 2>/dev/null || echo n/a)"

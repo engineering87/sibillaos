@@ -1,0 +1,80 @@
+#!/usr/bin/env bash
+# sibilla-bench: measure what this machine actually delivers, in a
+# form worth sharing. Two numbers matter for an interactive LLM box:
+# how long until the first token, and how many tokens per second once
+# it flows. Both are measured through the gateway, so the result is
+# what a client of this machine would experience, auth included.
+set -euo pipefail
+
+[[ $EUID -eq 0 ]] || { echo "run as root (sudo): the API key lives in /etc/llmd/apikey" >&2; exit 1; }
+
+KEY=$(cat /etc/llmd/apikey 2>/dev/null || true)
+MODEL=$(cat /etc/llmd/model 2>/dev/null || true)
+ENGINE=$(cat /etc/llmd/engine 2>/dev/null || echo ollama)
+[[ -n "$KEY" && -n "$MODEL" ]] || { echo "no key or model; run sudo sibilla setup first" >&2; exit 1; }
+
+URL=http://127.0.0.1:8080/v1/chat/completions
+PROMPT="Write four sentences about lighthouses."
+RUNS=3
+
+req_body() {
+  local stream="$1" max="$2"
+  printf '{"model":"%s","stream":%s,"max_tokens":%s,"messages":[{"role":"user","content":"%s"}]}' \
+    "$MODEL" "$stream" "$max" "$PROMPT"
+}
+
+echo "warming up (loads the model) ..." >&2
+curl -s -m 600 "$URL" -H "Authorization: Bearer $KEY" -H "Content-Type: application/json" \
+  -d "$(req_body false 8)" >/dev/null \
+  || { echo "the engine did not answer; is the stack up? (sibilla status)" >&2; exit 1; }
+
+echo "measuring time to first token ..." >&2
+start=$(date +%s%N)
+# grep exits at the first streamed chunk and curl takes a SIGPIPE:
+# that is the point, so pipefail is off for this one pipeline
+(
+  set +o pipefail
+  curl -sN -m 600 "$URL" -H "Authorization: Bearer $KEY" -H "Content-Type: application/json" \
+    -d "$(req_body true 16)" 2>/dev/null | grep -m1 '^data:' >/dev/null
+)
+ttft_ms=$(( ($(date +%s%N) - start) / 1000000 ))
+[[ "$ttft_ms" -gt 0 ]] || { echo "no streamed token arrived" >&2; exit 1; }
+
+echo "measuring generation speed ($RUNS runs) ..." >&2
+tps_list=""
+for _ in $(seq 1 "$RUNS"); do
+  start=$(date +%s%N)
+  resp=$(curl -s -m 600 "$URL" -H "Authorization: Bearer $KEY" -H "Content-Type: application/json" \
+    -d "$(req_body false 200)")
+  ms=$(( ($(date +%s%N) - start) / 1000000 ))
+  toks=$(echo "$resp" | jq -r '.usage.completion_tokens // 0')
+  [[ "$toks" -gt 0 && "$ms" -gt 0 ]] \
+    || { echo "the engine reported no token usage; cannot measure" >&2; exit 1; }
+  tps_list="$tps_list$(awk -v t="$toks" -v ms="$ms" 'BEGIN{printf "%.1f", t*1000/ms}')\n"
+done
+# median: robust against one slow outlier (page cache, background noise)
+tps=$(printf '%b' "$tps_list" | sort -g | sed -n 2p)
+
+cpu=$(sed -n 's/^model name[^:]*: //p' /proc/cpuinfo | head -1)
+cpu="${cpu:-$(uname -m)} ($(nproc) cores)"
+mem=$(free -h 2>/dev/null | awk '/^Mem:/{print $2}')
+gpu=$(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | head -1 || true)
+ver=$(dpkg-query -W -f='${Version}' llmd-hw 2>/dev/null || echo source)
+
+cat <<TABLE
+
+## SibillaOS bench
+
+| | |
+|---|---|
+| model | $MODEL |
+| engine | $ENGINE |
+| cpu | $cpu |
+| memory | $mem |
+| gpu | ${gpu:-none} |
+| sibillaos | $ver |
+| time to first token | $ttft_ms ms |
+| generation | $tps tok/s (median of $RUNS) |
+
+TABLE
+echo "share it: paste the table in a GitHub discussion or a review." >&2

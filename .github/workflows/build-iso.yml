@@ -23,7 +23,10 @@ jobs:
             packages/llmd-hw/usr/lib/llmd/* packages/llmd-hw/usr/bin/* \
             packages/llmd-firstboot/usr/lib/llmd/* \
             packages/llmd-gateway/usr/lib/llmd/* packages/llmd-gateway/usr/bin/* \
-            packages/llmd-webui/usr/bin/*
+            packages/llmd-webui/usr/bin/* packages/llmd-mcp/usr/bin/* \
+            tools/*.sh
+          # the MCP server is python: syntax-check it here too
+          python3 -m py_compile packages/llmd-mcp/usr/lib/llmd/llmd-mcp-server
       - name: Validate catalog JSON
         run: |
           jq empty catalog/models.json
@@ -52,8 +55,10 @@ jobs:
           export LLMD_CADDYFILE="$RUNNER_TEMP/Caddyfile"
           export LLMD_ENGINE_FILE="$RUNNER_TEMP/engine"
           export LLMD_ACCESS_LOG="$RUNNER_TEMP/access.log"
+          export LLMD_MCP_FILE="$RUNNER_TEMP/mcp"
           export LLMD_KEYS_ALT="lintkey1|lintkey2"
           echo ollama > "$LLMD_ENGINE_FILE"
+          echo off > "$LLMD_MCP_FILE"
           for conf in 'MODE=http' \
                       'MODE=http\nMETRICS=on' \
                       'MODE=internal\nTLS_HOSTNAME=sibillaos.test' \
@@ -63,6 +68,16 @@ jobs:
             bash packages/llmd-gateway/usr/lib/llmd/llmd-gateway-render
             caddy validate --adapter caddyfile --config "$LLMD_CADDYFILE"
           done
+          # the MCP route must render, validate, and sit inside the
+          # route block (behind the 401), never before it
+          echo on > "$LLMD_MCP_FILE"
+          printf 'MODE=http\nMETRICS=on\n' > "$LLMD_GATEWAY_CONF"
+          bash packages/llmd-gateway/usr/lib/llmd/llmd-gateway-render
+          caddy validate --adapter caddyfile --config "$LLMD_CADDYFILE"
+          grep -q "reverse_proxy /mcp 127.0.0.1:8765" "$LLMD_CADDYFILE"
+          awk '/route \{/{r=1} /respond @unauthorized/{if(r)a=NR} /reverse_proxy \/mcp/{m=NR}
+               END{exit !(a && m && m > a)}' "$LLMD_CADDYFILE" \
+            || { echo "MCP route is not behind the 401"; exit 1; }
       - name: Validate Quadlet units
         # dry-run the podman systemd generator against our .container
         # files; a unit that fails to convert would be silently absent
@@ -272,7 +287,8 @@ jobs:
   install-test:
     needs: build
     runs-on: ubuntu-24.04
-    timeout-minutes: 90
+    # 65min install guard + boot, firstboot wait and the probe battery
+    timeout-minutes: 105
     steps:
       - name: Download ISO artifact
         uses: actions/download-artifact@v4
@@ -294,13 +310,51 @@ jobs:
           qemu-img create -f qcow2 disk.qcow2 25G
           # -no-reboot: QEMU exits when the installer reboots, which marks
           # the end of the install phase
+          #
+          # The guard distinguishes slow from stuck. The installer
+          # always applies the day's security updates (subiquity
+          # run_unattended_upgrades; autoinstall has no off switch for
+          # it), so total time varies with patch volume: a slow day
+          # gets a generous 75 minutes. A STALLED install - the serial
+          # log not growing for 15 minutes, the July-9-style CDN
+          # failure mode - dies fast instead, with the last log line
+          # as the diagnosis.
           RC=0
           # shellcheck disable=SC2086
-          timeout 2700 qemu-system-x86_64 -m 4096 -smp 2 $KVM \
+          qemu-system-x86_64 -m 4096 -smp 2 $KVM \
             -display none \
             -serial file:install.log \
             -drive file=disk.qcow2,format=qcow2,if=virtio \
-            -cdrom "$ISO" -boot d -no-reboot || RC=$?
+            -cdrom "$ISO" -boot d -no-reboot &
+          QPID=$!
+          start=$(date +%s); last_size=-1; last_change=$start
+          while kill -0 "$QPID" 2>/dev/null; do
+            sleep 30
+            now=$(date +%s)
+            size=$(stat -c %s install.log 2>/dev/null || echo 0)
+            if [ "$size" != "$last_size" ]; then
+              last_size=$size
+              last_change=$now
+            fi
+            if [ $((now - last_change)) -ge 900 ]; then
+              echo "install STALLED: no serial output for 15 minutes; last lines:"
+              tail -5 install.log || true
+              kill "$QPID" 2>/dev/null
+              RC=124
+              break
+            fi
+            if [ $((now - start)) -ge 4500 ]; then
+              echo "install exceeded the 75 minute cap"
+              kill "$QPID" 2>/dev/null
+              RC=124
+              break
+            fi
+          done
+          if [ "$RC" -eq 0 ]; then
+            wait "$QPID" || RC=$?
+          else
+            wait "$QPID" 2>/dev/null || true
+          fi
           echo "--- install log (tail) ---"
           tail -150 install.log || true
           # the error-commands power the VM off on failure, so a clean
@@ -505,6 +559,15 @@ jobs:
                 grep -q "Status: active" ufw.out || { echo "ufw not active"; RC=1; }
                 grep -q "8080/tcp" ufw.out || { echo "gateway port not allowed"; RC=1; }
                 grep -q "3000" ufw.out && { echo "webui port open by default"; RC=1; }
+                # the per-IP gateway rate limit: written to the rules
+                # file AND loaded in the kernel
+                # before.rules is root-readable only: sudo like the
+                # ufw status check above
+                $SSH "echo sibilla | sudo -S grep -q sibilla-rl /etc/ufw/before.rules" \
+                  || { echo "rate limit rule not in before.rules"; RC=1; }
+                $SSH "echo sibilla | sudo -S iptables -S ufw-before-input" > ratelimit.out || RC=1
+                grep -q "hashlimit.*sibilla-rl-8080" ratelimit.out \
+                  || { echo "rate limit rule not loaded in the kernel"; RC=1; }
                 $SSH "grep -q 'Unattended-Upgrade .1.' /etc/apt/apt.conf.d/51sibilla-upgrades" \
                   || { echo "unattended upgrades config missing"; RC=1; }
                 for u in ollama caddy; do
@@ -626,6 +689,14 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+      # HF rate-limits anonymous requests from shared runner IPs; the
+      # cache (keyed on the catalog digests, so it can never go stale
+      # silently) lets the job recover through the offline import path
+      - name: Restore the model artifact cache
+        uses: actions/cache@v4
+        with:
+          path: gguf-cache
+          key: gguf-9acfc1e0-c159d151-v1
       - name: Build debs and a local apt repo
         run: |
           sudo apt-get update
@@ -645,6 +716,25 @@ jobs:
         run: |
           RC=0
           sudo sibilla setup --model hf.co/bartowski/Qwen_Qwen3-0.6B-GGUF:Q4_K_M
+          # when HF rate limited the pull (429 on shared runner IPs),
+          # the machine recovers through its own offline path: the
+          # cached artifact goes through the import digest gate
+          if ! sudo HOME=/root ollama list 2>/dev/null | grep -q "Qwen_Qwen3-0.6B-GGUF:Q4_K_M"; then
+            if [ -f gguf-cache/q4.gguf ]; then
+              echo "pull was rate limited; importing the cached artifact"
+              sudo sibilla model import gguf-cache/q4.gguf --use
+            else
+              echo "pull failed and no cached artifact to fall back to"
+            fi
+          fi
+          # populate the cache for the next run (the ollama blob IS
+          # the GGUF, content-addressed)
+          mkdir -p gguf-cache
+          if [ ! -f gguf-cache/q4.gguf ]; then
+            sudo cp /var/lib/llmd/models/ollama/blobs/sha256-9acfc1e001311f34b4252001b626f2e466d592a42065f66571bff3790d4e1b14 \
+              gguf-cache/q4.gguf 2>/dev/null && sudo chown "$USER" gguf-cache/q4.gguf \
+              || echo "no blob to cache yet"
+          fi
           # the gateway must answer on the existing box, no reinstall
           up=0
           for _ in $(seq 1 40); do
@@ -682,6 +772,178 @@ jobs:
           echo "--- sibilla status ---"
           sibilla status || RC=1
           exit "$RC"
+      - name: MCP endpoint through the gateway
+        run: |
+          RC=0
+          sudo sibilla mcp enable
+          KEY=$(sudo cat /etc/llmd/apikey)
+          # unauthenticated requests must die at the gateway, before
+          # ever reaching the MCP server
+          code=$(curl -s -o /dev/null -w '%{http_code}' -m 10 -X POST http://127.0.0.1:8080/mcp \
+            -H 'Content-Type: application/json' \
+            -d '{"jsonrpc":"2.0","id":0,"method":"initialize","params":{}}' || true)
+          [ "$code" = "401" ] || { echo "unauthenticated MCP request got $code"; RC=1; }
+          mcp() {
+            curl -s -m 330 -X POST http://127.0.0.1:8080/mcp \
+              -H "Authorization: Bearer $KEY" \
+              -H 'Content-Type: application/json' \
+              -H 'Accept: application/json, text/event-stream' \
+              -d "$1"
+          }
+          # Type=notify makes enable block until the server listens;
+          # the short retry only covers a slow runner, not the product
+          INIT=""
+          for _ in 1 2 3; do
+            INIT=$(mcp '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"sibillaos-ci","version":"0"}}}')
+            echo "$INIT" | jq -e '.result' >/dev/null 2>&1 && break
+            sleep 2
+          done
+          echo "$INIT" | jq -e '.result.protocolVersion == "2025-06-18" and .result.capabilities.tools != null' >/dev/null \
+            || { echo "initialize failed: $INIT"; RC=1; }
+          TOOLS=$(mcp '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}')
+          echo "$TOOLS" | jq -e '[.result.tools[].name] | (index("chat") != null) and (index("list_models") != null)' >/dev/null \
+            || { echo "tools/list failed: $TOOLS"; RC=1; }
+          LM=$(mcp '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"list_models","arguments":{}}}')
+          echo "$LM" | jq -e '.result.isError == false and (.result.content[0].text | contains("default model"))' >/dev/null \
+            || { echo "list_models call failed: $LM"; RC=1; }
+          # chat delegates to the engine: same best-effort policy as
+          # the direct inference check above (native runner CPU)
+          CH=$(mcp '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"chat","arguments":{"prompt":"Say ok.","max_tokens":50}}}')
+          if echo "$CH" | jq -e '.result.isError == false and (.result.content[0].text | length > 0)' >/dev/null 2>&1; then
+            echo "MCP CHAT OK"
+          else
+            echo "mcp chat not asserted on this box:"; echo "$CH" | head -c 300; echo
+          fi
+          # disable must close the endpoint again
+          sudo sibilla mcp disable
+          code=$(curl -s -o /dev/null -w '%{http_code}' -m 10 -X POST http://127.0.0.1:8080/mcp \
+            -H "Authorization: Bearer $KEY" \
+            -H 'Content-Type: application/json' \
+            -d '{"jsonrpc":"2.0","id":5,"method":"ping","params":{}}' || true)
+          # with the route gone the request falls through to the engine,
+          # which does not serve /mcp: anything but a 200 proves closure
+          [ "$code" != "200" ] || { echo "MCP still answering after disable"; RC=1; }
+          sudo sibilla mcp enable
+          exit "$RC"
+      - name: Offline model import, gated by the signed catalog
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          RC=0
+          # a user on a connected machine prepares the file a USB stick
+          # would carry to an air-gapped one; cached across runs, and
+          # authenticated when the repository has an HF_TOKEN secret
+          mkdir -p gguf-cache
+          if [ ! -f gguf-cache/q8.gguf ]; then
+            AUTH=()
+            [ -n "${HF_TOKEN:-}" ] && AUTH=(-H "Authorization: Bearer $HF_TOKEN")
+            curl -fL --retry 3 "${AUTH[@]}" -o gguf-cache/q8.gguf \
+              "https://huggingface.co/bartowski/Qwen_Qwen3-0.6B-GGUF/resolve/main/Qwen_Qwen3-0.6B-Q8_0.gguf"
+          fi
+          cp gguf-cache/q8.gguf /tmp/reviewed.gguf
+          sudo sibilla model import /tmp/reviewed.gguf | tee import.out
+          grep -q "identified: hf.co/bartowski/Qwen_Qwen3-0.6B-GGUF:Q8_0" import.out \
+            || { echo "import did not identify the artifact from its digest"; RC=1; }
+          grep -q "digest verified" import.out \
+            || { echo "import did not verify the stored blob"; RC=1; }
+          sudo HOME=/root ollama list | grep -q "Qwen_Qwen3-0.6B-GGUF:Q8_0" \
+            || { echo "imported model is not in the store"; RC=1; }
+          # serving an imported model must not touch the network: an
+          # ollama pull would print its manifest/layer progress
+          sudo sibilla model use hf.co/bartowski/Qwen_Qwen3-0.6B-GGUF:Q8_0 | tee use.out
+          grep -q "now serving" use.out || { echo "use after import failed"; RC=1; }
+          grep -qi "pulling" use.out && { echo "use after import pulled from the network"; RC=1; } || true
+          # an artifact the catalog does not know must be refused
+          head -c 1048576 /dev/urandom > /tmp/unknown.gguf
+          if sudo sibilla model import /tmp/unknown.gguf >unknown.out 2>&1; then
+            echo "an unreviewed artifact was accepted"; cat unknown.out; RC=1
+          else
+            grep -q "REFUSING to import" unknown.out \
+              || { echo "unexpected refusal path:"; cat unknown.out; RC=1; }
+          fi
+          # back to the setup model for the steps that follow
+          sudo sibilla model use hf.co/bartowski/Qwen_Qwen3-0.6B-GGUF:Q4_K_M >/dev/null
+          rm -f /tmp/reviewed.gguf /tmp/unknown.gguf
+          exit "$RC"
+      - name: Declarative profile, applied and idempotent
+        run: |
+          RC=0
+          # export must reflect the machine as the previous steps left
+          # it: Q4 model served, mcp on, metrics off
+          sudo sibilla apply export | tee exported.profile
+          grep -q "MODEL=hf.co/bartowski/Qwen_Qwen3-0.6B-GGUF:Q4_K_M" exported.profile \
+            || { echo "export missed the served model"; RC=1; }
+          grep -q "MCP=on" exported.profile || { echo "export missed the mcp state"; RC=1; }
+          grep -q "METRICS=off" exported.profile || { echo "export missed the metrics state"; RC=1; }
+          grep -q "apikey" exported.profile && { echo "export leaked key material"; RC=1; } || true
+          # declare drift on two axes; the Q8 model is already local
+          # from the import step, so the switch must not pull
+          printf 'MODEL=hf.co/bartowski/Qwen_Qwen3-0.6B-GGUF:Q8_0\nMETRICS=on\nMCP=on\n' > /tmp/profile
+          sudo sibilla apply /tmp/profile | tee apply.out
+          grep -q "profile applied: 2 change(s), 1 already in place" apply.out \
+            || { echo "apply did not report the expected drift"; cat apply.out; RC=1; }
+          grep -qi "pulling" apply.out && { echo "apply pulled a local model"; RC=1; } || true
+          [ "$(sudo cat /etc/llmd/model)" = "hf.co/bartowski/Qwen_Qwen3-0.6B-GGUF:Q8_0" ] \
+            || { echo "apply did not switch the model"; RC=1; }
+          KEY=$(sudo cat /etc/llmd/apikey)
+          mcode=$(curl -s -o /dev/null -w '%{http_code}' -m 10 \
+            -H "Authorization: Bearer $KEY" http://127.0.0.1:8080/metrics/gateway || true)
+          [ "$mcode" = "200" ] || { echo "metrics endpoint after apply got $mcode"; RC=1; }
+          # a second apply of the same profile must be a no-op
+          sudo sibilla apply /tmp/profile | tee apply2.out
+          grep -q "profile applied: 0 change(s), 3 already in place" apply2.out \
+            || { echo "apply is not idempotent"; cat apply2.out; RC=1; }
+          # a broken value must abort before touching anything
+          printf 'METRICS=maybe\n' > /tmp/bad.profile
+          if sudo sibilla apply /tmp/bad.profile >bad.out 2>&1; then
+            echo "invalid profile value was accepted"; RC=1
+          else
+            grep -q "invalid METRICS value" bad.out || { echo "unexpected rejection:"; cat bad.out; RC=1; }
+          fi
+          # back to the baseline for the steps that follow
+          printf 'MODEL=hf.co/bartowski/Qwen_Qwen3-0.6B-GGUF:Q4_K_M\nMETRICS=off\n' > /tmp/profile
+          sudo sibilla apply /tmp/profile >/dev/null
+          exit "$RC"
+      - name: Bench renders a shareable table
+        run: |
+          # same policy as inference on this runner: asserted when the
+          # engine generates, tolerated when it cannot
+          if sudo sibilla bench > bench.out 2>bench.err; then
+            cat bench.out
+            grep -q "## SibillaOS bench" bench.out || { echo "no bench header"; exit 1; }
+            grep -q "time to first token" bench.out || { echo "no ttft row"; exit 1; }
+            grep -Eq "\| generation \| [0-9]+\.[0-9] tok/s" bench.out || { echo "no generation row"; exit 1; }
+            KEY=$(sudo cat /etc/llmd/apikey)
+            grep -q "$KEY" bench.out && { echo "bench leaked the api key"; exit 1; } || true
+            echo "BENCH OK"
+          else
+            echo "bench not asserted on this box:"; cat bench.err; true
+          fi
+      - name: Embeddings through the gateway
+        run: |
+          RC=0
+          KEY=$(sudo cat /etc/llmd/apikey)
+          sudo sibilla model pull hf.co/nomic-ai/nomic-embed-text-v1.5-GGUF:Q8_0 | tee pull.out
+          grep -q "digest verified" pull.out || { echo "embedding model not digest-verified"; RC=1; }
+          # pulling must not touch the served chat model
+          [ "$(sudo cat /etc/llmd/model)" = "hf.co/bartowski/Qwen_Qwen3-0.6B-GGUF:Q4_K_M" ] \
+            || { echo "pull changed the served model"; RC=1; }
+          EMB=$(curl -s -m 300 http://127.0.0.1:8080/v1/embeddings \
+            -H "Authorization: Bearer $KEY" -H "Content-Type: application/json" \
+            -d '{"model":"hf.co/nomic-ai/nomic-embed-text-v1.5-GGUF:Q8_0","input":"the lighthouse keeps its own hours"}')
+          echo "$EMB" | jq -e '.data[0].embedding | length >= 256' >/dev/null \
+            || { echo "no embedding vector came back:"; echo "$EMB" | head -c 300; echo; RC=1; }
+          # an embedding model must never become the chat default
+          if sudo sibilla model use hf.co/nomic-ai/nomic-embed-text-v1.5-GGUF:Q8_0 >use-emb.out 2>&1; then
+            echo "an embedding model was accepted as the chat default"; RC=1
+          else
+            grep -q "embedding model" use-emb.out || { echo "unexpected refusal:"; cat use-emb.out; RC=1; }
+          fi
+          # nor be a candidate for auto-selection
+          if sudo /usr/lib/llmd/llmd-model-select | grep -q nomic; then
+            echo "the selector lists the embedding model as a chat candidate"; RC=1
+          fi
+          exit "$RC"
       - name: Doctor, connect --write, then a clean removal
         run: |
           RC=0
@@ -695,10 +957,29 @@ jobs:
             grep -F "$KEY" doctor.out | sed "s/$KEY/[REDACTED]/g" | head -5
             RC=1
           fi
-          # connect --write places the Continue config for the sudo user
+          # connect --write places the Continue and aider configs for
+          # the sudo user
           sudo sibilla connect --write || RC=1
           test -f "$HOME/.continue/config.yaml" || { echo "connect --write wrote nothing"; RC=1; }
           grep -q "apiBase" "$HOME/.continue/config.yaml" || { echo "written config incomplete"; RC=1; }
+          test -f "$HOME/.aider.conf.yml" || { echo "aider config not written"; RC=1; }
+          grep -q "openai-api-base" "$HOME/.aider.conf.yml" || { echo "aider config incomplete"; RC=1; }
+          # the developer kit outputs: payload-only, key filled in
+          KEY=$(sudo cat /etc/llmd/apikey)
+          sudo sibilla connect --env > kit.env || RC=1
+          grep -q "OPENAI_BASE_URL=" kit.env && grep -q "OPENAI_API_KEY=$KEY" kit.env \
+            || { echo "--env output incomplete"; RC=1; }
+          sudo sibilla connect --mcp > kit.mcp || RC=1
+          grep -q "claude mcp add" kit.mcp && grep -q "Bearer $KEY" kit.mcp && grep -q "/mcp" kit.mcp \
+            || { echo "--mcp output incomplete"; RC=1; }
+          sudo sibilla connect --snippet python > kit.py || RC=1
+          grep -q "from openai import OpenAI" kit.py && grep -q "$KEY" kit.py \
+            || { echo "--snippet python output incomplete"; RC=1; }
+          sudo sibilla connect --snippet node > kit.js || RC=1
+          grep -q 'import OpenAI from "openai"' kit.js \
+            || { echo "--snippet node output incomplete"; RC=1; }
+          # an unknown flag must fail, not print a kit with the key
+          sudo sibilla connect --snippet rust >/dev/null 2>&1 && { echo "bad snippet lang accepted"; RC=1; } || true
           # remove: a full, verifiable teardown
           sudo sibilla remove --yes || RC=1
           dpkg -l 2>/dev/null | grep -E '^ii +llmd' && { echo "llmd packages survived"; RC=1; } || true
@@ -713,6 +994,77 @@ jobs:
             echo "gateway still answering after removal"
             RC=1
           fi
+          code=$(curl -s -o /dev/null -w '%{http_code}' -m 5 -X POST http://127.0.0.1:8765/mcp || true)
+          [ "$code" = "000" ] || { echo "mcp server still answering after removal"; RC=1; }
+          exit "$RC"
+
+  # "Installed systems receive llmd updates through plain apt" is a
+  # promise from v0.4: this job proves it holds against every change.
+  # It installs the latest published release from the live Pages repo,
+  # upgrades to the branch packages with the exact command the docs
+  # give the user, and requires the serving machine to survive.
+  upgrade-test:
+    needs: lint
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install the published release, like a user did yesterday
+        run: |
+          curl -fsSL https://engineering87.github.io/sibillaos/apt/sibillaos-archive-key.asc \
+            | sudo gpg --batch --yes --dearmor -o /usr/share/keyrings/sibillaos-archive-keyring.gpg
+          printf 'Types: deb\nURIs: https://engineering87.github.io/sibillaos/apt/\nSuites: ./\nSigned-By: /usr/share/keyrings/sibillaos-archive-keyring.gpg\n' \
+            | sudo tee /etc/apt/sources.list.d/sibillaos.sources
+          sudo apt-get update
+          sudo apt-get install -y llmd jq
+          RELEASED=$(dpkg-query -W -f='${Version}' llmd)
+          echo "released version installed: $RELEASED"
+          echo "RELEASED=$RELEASED" >> "$GITHUB_ENV"
+          sudo sibilla setup --model hf.co/bartowski/Qwen_Qwen3-0.6B-GGUF:Q4_K_M
+          up=0
+          for _ in $(seq 1 40); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/v1/models || true)
+            if [ "$code" = "401" ]; then up=1; break; fi
+            sleep 3
+          done
+          [ "$up" = 1 ] || { echo "released gateway never came up"; exit 1; }
+          sudo cp /etc/llmd/apikey /tmp/key-before-upgrade
+      - name: Upgrade to the branch packages with the documented command
+        run: |
+          # the branch debs must version above the release for apt to
+          # see them as an upgrade
+          export LLMD_VERSION="${RELEASED}+ci1"
+          bash ./packages/build-debs.sh
+          mkdir -p localrepo && cp packages/dist/*.deb localrepo/
+          ( cd localrepo && apt-ftparchive packages . > Packages && apt-ftparchive release . > Release )
+          echo "deb [trusted=yes] file://$(pwd)/localrepo ./" \
+            | sudo tee /etc/apt/sources.list.d/sibillaos-branch.list
+          # the exact commands the README gives the user; `apt upgrade`
+          # (not apt-get) installs the new dependencies a grown
+          # metapackage brings in, e.g. llmd-mcp
+          sudo apt update
+          sudo DEBIAN_FRONTEND=noninteractive apt upgrade -y
+          NOW=$(dpkg-query -W -f='${Version}' llmd)
+          echo "upgraded to: $NOW"
+          [ "$NOW" = "${RELEASED}+ci1" ] || { echo "llmd did not upgrade (still $NOW)"; exit 1; }
+      - name: The serving machine must have survived the upgrade
+        run: |
+          RC=0
+          # the key is the contract with every configured client:
+          # an upgrade that rotates it breaks them all
+          sudo cmp -s /tmp/key-before-upgrade /etc/llmd/apikey \
+            || { echo "the upgrade changed the api key"; RC=1; }
+          KEY=$(sudo cat /etc/llmd/apikey)
+          MODEL=$(sudo cat /etc/llmd/model)
+          [ "$MODEL" = "hf.co/bartowski/Qwen_Qwen3-0.6B-GGUF:Q4_K_M" ] \
+            || { echo "the upgrade changed the served model: $MODEL"; RC=1; }
+          code=$(curl -s -o /dev/null -w '%{http_code}' -m 10 \
+            -H "Authorization: Bearer $KEY" http://127.0.0.1:8080/v1/models || true)
+          [ "$code" = "200" ] || { echo "gateway after upgrade answered $code"; RC=1; }
+          sibilla status || RC=1
+          # new subcommands shipped by the branch must exist post-upgrade
+          sibilla mcp status || RC=1
+          sudo sibilla apply export >/dev/null || RC=1
           exit "$RC"
 
   supply-chain:
@@ -997,3 +1349,150 @@ jobs:
         with:
           name: cloud-debug-${{ matrix.arch }}
           path: cloud.log
+
+  # The air-gapped promise, taken literally: the same cloud image
+  # boots in a VM whose network is restricted (QEMU user networking
+  # with restrict=on: SSH port forwards work, every outbound packet is
+  # dropped), with only the companion payload disk attached. The
+  # machine must come up serving the payload model.
+  airgap-test:
+    needs: build-cloud
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download cloud image
+        uses: actions/download-artifact@v4
+        with:
+          name: sibillaos-cloud-amd64
+          path: cloud-img
+      - name: Install QEMU
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-system-x86 qemu-utils xorriso sshpass jq
+      - name: Restore the model artifact cache
+        uses: actions/cache@v4
+        with:
+          path: gguf-cache
+          key: gguf-9acfc1e0-c159d151-v1
+      - name: Build the payload with the real tool
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          # a cached artifact makes the build fully offline: the
+          # builder recognizes it by digest and skips even the name
+          # resolution on the HF API
+          mkdir -p payload/models
+          if [ -f gguf-cache/q4.gguf ]; then
+            cp gguf-cache/q4.gguf payload/models/Qwen_Qwen3-0.6B-Q4_K_M.gguf
+          fi
+          bash ./tools/build-airgap-payload.sh --out payload \
+            --model hf.co/bartowski/Qwen_Qwen3-0.6B-GGUF:Q4_K_M
+          # populate the cache for the next run
+          mkdir -p gguf-cache
+          if [ ! -f gguf-cache/q4.gguf ]; then
+            cp payload/models/*.gguf gguf-cache/q4.gguf || true
+          fi
+          test -s payload/profile
+          grep -q "MODEL=hf.co/bartowski/Qwen_Qwen3-0.6B-GGUF:Q4_K_M" payload/profile
+          # the payload disk a user would prepare: ext4, the label is
+          # what llmd-firstboot looks for
+          truncate -s 2G payload.img
+          mkfs.ext4 -F -q -L SIBILLA-AIRGAP payload.img
+          sudo mkdir -p /mnt/payload
+          sudo mount -o loop payload.img /mnt/payload
+          sudo cp -r payload/. /mnt/payload/
+          sudo umount /mnt/payload
+      - name: Deploy with no outbound network
+        run: |
+          IMG=$(ls cloud-img/*.qcow2 | head -1)
+          KVM=""
+          if [ -e /dev/kvm ]; then
+            sudo chmod 666 /dev/kvm
+            # fixed CPU model: same reasoning as the install test
+            KVM="-enable-kvm -cpu Haswell-noTSX-IBRS"
+          fi
+          mkdir seed
+          cat > seed/user-data <<'EOF'
+          #cloud-config
+          hostname: sibilla-airgap
+          ssh_pwauth: true
+          users:
+            - name: sibilla
+              plain_text_passwd: sibilla
+              lock_passwd: false
+              shell: /bin/bash
+              groups: sudo
+              sudo: ALL=(ALL) NOPASSWD:ALL
+          EOF
+          printf 'instance-id: sibilla-airgap-ci\n' > seed/meta-data
+          xorriso -as mkisofs -volid CIDATA -joliet -rock -o seed.iso seed
+          # shellcheck disable=SC2086
+          qemu-system-x86_64 $KVM -m 4096 -smp 4 \
+            -display none -serial file:airgap.log \
+            -drive "file=$IMG,format=qcow2,if=virtio" \
+            -drive "file=seed.iso,format=raw,if=virtio,readonly=on" \
+            -drive "file=payload.img,format=raw,if=virtio" \
+            -netdev user,id=n0,restrict=on,hostfwd=tcp::8080-:8080,hostfwd=tcp::2222-:22 \
+            -device virtio-net,netdev=n0 &
+          QPID=$!
+          ok=0
+          for _ in $(seq 1 120); do
+            sleep 10
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/v1/models || true)
+            if [ "$code" = "401" ]; then ok=1; break; fi
+          done
+          RC=1
+          if [ "$ok" -eq 1 ]; then
+            echo "gateway answered 401 with no outbound network"
+            SSH="sshpass -p sibilla ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p 2222 sibilla@127.0.0.1"
+            KEY=$($SSH "sudo cat /etc/llmd/apikey" | tail -1)
+            MODEL=$($SSH "sudo cat /etc/llmd/model" | tail -1)
+            echo "served model: $MODEL"
+            if [ "$MODEL" = "hf.co/bartowski/Qwen_Qwen3-0.6B-GGUF:Q4_K_M" ] && [ -n "$KEY" ]; then
+              RC=0
+              # the model must have arrived from the payload, not a pull
+              $SSH "sudo journalctl -u llmd-firstboot --no-pager" > firstboot-journal.log || true
+              grep -q "air-gapped payload detected" firstboot-journal.log \
+                || { echo "payload was not detected"; RC=1; }
+              grep -q "identified: hf.co/bartowski/Qwen_Qwen3-0.6B-GGUF:Q4_K_M" firstboot-journal.log \
+                || { echo "payload model was not imported through the digest gate"; RC=1; }
+              grep -q "model already local, skipping the network pull" firstboot-journal.log \
+                || { echo "firstboot did not skip the pull"; RC=1; }
+              # prove the isolation is real from inside the guest
+              if $SSH "curl -s -m 8 https://huggingface.co >/dev/null 2>&1"; then
+                echo "the guest reached the internet; this test proves nothing"
+                RC=1
+              else
+                echo "outbound network confirmed dead from inside the guest"
+              fi
+              # and the machine still does its job: a real completion
+              RESP=$(curl -s -m 600 http://127.0.0.1:8080/v1/chat/completions \
+                -H "Authorization: Bearer $KEY" \
+                -H "Content-Type: application/json" \
+                -d "{\"model\": \"$MODEL\", \"messages\": [{\"role\": \"user\", \"content\": \"Say ok.\"}], \"max_tokens\": 60}") || true
+              if echo "$RESP" | jq -e '.choices[0].message | ((.content // "") + (.reasoning // "")) | length > 0' >/dev/null; then
+                echo "AIRGAP INFERENCE OK"
+              else
+                echo "air-gapped inference failed"
+                echo "$RESP" | head -c 400; echo
+                RC=1
+              fi
+            else
+              echo "wrong or missing model/key (model: $MODEL)"
+              $SSH "sudo journalctl -u llmd-firstboot --no-pager | tail -60" || true
+            fi
+          else
+            echo "gateway never came up; console tail:"
+            tail -80 airgap.log || true
+          fi
+          kill "$QPID" 2>/dev/null || true
+          exit "$RC"
+      - name: Upload airgap debug artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: airgap-debug
+          path: |
+            airgap.log
+            firstboot-journal.log

@@ -10,13 +10,18 @@ usage: sibilla COMMAND [ARGS]
   setup          turn this Ubuntu machine into an LLM appliance:
                  detect hardware, install the engine, serve the API
   status         health view: engine, served models, disk, GPU, gateway
-  model ...      list, download, switch and remove models
+  model ...      list, download, import from file, switch and remove
   tls ...        switch the gateway between HTTP and HTTPS
   key ...        manage the gateway API keys (list, add, revoke, rotate)
   metrics ...    Prometheus endpoint on the gateway, on or off
   webui ...      enable or disable the Open WebUI chat interface
+  mcp ...        expose the local model to MCP clients, on or off
+  apply          reconcile the machine onto a declared profile file
+                 (apply export prints the current state as a profile)
   connect        print client configuration for editors and agents
-                 (--write places the Continue config, with backup)
+                 (--write places Continue and aider configs; --env,
+                 --mcp and --snippet emit framework-ready formats)
+  bench          measure this machine: first token latency, tokens/s
   doctor         paste-ready diagnostic report, no secrets included
   remove         clean teardown: only what SibillaOS installed goes
 
@@ -35,7 +40,10 @@ case "$cmd" in
   key)     exec sibilla-key "$@" ;;
   metrics) exec sibilla-metrics "$@" ;;
   webui)   exec sibilla-webui "$@" ;;
+  mcp)     exec sibilla-mcp "$@" ;;
+  apply)   exec /usr/lib/llmd/sibilla-apply "$@" ;;
   connect) exec sibilla-connect "$@" ;;
+  bench)   exec /usr/lib/llmd/sibilla-bench "$@" ;;
   doctor)  exec /usr/lib/llmd/sibilla-doctor "$@" ;;
   remove)  exec /usr/lib/llmd/sibilla-remove "$@" ;;
   *)       usage ;;
