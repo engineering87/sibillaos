@@ -83,7 +83,7 @@ Where to go next:
 
 - switch model: `sudo sibilla model use ID` (`sibilla model list` shows what fits your machine)
 - HTTPS: `sudo sibilla tls enable myserver.lan` (add `--acme you@example.org` for a public hostname)
-- editor and agent config: `sudo sibilla connect` (`--write` places the Continue config for you)
+- editor and agent config: `sudo sibilla connect` (`--write` places Continue and aider configs; `--env`, `--mcp`, `--snippet python|node` emit ready-made formats for frameworks, Claude Code and SDKs)
 - agents via MCP: `sudo sibilla mcp enable` serves the model as Model Context Protocol tools
 - chat interface: `sudo sibilla webui enable` (Open WebUI on port 3000)
 - something wrong: `sudo sibilla doctor` produces a paste-ready report for your issue, secrets excluded

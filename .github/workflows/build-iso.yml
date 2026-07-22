@@ -866,10 +866,29 @@ jobs:
             grep -F "$KEY" doctor.out | sed "s/$KEY/[REDACTED]/g" | head -5
             RC=1
           fi
-          # connect --write places the Continue config for the sudo user
+          # connect --write places the Continue and aider configs for
+          # the sudo user
           sudo sibilla connect --write || RC=1
           test -f "$HOME/.continue/config.yaml" || { echo "connect --write wrote nothing"; RC=1; }
           grep -q "apiBase" "$HOME/.continue/config.yaml" || { echo "written config incomplete"; RC=1; }
+          test -f "$HOME/.aider.conf.yml" || { echo "aider config not written"; RC=1; }
+          grep -q "openai-api-base" "$HOME/.aider.conf.yml" || { echo "aider config incomplete"; RC=1; }
+          # the developer kit outputs: payload-only, key filled in
+          KEY=$(sudo cat /etc/llmd/apikey)
+          sudo sibilla connect --env > kit.env || RC=1
+          grep -q "OPENAI_BASE_URL=" kit.env && grep -q "OPENAI_API_KEY=$KEY" kit.env \
+            || { echo "--env output incomplete"; RC=1; }
+          sudo sibilla connect --mcp > kit.mcp || RC=1
+          grep -q "claude mcp add" kit.mcp && grep -q "Bearer $KEY" kit.mcp && grep -q "/mcp" kit.mcp \
+            || { echo "--mcp output incomplete"; RC=1; }
+          sudo sibilla connect --snippet python > kit.py || RC=1
+          grep -q "from openai import OpenAI" kit.py && grep -q "$KEY" kit.py \
+            || { echo "--snippet python output incomplete"; RC=1; }
+          sudo sibilla connect --snippet node > kit.js || RC=1
+          grep -q 'import OpenAI from "openai"' kit.js \
+            || { echo "--snippet node output incomplete"; RC=1; }
+          # an unknown flag must fail, not print a kit with the key
+          sudo sibilla connect --snippet rust >/dev/null 2>&1 && { echo "bad snippet lang accepted"; RC=1; } || true
           # remove: a full, verifiable teardown
           sudo sibilla remove --yes || RC=1
           dpkg -l 2>/dev/null | grep -E '^ii +llmd' && { echo "llmd packages survived"; RC=1; } || true

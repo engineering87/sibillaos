@@ -19,7 +19,8 @@ usage: sibilla COMMAND [ARGS]
   apply          reconcile the machine onto a declared profile file
                  (apply export prints the current state as a profile)
   connect        print client configuration for editors and agents
-                 (--write places the Continue config, with backup)
+                 (--write places Continue and aider configs; --env,
+                 --mcp and --snippet emit framework-ready formats)
   bench          measure this machine: first token latency, tokens/s
   doctor         paste-ready diagnostic report, no secrets included
   remove         clean teardown: only what SibillaOS installed goes
