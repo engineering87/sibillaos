@@ -520,6 +520,13 @@ jobs:
                 grep -q "Status: active" ufw.out || { echo "ufw not active"; RC=1; }
                 grep -q "8080/tcp" ufw.out || { echo "gateway port not allowed"; RC=1; }
                 grep -q "3000" ufw.out && { echo "webui port open by default"; RC=1; }
+                # the per-IP gateway rate limit: written to the rules
+                # file AND loaded in the kernel
+                $SSH "grep -q sibilla-rl /etc/ufw/before.rules" \
+                  || { echo "rate limit rule not in before.rules"; RC=1; }
+                $SSH "echo sibilla | sudo -S iptables -S ufw-before-input" > ratelimit.out || RC=1
+                grep -q "hashlimit.*sibilla-rl-8080" ratelimit.out \
+                  || { echo "rate limit rule not loaded in the kernel"; RC=1; }
                 $SSH "grep -q 'Unattended-Upgrade .1.' /etc/apt/apt.conf.d/51sibilla-upgrades" \
                   || { echo "unattended upgrades config missing"; RC=1; }
                 for u in ollama caddy; do

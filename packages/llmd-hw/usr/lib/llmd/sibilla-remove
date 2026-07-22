@@ -63,7 +63,14 @@ if [[ "$REMOVE_OLLAMA" -eq 1 ]]; then
   echo "ollama removed"
 fi
 
-# 4. SibillaOS state: keys, settings, models
+# 4. SibillaOS state: keys, settings, models; and the gateway rate
+# limit rule, if the appliance firstboot added one (both of its lines
+# carry the marker)
+if [[ -f /etc/ufw/before.rules ]] && grep -q "sibilla-rl" /etc/ufw/before.rules; then
+  sed -i '/sibilla-rl/d' /etc/ufw/before.rules
+  ufw reload >/dev/null 2>&1 || true
+  echo "gateway rate limit rule removed from the firewall"
+fi
 rm -rf /etc/llmd /var/lib/llmd
 systemctl daemon-reload
 

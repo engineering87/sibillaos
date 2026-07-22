@@ -190,8 +190,26 @@ if [[ -e /etc/llmd/appliance ]]; then
   if command -v ufw >/dev/null 2>&1; then
     ufw allow OpenSSH >/dev/null 2>&1 || ufw allow 22/tcp >/dev/null
     ufw allow 8080/tcp >/dev/null
+    # Kernel-level per-IP rate limit on NEW connections to the
+    # gateway: the abuse baseline (per-key fairness is a different
+    # problem, see the roadmap). 2/s sustained with a burst of 60 per
+    # source is generous for legitimate clients, which reuse
+    # connections, and a wall for floods. Inserted before COMMIT so
+    # the loopback accept earlier in the file keeps priority; both
+    # lines carry the sibilla-rl marker so sibilla remove can strip
+    # them. The hashlimit name stays within 15 characters: the
+    # historical kernel struct bounds it by IFNAMSIZ, and the
+    # appliance firewall is no place to bet on revision negotiation.
+    BR=/etc/ufw/before.rules
+    if [[ -f "$BR" ]] && ! grep -q "sibilla-rl" "$BR"; then
+      sed -i '0,/^COMMIT/{/^COMMIT/i\
+# sibilla-rl: per-IP abuse baseline for the gateway\
+-A ufw-before-input -p tcp --dport 8080 -m conntrack --ctstate NEW -m hashlimit --hashlimit-name sibilla-rl-8080 --hashlimit-mode srcip --hashlimit-above 2/second --hashlimit-burst 60 -j DROP
+}' "$BR"
+    fi
     ufw --force enable
-    echo "firewall enabled: only SSH and the gateway port are open"
+    echo "firewall enabled: only SSH and the gateway port are open,"
+    echo "new connections to the gateway rate limited per source IP"
   fi
 fi
 
