@@ -42,8 +42,19 @@ write_files:
       done
       dpkg -i /mnt/seed/debs/*.deb \
         || apt-get -o Acquire::Retries=3 -f install -y
-      # inference engine, PINNED version (same pin as the ISO build)
-      curl -fsSL https://ollama.com/install.sh | OLLAMA_VERSION=0.31.1 sh
+      # inference engine, PINNED version (same pin as the ISO build);
+      # retried because a mid-download TCP reset once corrupted the
+      # tarball and failed a whole bake
+      ollama_ok=0
+      for _ in 1 2 3; do
+        if curl -fsSL https://ollama.com/install.sh | OLLAMA_VERSION=0.31.1 sh; then
+          ollama_ok=1
+          break
+        fi
+        echo "ollama install failed, retrying in 15s"
+        sleep 15
+      done
+      [ "$ollama_ok" -eq 1 ] || { echo "ollama install failed after 3 attempts"; exit 1; }
       if [ -f /mnt/seed/ci-model ]; then
         # -D: /etc/llmd does not exist yet at bake time; on the ISO
         # path the installer late-commands create it, here the whole

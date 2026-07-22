@@ -12,7 +12,17 @@
 # --profile provides one. Copy the output onto a volume labeled
 # SIBILLA-AIRGAP and plug it in before first boot; llmd-firstboot picks
 # it up (docs/airgap.md).
+#
+# If HF_TOKEN is set in the environment, Hugging Face requests are
+# authenticated: anonymous requests from shared IPs (CI runners,
+# corporate NAT) get rate limited, authenticated ones far less so.
 set -euo pipefail
+
+HF_AUTH=()
+if [[ -n "${HF_TOKEN:-}" ]]; then
+  HF_AUTH=(-H "Authorization: Bearer $HF_TOKEN")
+  echo "using the HF_TOKEN from the environment for Hugging Face requests"
+fi
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CATALOG="$DIR/../catalog/models.json"
@@ -69,11 +79,27 @@ for spec in "${MODELS[@]}"; do
   [[ -n "$digest" ]] || { echo "no digest recorded for $spec; only reviewed artifacts enter a payload" >&2; exit 1; }
   hex="${digest#sha256:}"
 
+  # a file already in the payload that matches the digest needs no
+  # network at all, not even the name resolution: the digest is the
+  # identity, so a pre-seeded file (cache, previous run) is done
+  existing=""
+  for f in "$OUT/models/"*.gguf; do
+    [[ -e "$f" ]] || continue
+    if echo "$hex  $f" | sha256sum -c --quiet 2>/dev/null; then
+      existing="$f"
+      break
+    fi
+  done
+  if [[ -n "$existing" ]]; then
+    echo "already present and verified: $(basename "$existing") ($spec)"
+    continue
+  fi
+
   # resolve the file on Hugging Face by its LFS oid: the digest is the
   # identity, the filename is just where it happens to live
   repo="${base#hf.co/}"
   [[ "$repo" != "$base" ]] || { echo "only hf.co models are supported: $spec" >&2; exit 1; }
-  file=$(curl -fsSL --retry 3 "https://huggingface.co/api/models/$repo/tree/main" \
+  file=$(curl -fsSL --retry 3 "${HF_AUTH[@]}" "https://huggingface.co/api/models/$repo/tree/main" \
     | jq -r --arg oid "$hex" '.[] | select(.lfs.oid? == $oid) | .path' | head -1)
   [[ -n "$file" ]] || { echo "no file with digest $digest in $repo; catalog and repo disagree" >&2; exit 1; }
 
@@ -82,7 +108,7 @@ for spec in "${MODELS[@]}"; do
     echo "already present and verified: $file"
   else
     echo "downloading $file ($spec)"
-    curl -fL --retry 3 -o "$dest" "https://huggingface.co/$repo/resolve/main/$file"
+    curl -fL --retry 3 "${HF_AUTH[@]}" -o "$dest" "https://huggingface.co/$repo/resolve/main/$file"
     echo "$hex  $dest" | sha256sum -c --quiet \
       || { echo "downloaded file does not match the catalog digest, refusing" >&2; rm -f "$dest"; exit 1; }
     echo "verified: $file is $digest"

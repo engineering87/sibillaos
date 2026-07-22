@@ -27,6 +27,10 @@ downloads it, verifies the sha256 and writes `models/`, `SHA256SUMS`,
 [profile format](configuration.md) works, so TLS or MCP can be
 declared on the same stick). Only catalog entries with recorded
 digests are eligible; run the tool without arguments to list them.
+With `HF_TOKEN` set in the environment the Hugging Face requests are
+authenticated, which matters behind shared IPs (CI runners, corporate
+NAT) that anonymous rate limits hit first. A file already present in
+the output that matches its digest is reused without any network.
 
 The volume must carry the filesystem label `SIBILLA-AIRGAP`:
 

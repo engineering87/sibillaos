@@ -648,6 +648,14 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+      # HF rate-limits anonymous requests from shared runner IPs; the
+      # cache (keyed on the catalog digests, so it can never go stale
+      # silently) lets the job recover through the offline import path
+      - name: Restore the model artifact cache
+        uses: actions/cache@v4
+        with:
+          path: gguf-cache
+          key: gguf-9acfc1e0-c159d151-v1
       - name: Build debs and a local apt repo
         run: |
           sudo apt-get update
@@ -667,6 +675,25 @@ jobs:
         run: |
           RC=0
           sudo sibilla setup --model hf.co/bartowski/Qwen_Qwen3-0.6B-GGUF:Q4_K_M
+          # when HF rate limited the pull (429 on shared runner IPs),
+          # the machine recovers through its own offline path: the
+          # cached artifact goes through the import digest gate
+          if ! sudo HOME=/root ollama list 2>/dev/null | grep -q "Qwen_Qwen3-0.6B-GGUF:Q4_K_M"; then
+            if [ -f gguf-cache/q4.gguf ]; then
+              echo "pull was rate limited; importing the cached artifact"
+              sudo sibilla model import gguf-cache/q4.gguf --use
+            else
+              echo "pull failed and no cached artifact to fall back to"
+            fi
+          fi
+          # populate the cache for the next run (the ollama blob IS
+          # the GGUF, content-addressed)
+          mkdir -p gguf-cache
+          if [ ! -f gguf-cache/q4.gguf ]; then
+            sudo cp /var/lib/llmd/models/ollama/blobs/sha256-9acfc1e001311f34b4252001b626f2e466d592a42065f66571bff3790d4e1b14 \
+              gguf-cache/q4.gguf 2>/dev/null && sudo chown "$USER" gguf-cache/q4.gguf \
+              || echo "no blob to cache yet"
+          fi
           # the gateway must answer on the existing box, no reinstall
           up=0
           for _ in $(seq 1 40); do
@@ -758,12 +785,21 @@ jobs:
           sudo sibilla mcp enable
           exit "$RC"
       - name: Offline model import, gated by the signed catalog
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
           RC=0
           # a user on a connected machine prepares the file a USB stick
-          # would carry to an air-gapped one
-          curl -fL --retry 3 -o /tmp/reviewed.gguf \
-            "https://huggingface.co/bartowski/Qwen_Qwen3-0.6B-GGUF/resolve/main/Qwen_Qwen3-0.6B-Q8_0.gguf"
+          # would carry to an air-gapped one; cached across runs, and
+          # authenticated when the repository has an HF_TOKEN secret
+          mkdir -p gguf-cache
+          if [ ! -f gguf-cache/q8.gguf ]; then
+            AUTH=()
+            [ -n "${HF_TOKEN:-}" ] && AUTH=(-H "Authorization: Bearer $HF_TOKEN")
+            curl -fL --retry 3 "${AUTH[@]}" -o gguf-cache/q8.gguf \
+              "https://huggingface.co/bartowski/Qwen_Qwen3-0.6B-GGUF/resolve/main/Qwen_Qwen3-0.6B-Q8_0.gguf"
+          fi
+          cp gguf-cache/q8.gguf /tmp/reviewed.gguf
           sudo sibilla model import /tmp/reviewed.gguf | tee import.out
           grep -q "identified: hf.co/bartowski/Qwen_Qwen3-0.6B-GGUF:Q8_0" import.out \
             || { echo "import did not identify the artifact from its digest"; RC=1; }
@@ -1293,10 +1329,29 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y qemu-system-x86 qemu-utils xorriso sshpass jq
+      - name: Restore the model artifact cache
+        uses: actions/cache@v4
+        with:
+          path: gguf-cache
+          key: gguf-9acfc1e0-c159d151-v1
       - name: Build the payload with the real tool
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
+          # a cached artifact makes the build fully offline: the
+          # builder recognizes it by digest and skips even the name
+          # resolution on the HF API
+          mkdir -p payload/models
+          if [ -f gguf-cache/q4.gguf ]; then
+            cp gguf-cache/q4.gguf payload/models/Qwen_Qwen3-0.6B-Q4_K_M.gguf
+          fi
           bash ./tools/build-airgap-payload.sh --out payload \
             --model hf.co/bartowski/Qwen_Qwen3-0.6B-GGUF:Q4_K_M
+          # populate the cache for the next run
+          mkdir -p gguf-cache
+          if [ ! -f gguf-cache/q4.gguf ]; then
+            cp payload/models/*.gguf gguf-cache/q4.gguf || true
+          fi
           test -s payload/profile
           grep -q "MODEL=hf.co/bartowski/Qwen_Qwen3-0.6B-GGUF:Q4_K_M" payload/profile
           # the payload disk a user would prepare: ext4, the label is
