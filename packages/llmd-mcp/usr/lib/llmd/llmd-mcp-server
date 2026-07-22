@@ -19,6 +19,7 @@
 
 import json
 import os
+import socket
 import urllib.request
 import urllib.error
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -240,8 +241,32 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, response)
 
 
+def sd_notify_ready():
+    """Tell systemd the socket is bound (Type=notify in the unit).
+
+    Without this, `systemctl start` returns at exec time and the first
+    request through the gateway races the bind: caddy answers it with
+    an empty 502. Ten lines of stdlib buy a deterministic
+    `sibilla mcp enable`.
+    """
+    path = os.environ.get("NOTIFY_SOCKET", "")
+    if not path:
+        return
+    if path.startswith("@"):  # abstract namespace socket
+        path = "\0" + path[1:]
+    try:
+        s = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
+        s.sendto(b"READY=1", path)
+        s.close()
+    except OSError:
+        pass  # readiness is a nicety; serving is the job
+
+
 def main():
+    # the constructor binds the socket: after this line requests queue
+    # up in the kernel even before serve_forever runs
     server = ThreadingHTTPServer((ADDR, PORT), Handler)
+    sd_notify_ready()
     print("llmd-mcp-server listening on %s:%d" % (ADDR, PORT), flush=True)
     server.serve_forever()
 

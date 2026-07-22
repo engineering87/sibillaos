@@ -715,7 +715,14 @@ jobs:
               -H 'Accept: application/json, text/event-stream' \
               -d "$1"
           }
-          INIT=$(mcp '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"sibillaos-ci","version":"0"}}}')
+          # Type=notify makes enable block until the server listens;
+          # the short retry only covers a slow runner, not the product
+          INIT=""
+          for _ in 1 2 3; do
+            INIT=$(mcp '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"sibillaos-ci","version":"0"}}}')
+            echo "$INIT" | jq -e '.result' >/dev/null 2>&1 && break
+            sleep 2
+          done
           echo "$INIT" | jq -e '.result.protocolVersion == "2025-06-18" and .result.capabilities.tools != null' >/dev/null \
             || { echo "initialize failed: $INIT"; RC=1; }
           TOOLS=$(mcp '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}')

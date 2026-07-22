@@ -4,6 +4,10 @@ Documentation=https://github.com/engineering87/sibillaos
 After=network.target
 
 [Service]
+# notify: startup completes when the socket is bound, so
+# `systemctl start` (and sibilla mcp enable with it) returns only
+# once the server actually answers - no race for the first request
+Type=notify
 ExecStart=/usr/bin/python3 /usr/lib/llmd/llmd-mcp-server
 Restart=on-failure
 RestartSec=2
