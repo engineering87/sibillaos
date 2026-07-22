@@ -919,6 +919,45 @@ jobs:
           else
             echo "bench not asserted on this box:"; cat bench.err; true
           fi
+      - name: Record the authentic terminal demo
+        run: |
+          # the pipeline runs the real session anyway: record it, so
+          # the README demo is generated, not acted. The cast is the
+          # artifact of record; the svg render is a nicety.
+          sudo apt-get install -y asciinema >/dev/null
+          cat > /tmp/demo.sh <<'DEMO'
+          #!/usr/bin/env bash
+          set -e
+          say() { printf '\n\033[1;32m$\033[0m %s\n' "$*"; sleep 1; }
+          say "sibilla status"
+          sibilla status
+          sleep 1
+          say 'KEY=$(sudo cat /etc/llmd/apikey)  MODEL=$(sudo cat /etc/llmd/model)'
+          KEY=$(sudo cat /etc/llmd/apikey); MODEL=$(sudo cat /etc/llmd/model)
+          sleep 1
+          say 'curl -s localhost:8080/v1/chat/completions -H "Authorization: Bearer $KEY" -d ... | jq -r ".choices[0].message.content"'
+          curl -s -m 300 localhost:8080/v1/chat/completions \
+            -H "Authorization: Bearer $KEY" -H "Content-Type: application/json" \
+            -d "{\"model\": \"$MODEL\", \"messages\": [{\"role\": \"user\", \"content\": \"Reply with one short friendly sentence: hello!\"}], \"max_tokens\": 120}" \
+            | jq -r '.choices[0].message.content // .choices[0].message.reasoning'
+          sleep 2
+          DEMO
+          chmod +x /tmp/demo.sh
+          asciinema rec -c /tmp/demo.sh demo.cast
+          grep -q "chat/completions" demo.cast || { echo "demo did not run the completion"; exit 1; }
+          KEY=$(sudo cat /etc/llmd/apikey)
+          grep -q "$KEY" demo.cast && { echo "demo recording leaked the api key"; exit 1; } || true
+          (sudo npm install -g svg-term-cli >/dev/null 2>&1 \
+            && svg-term --in demo.cast --out demo.svg --window --no-cursor) \
+            || echo "svg render unavailable; the cast still ships"
+      - name: Upload the demo recording
+        uses: actions/upload-artifact@v4
+        with:
+          name: terminal-demo
+          path: |
+            demo.cast
+            demo.svg
+          if-no-files-found: error
       - name: Embeddings through the gateway
         run: |
           RC=0

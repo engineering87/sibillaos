@@ -112,6 +112,21 @@ The installer detects your hardware and makes the decisions a human would otherw
 
 The base install is a headless server; a desktop variant is on the roadmap.
 
+## Why not just Ollama?
+
+Fair question: `curl ollama.com/install.sh | sh` is one line, and SibillaOS ships that very engine. The difference is everything around it, and it matters the moment the machine serves anyone but you:
+
+| Plain engine install | SibillaOS |
+|---|---|
+| API open to whoever reaches the port | Mandatory bearer keys from the first second, per-client keys with instant revocation, TLS in one command |
+| You trust whatever the download gave you | Models verified against a GPG-signed catalog with per-file sha256 digests; a mismatched artifact is refused |
+| Configuration lives in your shell history | One declared profile file; `sibilla apply` converges any machine onto it, cloud-init included |
+| Needs the internet to exist | Installs and serves fully air-gapped from a verified USB payload |
+| Uninstall is a guess | `sibilla remove` takes out exactly what was installed and restores what it displaced, CI-verified |
+| You wire up agents, RAG and editors by hand | MCP tools, `/v1/embeddings` and editor configs served by the same box, behind the same keys |
+
+None of this is a criticism of Ollama, which does its job excellently - it is the job of turning an engine into an appliance someone can audit, replicate and walk away from. If you serve only yourself on localhost, plain Ollama is probably all you need. The moment there is a network, a team, a compliance question or a second machine, the difference is the product.
+
 ## Architecture at a glance
 
 <p align="center"><img src="branding/architecture.svg" alt="SibillaOS architecture: clients reach one authenticated gateway on port 8080; Ollama and vLLM stay on loopback; llmd-hw and llmfit pick the engine and model; Ubuntu 24.04 underneath" width="760"/></p>
