@@ -946,6 +946,31 @@ jobs:
           printf 'MODEL=hf.co/bartowski/Qwen_Qwen3-0.6B-GGUF:Q4_K_M\nMETRICS=off\n' > /tmp/profile
           sudo sibilla apply /tmp/profile >/dev/null
           exit "$RC"
+      - name: apply check verifies the machine and catches tampering
+        run: |
+          RC=0
+          # a clean machine must pass
+          sudo sibilla apply check | tee check.out || { echo "clean machine failed the check"; RC=1; }
+          grep -q "check passed" check.out || RC=1
+          # a hand-edited Caddyfile must be caught
+          echo "# hand edit" | sudo tee -a /etc/caddy/Caddyfile >/dev/null
+          if sudo sibilla apply check >tamper.out 2>&1; then
+            echo "tampered Caddyfile passed the check"; RC=1
+          else
+            grep -q "TAMPERED" tamper.out || { echo "unexpected finding:"; cat tamper.out; RC=1; }
+          fi
+          sudo /usr/lib/llmd/llmd-gateway-render >/dev/null
+          sudo systemctl restart caddy.service
+          # drift against a declared profile must be caught
+          printf 'METRICS=on\n' | sudo tee /etc/llmd/profile >/dev/null
+          if sudo sibilla apply check >drift.out 2>&1; then
+            echo "drifted machine passed the check"; RC=1
+          else
+            grep -q "DRIFT" drift.out || { echo "unexpected finding:"; cat drift.out; RC=1; }
+          fi
+          sudo rm -f /etc/llmd/profile
+          sudo sibilla apply check >/dev/null || { echo "machine did not return clean"; RC=1; }
+          exit "$RC"
       - name: Bench renders a shareable table
         run: |
           # same policy as inference on this runner: asserted when the

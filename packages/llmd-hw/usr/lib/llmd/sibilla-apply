@@ -20,6 +20,10 @@ usage() {
   cat <<USAGE
 usage: sibilla-apply [FILE]     reconcile onto FILE (default /etc/llmd/profile)
        sibilla-apply export     print the profile of the current state
+       sibilla-apply check      verify the machine: drift against the
+                                declared profile, hand-edited gateway
+                                config, served model digest, key file
+                                permissions; exits nonzero on findings
 
 Write the file by hand, with cloud-init, or from another machine's
 "sibilla apply export". On the SibillaOS images llmd-firstboot applies
@@ -176,8 +180,104 @@ cmd_apply() {
   echo "profile applied: $changes change(s), $kept already in place"
 }
 
+# The audit counterpart of apply: nothing is changed, everything the
+# machine claims about itself is verified. Four checks: the declared
+# profile still matches reality (drift), the live Caddyfile is exactly
+# what the renderer would produce (hand edits shown up), the served
+# model still matches its catalog digest, and the key files kept their
+# permissions. Exit nonzero on any finding, so it doubles as a probe
+# for cron or a fleet tool.
+cmd_check() {
+  [[ $EUID -eq 0 ]] || { echo "run as root (sudo)" >&2; exit 1; }
+  local rc=0
+  read_state
+
+  if [[ -s /etc/llmd/profile ]]; then
+    local MODEL="" TLS="" METRICS="" MCP="" WEBUI=""
+    # shellcheck disable=SC1091
+    . /etc/llmd/profile
+    local key want cur
+    for key in MODEL TLS METRICS MCP WEBUI; do
+      want="${!key}"
+      [[ -n "$want" ]] || continue
+      case "$key" in
+        MODEL)   cur="$CUR_MODEL" ;;
+        TLS)     cur="$CUR_TLS" ;;
+        METRICS) cur="$CUR_METRICS" ;;
+        MCP)     cur="$CUR_MCP" ;;
+        WEBUI)   cur="$CUR_WEBUI" ;;
+      esac
+      if [[ "$want" == "$cur" ]]; then
+        echo "profile:  $key ok ($cur)"
+      else
+        echo "DRIFT:    $key declared '$want' but the machine has '$cur'"
+        rc=1
+      fi
+    done
+  else
+    echo "profile:  none declared (imperative configuration, drift not checkable)"
+  fi
+
+  # the gateway config must be exactly what the renderer produces from
+  # the current settings; anything else is a hand edit that the next
+  # sibilla tls/metrics/mcp run would silently overwrite
+  if [[ -f /etc/caddy/Caddyfile ]]; then
+    local rendered
+    rendered=$(mktemp)
+    if LLMD_CADDYFILE="$rendered" /usr/lib/llmd/llmd-gateway-render >/dev/null 2>&1 \
+        && diff -q "$rendered" /etc/caddy/Caddyfile >/dev/null 2>&1; then
+      echo "gateway:  Caddyfile matches its render"
+    else
+      echo "TAMPERED: Caddyfile differs from what llmd-gateway-render produces"
+      echo "          (hand edit? it will be lost on the next render; re-render with: sudo sibilla tls status)"
+      rc=1
+    fi
+    rm -f "$rendered"
+  else
+    echo "gateway:  no Caddyfile (gateway not set up)"
+  fi
+
+  if [[ -n "$CUR_MODEL" ]]; then
+    local vrc=0
+    /usr/lib/llmd/llmd-model-verify "$CUR_MODEL" >/dev/null 2>&1 || vrc=$?
+    case "$vrc" in
+      0) echo "model:    digest verified ($CUR_MODEL)" ;;
+      1) echo "MISMATCH: served model does not match its catalog digest ($CUR_MODEL)"; rc=1 ;;
+      *) echo "model:    no digest recorded for $CUR_MODEL, integrity not checkable" ;;
+    esac
+  fi
+
+  local p
+  if [[ -f /etc/llmd/apikey ]]; then
+    p=$(stat -c %a /etc/llmd/apikey)
+    if [[ "$p" == "600" ]]; then
+      echo "keys:     /etc/llmd/apikey is 600"
+    else
+      echo "EXPOSED:  /etc/llmd/apikey has mode $p (expected 600)"
+      rc=1
+    fi
+  fi
+  if [[ -d /etc/llmd/apikeys.d ]]; then
+    p=$(stat -c %a /etc/llmd/apikeys.d)
+    if [[ "$p" == "700" ]]; then
+      echo "keys:     /etc/llmd/apikeys.d is 700"
+    else
+      echo "EXPOSED:  /etc/llmd/apikeys.d has mode $p (expected 700)"
+      rc=1
+    fi
+  fi
+
+  if [[ "$rc" -eq 0 ]]; then
+    echo "check passed: the machine matches its declarations"
+  else
+    echo "check FAILED: findings above" >&2
+  fi
+  exit "$rc"
+}
+
 case "${1:-}" in
   export)      cmd_export ;;
+  check)       cmd_check ;;
   -h|--help)   usage ;;
   *)           cmd_apply "${1:-/etc/llmd/profile}" ;;
 esac

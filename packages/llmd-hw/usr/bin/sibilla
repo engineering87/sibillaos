@@ -17,7 +17,8 @@ usage: sibilla COMMAND [ARGS]
   webui ...      enable or disable the Open WebUI chat interface
   mcp ...        expose the local model to MCP clients, on or off
   apply          reconcile the machine onto a declared profile file
-                 (apply export prints the current state as a profile)
+                 (export prints the current state; check audits drift,
+                 hand edits, model digest and key permissions)
   connect        print client configuration for editors and agents
                  (--write places Continue and aider configs; --env,
                  --mcp and --snippet emit framework-ready formats)
