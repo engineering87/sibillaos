@@ -1050,6 +1050,27 @@ jobs:
             echo "the selector lists the embedding model as a chat candidate"; RC=1
           fi
           exit "$RC"
+      - name: The RAG quickstart runs end to end
+        run: |
+          RC=0
+          # exactly the flow the docs give: env from the machine, run
+          sudo sibilla connect --env > sibilla.env
+          set -a; . ./sibilla.env; set +a
+          python3 examples/rag-quickstart.py "What port does SibillaOS serve on?" | tee rag.out || RC=1
+          # retrieval is deterministic (embeddings rank the SibillaOS
+          # doc first for that question); generation follows the usual
+          # best-effort policy on this runner
+          grep -q "retrieved: SibillaOS serves an OpenAI-compatible API on port 8080" rag.out \
+            || { echo "retrieval picked the wrong document"; RC=1; }
+          if grep -q "answer:" rag.out && ! grep -q "answer:    $" rag.out; then
+            echo "RAG ANSWER OK"
+          else
+            echo "generation not asserted on this box"
+          fi
+          KEY=$(sudo cat /etc/llmd/apikey)
+          grep -q "$KEY" rag.out && { echo "the example echoed the api key"; RC=1; } || true
+          rm -f sibilla.env
+          exit "$RC"
       - name: Doctor, connect --write, then a clean removal
         run: |
           RC=0
