@@ -1107,6 +1107,25 @@ jobs:
             || { echo "--snippet node output incomplete"; RC=1; }
           # an unknown flag must fail, not print a kit with the key
           sudo sibilla connect --snippet rust >/dev/null 2>&1 && { echo "bad snippet lang accepted"; RC=1; } || true
+          # the workstation kit: the generated script must be keyless,
+          # prompt on stdin, refuse a bad key, and write on a good one
+          sudo sibilla connect --remote > remote.sh || RC=1
+          grep -q "$KEY" remote.sh && { echo "the remote script embeds the api key"; RC=1; } || true
+          WSHOME=$(mktemp -d)
+          if echo "wrong-key-123" | HOME="$WSHOME" bash remote.sh >bad.out 2>&1; then
+            echo "the remote script accepted a bad key"; RC=1
+          else
+            grep -q "did not accept the key" bad.out || { echo "unexpected refusal:"; cat bad.out; RC=1; }
+            [ ! -f "$WSHOME/.continue/config.yaml" ] || { echo "wrote files despite bad key"; RC=1; }
+          fi
+          echo "$KEY" | HOME="$WSHOME" bash remote.sh "$WSHOME/myproject" | tee remote.out || RC=1
+          grep -q "authenticated:" remote.out || { echo "remote kit did not authenticate"; RC=1; }
+          grep -q "apiKey: $KEY" "$WSHOME/.continue/config.yaml" || { echo "continue config not written"; RC=1; }
+          grep -q "openai-api-key: $KEY" "$WSHOME/.aider.conf.yml" || { echo "aider config not written"; RC=1; }
+          grep -q "OPENAI_API_KEY=$KEY" "$WSHOME/myproject/.env" || { echo "project .env not written"; RC=1; }
+          for f in "$WSHOME/.continue/config.yaml" "$WSHOME/.aider.conf.yml" "$WSHOME/myproject/.env"; do
+            [ "$(stat -c %a "$f")" = "600" ] || { echo "$f has loose permissions"; RC=1; }
+          done
           # remove: a full, verifiable teardown
           sudo sibilla remove --yes || RC=1
           dpkg -l 2>/dev/null | grep -E '^ii +llmd' && { echo "llmd packages survived"; RC=1; } || true
