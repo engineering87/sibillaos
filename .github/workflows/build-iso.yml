@@ -1386,6 +1386,10 @@ jobs:
       - name: Deploy and probe
         run: |
           IMG=$(ls cloud-img/*.qcow2 | head -1)
+          # transit integrity: the image is metadata-checked at build,
+          # so a failure here means the artifact round trip broke it
+          qemu-img check "$IMG" >/dev/null \
+            || { echo "downloaded image is corrupt (artifact transit)"; exit 1; }
           if [ "${{ matrix.arch }}" = "arm64" ]; then
             QEMU=qemu-system-aarch64
             KVM="-machine virt -cpu max -bios /usr/share/AAVMF/AAVMF_CODE.fd"
@@ -1552,6 +1556,10 @@ jobs:
       - name: Deploy with no outbound network
         run: |
           IMG=$(ls cloud-img/*.qcow2 | head -1)
+          # transit integrity: the image is metadata-checked at build,
+          # so a failure here means the artifact round trip broke it
+          qemu-img check "$IMG" >/dev/null \
+            || { echo "downloaded image is corrupt (artifact transit)"; exit 1; }
           KVM=""
           if [ -e /dev/kvm ]; then
             sudo chmod 666 /dev/kvm
