@@ -570,6 +570,10 @@ jobs:
                   || { echo "rate limit rule not loaded in the kernel"; RC=1; }
                 $SSH "grep -q 'Unattended-Upgrade .1.' /etc/apt/apt.conf.d/51sibilla-upgrades" \
                   || { echo "unattended upgrades config missing"; RC=1; }
+                # no cloud routing on the engine, ever
+                $SSH "systemctl show ollama.service -p Environment" > ollama-env.out || RC=1
+                grep -q "OLLAMA_NO_CLOUD=1" ollama-env.out \
+                  || { echo "cloud routing is not disabled on the engine"; RC=1; }
                 for u in ollama caddy; do
                   $SSH "systemctl show -p NoNewPrivileges $u.service" | grep -q "=yes" \
                     || { echo "$u.service lost NoNewPrivileges"; RC=1; }
@@ -760,6 +764,10 @@ jobs:
           else
             echo "inference not asserted on this box:"; echo "$RESP" | head -c 300; echo
           fi
+          # the engine must never route to ollama.com's cloud: the
+          # hardening drop-in pins OLLAMA_NO_CLOUD=1 on every install
+          sudo systemctl show ollama.service -p Environment | grep -q "OLLAMA_NO_CLOUD=1" \
+            || { echo "cloud routing is not disabled on the engine"; RC=1; }
           # good-guest behavior: setup must not act like an appliance
           [ ! -e /etc/llmd/appliance ] || { echo "setup wrongly created the appliance marker"; RC=1; }
           if command -v ufw >/dev/null 2>&1; then

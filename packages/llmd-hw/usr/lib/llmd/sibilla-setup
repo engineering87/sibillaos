@@ -10,7 +10,7 @@
 # source on its own.
 set -euo pipefail
 
-OLLAMA_VERSION="0.31.1"
+OLLAMA_VERSION="0.32.1"
 MODEL=""
 ENGINE=""
 
