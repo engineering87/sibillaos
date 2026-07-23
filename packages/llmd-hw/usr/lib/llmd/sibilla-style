@@ -1,0 +1,44 @@
+# shellcheck shell=bash
+# sibilla-style: shared output styling for the sibilla commands.
+# Sourced, not executed. Two hard rules make it safe:
+#   1. color only when stdout is a TTY and NO_COLOR is unset, so
+#      pipes, redirects and CI get byte-identical plain text and
+#      every existing grep keeps working;
+#   2. ASCII-only glyphs ([ok], [!!], [--]) - unlike color, they
+#      survive a copy-paste into an issue.
+# Palette mirrors the brand: emerald values, dim labels, gold warns.
+
+if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
+  S_EM=$'\033[38;5;78m'      # emerald, the brand green
+  S_VAL=$'\033[38;5;150m'    # light green for values
+  S_DIM=$'\033[2m'           # labels and rules
+  S_WARN=$'\033[38;5;179m'   # gold for warnings
+  S_ERR=$'\033[31m'          # red for findings
+  S_RST=$'\033[0m'
+else
+  # shellcheck disable=SC2034  # S_ERR is part of the public set for consumers
+  S_EM="" S_VAL="" S_DIM="" S_WARN="" S_ERR="" S_RST=""
+fi
+
+# s_hdr COMMAND: the oracle header for the long-form commands
+s_hdr() {
+  local ver
+  ver=$(dpkg-query -W -f='${Version}' llmd-hw 2>/dev/null || echo source)
+  printf '%s.:: sibilla ::.%s %s%s - SibillaOS %s - %s%s\n' \
+    "$S_EM" "$S_RST" "$S_DIM" "$1" "$ver" "$(hostname)" "$S_RST"
+  s_rule
+}
+
+s_rule() { printf '%s--------------------------------------------------%s\n' "$S_DIM" "$S_RST"; }
+
+# inline status glyphs
+s_ok()   { printf '%s[ok]%s' "$S_EM" "$S_RST"; }
+s_warn() { printf '%s[!!]%s' "$S_WARN" "$S_RST"; }
+s_off()  { printf '%s[--]%s' "$S_DIM" "$S_RST"; }
+
+# s_kv LABEL VALUE [glyph]: aligned, dim label, emerald value
+s_kv() {
+  printf '%s%-10s%s %s%s%s' "$S_DIM" "$1" "$S_RST" "$S_VAL" "$2" "$S_RST"
+  if [[ -n "${3:-}" ]]; then printf ' %s' "$3"; fi
+  printf '\n'
+}

@@ -35,8 +35,10 @@ Depends: $deps
 Maintainer: SibillaOS contributors
 Description: $desc
 EOF
-  # executable bit for the scripts
-  find "$staging/usr/lib/llmd" "$staging/usr/bin" -type f -exec chmod 755 {} + 2>/dev/null || true
+  # executable bit for the scripts (update-motd.d scripts must be
+  # executable or pam_motd silently skips them)
+  find "$staging/usr/lib/llmd" "$staging/usr/bin" "$staging/etc/update-motd.d" \
+    -type f -exec chmod 755 {} + 2>/dev/null || true
   # a local py_compile (the lint job runs one) must never ship
   find "$staging" -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
   # the curated model catalog ships with llmd-hw, with its detached

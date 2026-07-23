@@ -16,6 +16,9 @@
 # does nothing at all.
 set -euo pipefail
 
+# shellcheck source=/dev/null
+. /usr/lib/llmd/sibilla-style
+
 usage() {
   cat <<USAGE
 usage: sibilla-apply [FILE]     reconcile onto FILE (default /etc/llmd/profile)
@@ -190,6 +193,7 @@ cmd_apply() {
 cmd_check() {
   [[ $EUID -eq 0 ]] || { echo "run as root (sudo)" >&2; exit 1; }
   local rc=0
+  s_hdr check
   read_state
 
   if [[ -s /etc/llmd/profile ]]; then
@@ -228,7 +232,7 @@ cmd_check() {
         && diff -q "$rendered" /etc/caddy/Caddyfile >/dev/null 2>&1; then
       echo "gateway:  Caddyfile matches its render"
     else
-      echo "TAMPERED: Caddyfile differs from what llmd-gateway-render produces"
+      echo "${S_ERR}TAMPERED:${S_RST} Caddyfile differs from what llmd-gateway-render produces"
       echo "          (hand edit? it will be lost on the next render; re-render with: sudo sibilla tls status)"
       rc=1
     fi
@@ -242,7 +246,7 @@ cmd_check() {
     /usr/lib/llmd/llmd-model-verify "$CUR_MODEL" >/dev/null 2>&1 || vrc=$?
     case "$vrc" in
       0) echo "model:    digest verified ($CUR_MODEL)" ;;
-      1) echo "MISMATCH: served model does not match its catalog digest ($CUR_MODEL)"; rc=1 ;;
+      1) echo "${S_ERR}MISMATCH:${S_RST} served model does not match its catalog digest ($CUR_MODEL)"; rc=1 ;;
       *) echo "model:    no digest recorded for $CUR_MODEL, integrity not checkable" ;;
     esac
   fi
@@ -253,7 +257,7 @@ cmd_check() {
     if [[ "$p" == "600" ]]; then
       echo "keys:     /etc/llmd/apikey is 600"
     else
-      echo "EXPOSED:  /etc/llmd/apikey has mode $p (expected 600)"
+      echo "${S_ERR}EXPOSED:${S_RST}  /etc/llmd/apikey has mode $p (expected 600)"
       rc=1
     fi
   fi
@@ -262,15 +266,15 @@ cmd_check() {
     if [[ "$p" == "700" ]]; then
       echo "keys:     /etc/llmd/apikeys.d is 700"
     else
-      echo "EXPOSED:  /etc/llmd/apikeys.d has mode $p (expected 700)"
+      echo "${S_ERR}EXPOSED:${S_RST}  /etc/llmd/apikeys.d has mode $p (expected 700)"
       rc=1
     fi
   fi
 
   if [[ "$rc" -eq 0 ]]; then
-    echo "check passed: the machine matches its declarations"
+    echo "${S_EM}check passed:${S_RST} the machine matches its declarations"
   else
-    echo "check FAILED: findings above" >&2
+    echo "${S_ERR}check FAILED:${S_RST} findings above" >&2
   fi
   exit "$rc"
 }

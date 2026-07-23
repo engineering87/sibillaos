@@ -4,6 +4,10 @@
 # used as a machine check as well as a human summary.
 set -euo pipefail
 
+# shellcheck source=/dev/null
+. /usr/lib/llmd/sibilla-style
+s_hdr status
+
 ENGINE=$(cat /etc/llmd/engine 2>/dev/null || echo ollama)
 MODEL=$(cat /etc/llmd/model 2>/dev/null || true)
 FAIL=0
@@ -13,8 +17,12 @@ unit=ollama.service
 [[ "$ENGINE" == "vllm" ]] && unit=vllm.service
 engine_state=$(systemctl is-active "$unit" 2>/dev/null || true)
 [[ "$engine_state" == "active" ]] || FAIL=1
-echo "engine:    $ENGINE ($engine_state)"
-echo "model:     ${MODEL:-none selected}"
+if [[ "$engine_state" == "active" ]]; then
+  s_kv "engine:" "$ENGINE ($engine_state)" "$(s_ok)"
+else
+  s_kv "engine:" "$ENGINE ($engine_state)" "$(s_warn)"
+fi
+s_kv "model:" "${MODEL:-none selected}"
 
 # served models, straight from the engine on loopback
 case "$ENGINE" in
@@ -23,10 +31,10 @@ case "$ENGINE" in
 esac
 count=$(echo "$mjson" | jq '.data | length' 2>/dev/null) || count=""
 if [[ -n "$count" ]]; then
-  echo "served:    $count model(s)"
+  s_kv "served:" "$count model(s)"
   echo "$mjson" | jq -r '.data[].id' 2>/dev/null | sed 's/^/           - /'
 else
-  echo "served:    engine API not reachable"
+  s_kv "served:" "engine API not reachable" "$(s_warn)"
   FAIL=1
 fi
 
@@ -35,7 +43,7 @@ store=/var/lib/llmd/models
 if [[ -d "$store" ]]; then
   used=$(du -sh "$store" 2>/dev/null | cut -f1)
   free=$(df -h --output=avail "$store" 2>/dev/null | tail -1 | tr -d ' ')
-  echo "disk:      $used in $store ($free free on the filesystem)"
+  s_kv "disk:" "$used in $store ($free free on the filesystem)"
 fi
 
 # GPU utilization when present
@@ -53,7 +61,7 @@ elif lspci 2>/dev/null | grep -qi 'VGA.*AMD\|Display.*AMD'; then
     echo "gpu:       ROCm runtime missing, CPU inference (docs/validation/gpu.md)"
   fi
 else
-  echo "gpu:       none detected (CPU inference)"
+  s_kv "gpu:" "none detected (CPU inference)" "$(s_off)"
 fi
 
 # gateway reachability, honoring the configured mode
@@ -79,9 +87,9 @@ case "$MODE" in
     ;;
 esac
 if [[ "$code" == "401" || "$code" == "200" ]]; then
-  echo "gateway:   $endpoint up, mode $MODE (key in /etc/llmd/apikey)"
+  s_kv "gateway:" "$endpoint up, mode $MODE (key in /etc/llmd/apikey)" "$(s_ok)"
 else
-  echo "gateway:   $endpoint NOT responding (http ${code:-000})"
+  s_kv "gateway:" "$endpoint NOT responding (http ${code:-000})" "$(s_warn)"
   FAIL=1
 fi
 

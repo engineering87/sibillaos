@@ -8,9 +8,13 @@
 # on every start, so quoted service logs would leak them.
 set -uo pipefail
 
+# shellcheck source=/dev/null
+. /usr/lib/llmd/sibilla-style
+
 line() { echo "----------------------------------------------------------"; }
 
 report() {
+s_hdr doctor
 echo "SibillaOS doctor report"
 echo "generated: $(date -u +%Y-%m-%dT%H:%M:%SZ) (no secrets included)"
 line

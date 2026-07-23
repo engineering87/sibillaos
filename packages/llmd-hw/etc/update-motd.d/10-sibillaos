@@ -1,0 +1,27 @@
+#!/bin/sh
+# SibillaOS login banner. Appliance images only: on a machine set up
+# with `sibilla setup` we are a guest, and guests do not redecorate
+# the hallway - without the appliance marker this prints nothing.
+# ANSI is embedded on purpose: pam_motd writes the generated text to
+# the login terminal, where it renders; there is no tty to probe at
+# generation time.
+[ -e /etc/llmd/appliance ] || exit 0
+
+EM="$(printf '\033[38;5;78m')"
+VAL="$(printf '\033[38;5;150m')"
+DIM="$(printf '\033[2m')"
+RST="$(printf '\033[0m')"
+
+VER=$(dpkg-query -W -f='${Version}' llmd-hw 2>/dev/null || echo "")
+MODEL=$(cat /etc/llmd/model 2>/dev/null || echo "none selected")
+
+printf '%s\n' \
+"${EM}        .:::::.${RST}" \
+"${EM}      .:'  |  ':.${RST}     SibillaOS ${VER}${DIM} - the machine is the oracle${RST}" \
+"${EM}     ::    |    ::${RST}${DIM}    OpenAI-compatible API on :8080, auth required${RST}" \
+"${EM}      ':.  |  .:'${RST}" \
+"${EM}        ':::::'${RST}" \
+"" \
+"${DIM}  model:${RST} ${VAL}${MODEL}${RST}" \
+"${DIM}  start here:${RST} ${VAL}sibilla status${RST}${DIM} | ${RST}${VAL}sibilla doctor${RST}${DIM} | ${RST}${VAL}sibilla bench${RST}" \
+""

@@ -6,6 +6,10 @@
 # what a client of this machine would experience, auth included.
 set -euo pipefail
 
+# shellcheck source=/dev/null
+. /usr/lib/llmd/sibilla-style
+s_hdr bench >&2
+
 [[ $EUID -eq 0 ]] || { echo "run as root (sudo): the API key lives in /etc/llmd/apikey" >&2; exit 1; }
 
 KEY=$(cat /etc/llmd/apikey 2>/dev/null || true)

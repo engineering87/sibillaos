@@ -24,6 +24,7 @@ jobs:
             packages/llmd-firstboot/usr/lib/llmd/* \
             packages/llmd-gateway/usr/lib/llmd/* packages/llmd-gateway/usr/bin/* \
             packages/llmd-webui/usr/bin/* packages/llmd-mcp/usr/bin/* \
+            packages/llmd-hw/etc/update-motd.d/* \
             tools/*.sh
           # the MCP server is python: syntax-check it here too
           python3 -m py_compile packages/llmd-mcp/usr/lib/llmd/llmd-mcp-server
@@ -608,6 +609,10 @@ jobs:
                 $SSH "systemctl show ollama.service -p Environment" > ollama-env.out || RC=1
                 grep -q "OLLAMA_NO_CLOUD=1" ollama-env.out \
                   || { echo "cloud routing is not disabled on the engine"; RC=1; }
+                # the login banner: present on the image, with the real model
+                $SSH "echo sibilla | sudo -S /etc/update-motd.d/10-sibillaos" > motd.out || RC=1
+                grep -q "SibillaOS" motd.out || { echo "motd banner missing on the image"; RC=1; }
+                grep -q "Qwen_Qwen3-0.6B" motd.out || { echo "motd banner does not show the served model"; RC=1; }
                 for u in ollama caddy; do
                   $SSH "systemctl show -p NoNewPrivileges $u.service" | grep -q "=yes" \
                     || { echo "$u.service lost NoNewPrivileges"; RC=1; }
@@ -811,6 +816,10 @@ jobs:
             grep -q '^Enabled: no' /etc/apt/sources.list.d/sibillaos.sources \
               || { echo "setup flipped the apt source on"; RC=1; }
           fi
+          # a guest never redecorates the login: without the appliance
+          # marker the motd script must print nothing at all
+          [ -z "$(sudo /etc/update-motd.d/10-sibillaos)" ] \
+            || { echo "motd banner leaked onto a guest install"; RC=1; }
           echo "--- sibilla status ---"
           sibilla status || RC=1
           exit "$RC"
