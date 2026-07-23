@@ -84,6 +84,15 @@ BLOCK
 BLOCK
   fi
   echo "	route {"
+  # the machine speaks with its own name, and the underlying proxy
+  # is one less fingerprint to hand out; defer applies the header
+  # after proxied responses too
+  cat <<'BLOCK'
+		header {
+			Server "SibillaOS"
+			defer
+		}
+BLOCK
   echo "		respond @unauthorized 401"
   if [[ "$METRICS" == "on" ]]; then
     echo "		metrics @gwmetrics"

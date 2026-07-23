@@ -793,6 +793,9 @@ jobs:
           acode=$(curl -s -o /dev/null -w '%{http_code}' \
             -H "Authorization: Bearer $KEY" http://127.0.0.1:8080/v1/models || true)
           [ "$acode" = "200" ] || { echo "authenticated models call was $acode"; RC=1; }
+          # the machine speaks with its own name: no proxy fingerprint
+          curl -s -I -m 10 http://127.0.0.1:8080/v1/models | grep -qi '^server: SibillaOS' \
+            || { echo "gateway does not identify as SibillaOS"; RC=1; }
           # inference is best-effort here (native runner CPU); assert it
           # when it works, report otherwise, do not fail the guest test
           RESP=$(curl -s -m 300 http://127.0.0.1:8080/v1/chat/completions \

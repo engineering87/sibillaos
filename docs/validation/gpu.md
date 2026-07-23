@@ -52,10 +52,12 @@ Any SibillaOS install: ISO, cloud image, or `apt install llmd` plus
 
 ## What to report
 
-The issue template is simple: hardware (GPU, VRAM, driver version),
-install path (ISO / cloud / apt), the detect JSON, the
-inference-compute journal line, the bench table, anything that
-surprised you. Negative results are as valuable as positive ones.
+Open a "GPU validation report" issue: the repository ships a
+structured form (.github/ISSUE_TEMPLATE/gpu-validation.yml) with a
+field for each item above - hardware, install path, detect JSON,
+inference-compute journal line, bench table, the APU override value
+when one was needed, the doctor report. Negative results are as
+valuable as positive ones.
 
 ## Result record
 

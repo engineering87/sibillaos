@@ -77,6 +77,7 @@ Ideas that look promising but need a use case or a champion:
 
 - Speech endpoints: whisper.cpp for transcription behind the same gateway.
 - ds4 (DwarfStar) as a third engine for high-memory unified-RAM machines (DGX Spark, Strix Halo, 96 GB and up): a narrow native engine for DeepSeek V4 Flash/PRO with an HTTP API and SSD streaming for models larger than RAM. Philosophically close to this project, but explicitly beta today and with a deliberately volatile model-support policy (upstream may drop a model when a better one appears), which conflicts with our pinning discipline. Revisit when it stabilizes; track upstream at github.com/antirez/ds4.
+- Man pages for the sibilla commands: the professionalism of a real distro, noted during the v0.7 polish pass and deferred as effort disproportionate to that cycle.
 - LDAP or OIDC authentication on the gateway for team deployments.
 - A Debian stable base variant for shops that prefer it over Ubuntu.
 
