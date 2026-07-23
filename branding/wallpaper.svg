@@ -1,68 +1,23 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 3840 2160" width="3840" height="2160">
+  <!-- SibillaOS wallpaper: "quiet corner". Near-black emerald field,
+       the oracle eye small in the lower right with its rune orbit.
+       Identity without intrusion: desktops live on top of this. -->
   <defs>
-    <radialGradient id="forest" cx="0.62" cy="0.42" r="1.1">
-      <stop offset="0" stop-color="#14402a"/>
-      <stop offset="0.45" stop-color="#0e2a1c"/>
-      <stop offset="1" stop-color="#05130c"/>
-    </radialGradient>
-    <radialGradient id="halo" cx="0.5" cy="0.5" r="0.5">
-      <stop offset="0" stop-color="#3ddc84" stop-opacity="0.14"/>
-      <stop offset="1" stop-color="#3ddc84" stop-opacity="0"/>
+    <radialGradient id="vign" cx="0.82" cy="0.78" r="0.9">
+      <stop offset="0" stop-color="#0a1f14"/>
+      <stop offset="0.45" stop-color="#060f0a"/>
+      <stop offset="1" stop-color="#030704"/>
     </radialGradient>
   </defs>
 
-  <rect width="3840" height="2160" fill="url(#forest)"/>
+  <rect width="3840" height="2160" fill="url(#vign)"/>
 
-  <!-- constellation: subtle nodes and links -->
-  <g stroke="#2e9e63" stroke-width="2" opacity="0.3">
-    <path d="M320 380 L720 300 L1080 520" fill="none"/>
-    <path d="M520 1720 L900 1560 L1240 1780" fill="none"/>
-    <path d="M3100 360 L3420 520 L3660 400" fill="none"/>
-    <path d="M2900 1800 L3260 1680 L3560 1860" fill="none"/>
-    <path d="M180 1000 L480 1120" fill="none"/>
-    <path d="M3500 1100 L3760 980" fill="none"/>
-  </g>
-  <g fill="#a8e063" opacity="0.45">
-    <circle cx="320" cy="380" r="6"/><circle cx="720" cy="300" r="8"/><circle cx="1080" cy="520" r="5"/>
-    <circle cx="520" cy="1720" r="6"/><circle cx="900" cy="1560" r="8"/><circle cx="1240" cy="1780" r="5"/>
-    <circle cx="3100" cy="360" r="6"/><circle cx="3420" cy="520" r="8"/><circle cx="3660" cy="400" r="5"/>
-    <circle cx="2900" cy="1800" r="6"/><circle cx="3260" cy="1680" r="8"/><circle cx="3560" cy="1860" r="5"/>
-    <circle cx="180" cy="1000" r="5"/><circle cx="480" cy="1120" r="6"/>
-    <circle cx="3500" cy="1100" r="6"/><circle cx="3760" cy="980" r="5"/>
-    <circle cx="1500" cy="260" r="4"/><circle cx="2300" cy="200" r="5"/><circle cx="2700" cy="640" r="4"/>
-    <circle cx="1300" cy="1950" r="4"/><circle cx="2500" cy="2000" r="5"/><circle cx="750" cy="850" r="4"/>
-  </g>
-
-  <!-- halo behind the mark -->
-  <circle cx="2380" cy="905" r="720" fill="url(#halo)"/>
-
-  <!-- faint concentric rings -->
-  <g fill="none" stroke="#2e9e63" stroke-opacity="0.25">
-    <circle cx="2380" cy="905" r="560" stroke-width="2"/>
-    <circle cx="2380" cy="905" r="640" stroke-width="1.5" stroke-dasharray="4 14"/>
-    <circle cx="2380" cy="905" r="470" stroke-width="1.5" stroke-dasharray="2 10"/>
-  </g>
-
-  <!-- the mark: serpent eye with orbiting runes -->
-  <g transform="translate(1765.6 290.6) scale(2.4)">
-    <g fill="#2e9e63">
-      <path d="M256 84 L272 108 L256 132 L240 108 Z"/>
-      <path d="M256 380 L272 404 L256 428 L240 404 Z"/>
-      <path d="M96 160 L114 176 L96 192 L78 176 Z"/>
-      <path d="M416 160 L434 176 L416 192 L398 176 Z"/>
-      <path d="M96 320 L114 336 L96 352 L78 336 Z"/>
-      <path d="M416 320 L434 336 L416 352 L398 336 Z"/>
-    </g>
-    <path d="M76 256 Q 256 128 436 256 Q 256 384 76 256 Z"
-          fill="#05130c" fill-opacity="0.65" stroke="#3ddc84" stroke-width="20"/>
-    <circle cx="256" cy="256" r="66" fill="#a8e063"/>
-    <path d="M256 200 Q 272 256 256 312 Q 240 256 256 200 Z" fill="#05130c"/>
-    <circle cx="256" cy="228" r="8" fill="#f5c542"/>
-  </g>
-
-  <!-- wordmark -->
-  <g font-family="Ubuntu, DejaVu Sans, sans-serif">
-    <text x="240" y="1975" font-size="120" font-weight="bold" fill="#eaf7ee" letter-spacing="6">SibillaOS</text>
-    <text x="244" y="2040" font-size="44" fill="#3ddc84" letter-spacing="10">THE ORACLE ON YOUR HARDWARE</text>
+  <g transform="translate(3156,1698)">
+    <circle r="258" fill="none" stroke="#2e9e63" stroke-opacity="0.22" stroke-width="3" stroke-dasharray="6 24"/>
+    <path d="M -198 0 Q 0 -144 198 0 Q 0 144 -198 0 Z" fill="#04120a" stroke="#3ddc84" stroke-opacity="0.75" stroke-width="5.4"/>
+    <circle r="72" fill="#0a1f14" stroke="#3ddc84" stroke-opacity="0.8" stroke-width="4.2"/>
+    <ellipse rx="16.5" ry="60" fill="#020805"/>
+    <path d="M 0 -312 l 15 24 -15 24 -15 -24 Z" fill="#2e9e63" opacity="0.4"/>
+    <path d="M 0 264 l 15 24 -15 24 -15 -24 Z" fill="#2e9e63" opacity="0.4"/>
   </g>
 </svg>

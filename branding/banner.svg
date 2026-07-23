@@ -40,7 +40,6 @@
           fill="#05130c" stroke="#3ddc84" stroke-width="20"/>
     <circle cx="256" cy="256" r="66" fill="#a8e063"/>
     <path d="M256 200 Q 272 256 256 312 Q 240 256 256 200 Z" fill="#05130c"/>
-    <circle cx="256" cy="228" r="8" fill="#f5c542"/>
   </g>
 
   <!-- wordmark -->
