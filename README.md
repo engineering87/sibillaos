@@ -162,6 +162,13 @@ docs/         architecture document
 
 Working proof of concept: on every push, CI builds the ISO, boots it under BIOS and UEFI, runs the install end to end and gets a real chat completion through the gateway on first boot. Engine versions are pinned in the installer. Release ISOs walk you through the standard installer screens and you choose your own credentials; only the fully unattended CI images use a fixed test user. The design and decision log live in [docs/architecture.md](docs/architecture.md); where the project is going is in [ROADMAP.md](ROADMAP.md).
 
+## Call for GPU testers
+
+CI proves everything except silicon: if you own an NVIDIA card, an AMD
+card or a Ryzen APU, thirty minutes and [docs/validation/gpu.md](docs/validation/gpu.md)
+turn your machine into exactly the data this project needs. `sibilla
+bench` and `sibilla doctor` produce paste-ready, secret-free results.
+
 ## Contributing
 
 Contributions are welcome. [CONTRIBUTING.md](CONTRIBUTING.md) covers the build setup, the CI test suite your change has to pass, and the criteria for model catalog additions.

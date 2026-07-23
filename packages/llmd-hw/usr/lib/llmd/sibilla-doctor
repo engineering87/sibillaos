@@ -24,6 +24,14 @@ echo "memory:    $(free -h 2>/dev/null | awk '/^Mem:/{print $2}')"
 if command -v nvidia-smi >/dev/null 2>&1; then
   nvidia-smi --query-gpu=name,memory.total --format=csv,noheader 2>/dev/null \
     | sed 's/^/gpu:       /' || echo "gpu:       nvidia-smi present but not responding"
+elif lspci 2>/dev/null | grep -qi 'VGA.*AMD\|Display.*AMD'; then
+  lspci 2>/dev/null | grep -i 'VGA.*AMD\|Display.*AMD' | head -2 \
+    | sed 's/^[0-9a-f:.]* [^:]*: /gpu:       /'
+  if [[ -d /usr/local/lib/ollama/rocm ]]; then
+    echo "gpu:       ollama ROCm runtime present"
+  else
+    echo "gpu:       ollama ROCm runtime MISSING (CPU inference; see docs/validation/gpu.md)"
+  fi
 else
   echo "gpu:       none detected"
 fi

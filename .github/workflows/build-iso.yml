@@ -78,6 +78,40 @@ jobs:
           awk '/route \{/{r=1} /respond @unauthorized/{if(r)a=NR} /reverse_proxy \/mcp/{m=NR}
                END{exit !(a && m && m > a)}' "$LLMD_CADDYFILE" \
             || { echo "MCP route is not behind the 401"; exit 1; }
+      - name: Hardware detection matrix
+        # llmd-hw-detect probes plain command names, so PATH-prepended
+        # stubs make every hardware combination testable on a bare
+        # runner: datacenter NVIDIA, consumer NVIDIA, AMD, none.
+        run: |
+          STUB="$RUNNER_TEMP/hwstubs"; mkdir -p "$STUB"
+          DETECT=packages/llmd-hw/usr/lib/llmd/llmd-hw-detect
+          expect() { # expect <json-fragment> <label>
+            grep -q "$1" /tmp/detect.out || { echo "FAIL($2): $(cat /tmp/detect.out)"; exit 1; }
+          }
+          # datacenter NVIDIA (80 GB) -> vllm
+          printf '#!/bin/sh\necho 81920\n' > "$STUB/nvidia-smi"; chmod +x "$STUB/nvidia-smi"
+          PATH="$STUB:$PATH" bash $DETECT --json > /tmp/detect.out
+          expect '"engine":"vllm"' "datacenter nvidia"
+          # consumer NVIDIA (8 GB) -> ollama
+          printf '#!/bin/sh\necho 8192\n' > "$STUB/nvidia-smi"
+          PATH="$STUB:$PATH" bash $DETECT --json > /tmp/detect.out
+          expect '"vendor":"nvidia"' "consumer vendor"; expect '"engine":"ollama"' "consumer nvidia"
+          # AMD (lspci only, rocm-smi absent) -> ollama, vendor amd
+          rm "$STUB/nvidia-smi"
+          printf '#!/bin/sh\necho "03:00.0 VGA compatible controller: AMD Radeon RX 7900 XTX"\n' > "$STUB/lspci"
+          chmod +x "$STUB/lspci"
+          PATH="$STUB:$PATH" bash $DETECT --json > /tmp/detect.out
+          expect '"vendor":"amd"' "amd vendor"; expect '"engine":"ollama"' "amd engine"
+          # AMD APU with rocm-smi reporting VRAM -> still ollama
+          printf '#!/bin/sh\necho "col,vram\ncard0,68719476736"\n' > "$STUB/rocm-smi"; chmod +x "$STUB/rocm-smi"
+          PATH="$STUB:$PATH" bash $DETECT --json > /tmp/detect.out
+          expect '"vendor":"amd"' "apu vendor"
+          # nothing at all -> ollama, vendor none
+          rm "$STUB/lspci" "$STUB/rocm-smi"
+          printf '#!/bin/sh\nexit 0\n' > "$STUB/lspci"; chmod +x "$STUB/lspci"
+          PATH="$STUB:$PATH" bash $DETECT --json > /tmp/detect.out
+          expect '"vendor":"none"' "no gpu"; expect '"engine":"ollama"' "cpu engine"
+          echo "hardware detection matrix OK"
       - name: Validate Quadlet units
         # dry-run the podman systemd generator against our .container
         # files; a unit that fails to convert would be silently absent

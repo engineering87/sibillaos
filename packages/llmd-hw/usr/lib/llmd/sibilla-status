@@ -44,6 +44,14 @@ if command -v nvidia-smi >/dev/null 2>&1; then
       --format=csv,noheader 2>/dev/null | sed 's/^/gpu:       /'; then
     echo "gpu:       nvidia-smi present but not responding"
   fi
+elif lspci 2>/dev/null | grep -qi 'VGA.*AMD\|Display.*AMD'; then
+  lspci 2>/dev/null | grep -i 'VGA.*AMD\|Display.*AMD' | head -1 \
+    | sed 's/^[0-9a-f:.]* [^:]*: /gpu:       /'
+  if [[ -d /usr/local/lib/ollama/rocm ]]; then
+    echo "gpu:       ROCm runtime present"
+  else
+    echo "gpu:       ROCm runtime missing, CPU inference (docs/validation/gpu.md)"
+  fi
 else
   echo "gpu:       none detected (CPU inference)"
 fi

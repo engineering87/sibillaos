@@ -59,6 +59,10 @@ cpu=$(sed -n 's/^model name[^:]*: //p' /proc/cpuinfo | head -1)
 cpu="${cpu:-$(uname -m)} ($(nproc) cores)"
 mem=$(free -h 2>/dev/null | awk '/^Mem:/{print $2}')
 gpu=$(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | head -1 || true)
+if [[ -z "$gpu" ]]; then
+  gpu=$(lspci 2>/dev/null | grep -i 'VGA.*AMD\|Display.*AMD' | head -1 \
+    | sed 's/^[0-9a-f:.]* [^:]*: //' || true)
+fi
 ver=$(dpkg-query -W -f='${Version}' llmd-hw 2>/dev/null || echo source)
 
 cat <<TABLE
