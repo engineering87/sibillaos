@@ -35,7 +35,7 @@ while IFS= read -r id; do
   digests=$(echo "$tree" | jq '[ .[]
       | select(.path | test("\\.gguf$"))
       | select(.lfs.oid != null)
-      | {key: (.path | sub("\\.gguf$"; "") | sub("^.*-"; "")),
+      | {key: (.path | sub("\\.gguf$"; "") | sub("^.*[-.]"; "")),
          value: ("sha256:" + .lfs.oid)} ]
     | from_entries')
   jq --arg id "$id" --argjson d "$digests" \
