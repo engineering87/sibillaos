@@ -73,7 +73,7 @@ Put it right under the tagline, above the first prose line:
 <p align="center"><img src="branding/demo-quickstart.svg" alt="SibillaOS quick start" width="760"/></p>
 ```
 
-Until the first tag-run recording lands, `branding/demo-quickstart.svg`
-is a hand-built stopgap: correct commands, representative output. A
-hand-made capture on real GPU hardware would outshine even the CI
-recording; this section is the recipe for that day.
+Since v0.7.0, `branding/demo-quickstart.svg` IS the tag-run recording:
+the hand-built stopgap era is over. A hand-made capture on real GPU
+hardware would outshine even the CI recording; this section is the
+recipe for that day.
