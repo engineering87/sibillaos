@@ -31,7 +31,11 @@ while IFS= read -r id; do
     echo "  fetch failed, skipping" >&2
     continue
   }
-  # single-file GGUF quants only: name pattern <anything>-<QUANT>.gguf
+  # single-file GGUF quants only. The quant is the token after the
+  # LAST separator, which is a dash for bartowski-style names
+  # (model-Q4_K_M.gguf) and a dot for nomic-style ones
+  # (model-v1.5.Q8_0.gguf): accept both, or the recorded key does not
+  # match what sibilla model use/pull looks up
   digests=$(echo "$tree" | jq '[ .[]
       | select(.path | test("\\.gguf$"))
       | select(.lfs.oid != null)

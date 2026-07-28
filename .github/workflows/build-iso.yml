@@ -31,6 +31,11 @@ jobs:
       - name: Validate catalog JSON
         run: |
           jq empty catalog/models.json
+          # jq empty exits 0 on a ZERO-BYTE file: an emptied catalog
+          # once sailed past this check with a valid signature over
+          # nothing. Substance is part of validity.
+          jq -e '.models | length > 0' catalog/models.json >/dev/null \
+            || { echo "the catalog has no models"; exit 1; }
           # recorded digests must be well-formed sha256 values
           jq -e '[.models[].digests? // {} | to_entries[] | .value
                   | select(test("^sha256:[0-9a-f]{64}$") | not)] | length == 0' \

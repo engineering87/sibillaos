@@ -46,6 +46,10 @@ EOF
   # key and the signature exist, the build refuses a catalog that
   # does not verify
   if [[ "$name" == "llmd-hw" ]]; then
+    # a signature can be valid over an empty file: substance is
+    # checked separately before the catalog enters the package
+    jq -e '.models | length > 0' "$DIR/../catalog/models.json" >/dev/null \
+      || { echo "refusing to embed a catalog with no models" >&2; exit 1; }
     install -D -m644 "$DIR/../catalog/models.json" "$staging/usr/share/llmd/models.json"
     if [[ -f "$DIR/../catalog/models.json.asc" ]]; then
       if [[ -f "$DIR/../apt/sibillaos-archive-key.asc" ]]; then
