@@ -18,6 +18,12 @@ usage: sibilla connect              full connection kit for humans
        sibilla connect --snippet python|node
                                    SDK boilerplate, endpoint and key
                                    filled in
+       sibilla connect --remote    a self-contained script for the
+                                   developer workstation: run it there,
+                                   it prompts for the key on stdin
+                                   (never argv, never shell history)
+                                   and writes Continue, aider and an
+                                   optional project .env
 USAGE
   exit 1
 }
@@ -29,6 +35,7 @@ case "${1:-}" in
   --write)   WRITE=1 ;;
   --env)     OUTPUT="env" ;;
   --mcp)     OUTPUT=mcp ;;
+  --remote)  OUTPUT=remote ;;
   --snippet)
     OUTPUT=snippet
     SNIPPET_LANG="${2:-}"
@@ -60,6 +67,76 @@ esac
 # single-purpose outputs: payload only, nothing else, so redirection
 # into a config file yields a valid file
 case "$OUTPUT" in
+  remote)
+    # A script for the developer workstation (Linux/macOS). Generated
+    # in two parts: %q-quoted variable assignments (injection-safe),
+    # then a fully literal body ('EOS'), so nothing expands here on
+    # the server. The key deliberately never appears: the script
+    # prompts for it on stdin at run time and refuses to write any
+    # file until the gateway accepts it.
+    printf '#!/usr/bin/env bash\nBASE=%q\nMODEL=%q\nCANOTE=%q\n' "$BASE" "$MODEL" "$CANOTE"
+    cat <<'EOS'
+set -euo pipefail
+echo "SibillaOS workstation kit for $BASE (model: $MODEL)"
+read -rs -p "Paste the API key (input stays hidden): " KEY; echo
+[ -n "$KEY" ] || { echo "empty key, nothing written" >&2; exit 1; }
+code=$(curl -s -o /dev/null -w '%{http_code}' -m 10 \
+  -H "Authorization: Bearer $KEY" "$BASE/models" || true)
+if [ "$code" != "200" ]; then
+  echo "the gateway at $BASE did not accept the key (HTTP $code); nothing written" >&2
+  [ "$CANOTE" = "1" ] && echo "note: this host uses a locally trusted CA (curl -k to test reachability)" >&2
+  exit 1
+fi
+echo "authenticated: $BASE serves $MODEL"
+cfg_dir="$HOME/.continue"; cfg="$cfg_dir/config.yaml"
+mkdir -p "$cfg_dir"
+if [ -f "$cfg" ] && [ ! -f "$cfg.pre-sibilla" ]; then
+  cp -a "$cfg" "$cfg.pre-sibilla"; echo "existing Continue config backed up as config.yaml.pre-sibilla"
+fi
+cat > "$cfg" <<CFG
+# written by the SibillaOS workstation kit
+models:
+  - name: SibillaOS
+    provider: openai
+    model: $MODEL
+    apiBase: $BASE
+    apiKey: $KEY
+    roles:
+      - chat
+      - edit
+CFG
+chmod 600 "$cfg"
+echo "wrote $cfg (VS Code and JetBrains via Continue)"
+aider_cfg="$HOME/.aider.conf.yml"
+if [ -f "$aider_cfg" ] && [ ! -f "$aider_cfg.pre-sibilla" ]; then
+  cp -a "$aider_cfg" "$aider_cfg.pre-sibilla"; echo "existing aider config backed up"
+fi
+cat > "$aider_cfg" <<CFG
+# written by the SibillaOS workstation kit
+model: openai/$MODEL
+openai-api-base: $BASE
+openai-api-key: $KEY
+CFG
+chmod 600 "$aider_cfg"
+echo "wrote $aider_cfg"
+if [ -n "${1:-}" ]; then
+  mkdir -p "$1"
+  cat > "$1/.env" <<CFG
+OPENAI_BASE_URL=$BASE
+OPENAI_API_KEY=$KEY
+OPENAI_MODEL=$MODEL
+CFG
+  chmod 600 "$1/.env"
+  echo "wrote $1/.env (project scaffold for SDKs and frameworks)"
+fi
+if [ "$CANOTE" = "1" ]; then
+  echo "note: the gateway uses a locally trusted CA; import its root"
+  echo "certificate on this workstation or configure clients accordingly"
+fi
+echo "done. Reload your editor; aider and SDKs pick the files up as is."
+EOS
+    exit 0
+    ;;
   env)
     cat <<ENV
 # SibillaOS connection for OpenAI SDKs and frameworks (LangChain,
@@ -136,14 +213,22 @@ aider
 -----
 aider --openai-api-base $BASE --openai-api-key $KEY --model openai/$MODEL
 
+Zed (settings.json)
+-------------------
+"language_models": { "openai": { "api_url": "$BASE" } }
+(Zed asks for the key itself and stores it in its credential store;
+paste the one above)
+
 Any OpenAI-compatible client
 ----------------------------
 export OPENAI_BASE_URL=$BASE
 export OPENAI_API_KEY=$KEY
 
 More formats: --env (frameworks), --mcp (Claude Code and MCP
-agents), --snippet python|node (SDK boilerplate). Cline keeps its
-settings inside VS Code state: paste the values above by hand.
+agents), --snippet python|node (SDK boilerplate), --remote (a script
+for your workstation: prompts for the key there, never in argv or
+history). Cline keeps its settings inside VS Code state: paste the
+values above by hand.
 KIT
 
 if [[ "$CANOTE" -eq 1 ]]; then

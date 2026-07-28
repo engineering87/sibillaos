@@ -68,6 +68,27 @@ On an existing Ubuntu machine the same file works with the apt path:
 `apt install llmd`, write `/etc/llmd/profile`, then `sudo sibilla
 setup` (firstboot picks the profile up exactly as on the images).
 
+## Auditing: `sibilla apply check`
+
+The read-only counterpart: nothing changes, everything the machine
+claims about itself is verified. Drift against the declared profile
+(if one exists), a Caddyfile that differs from what the renderer
+would produce (a hand edit, which the next `sibilla tls` or
+`sibilla metrics` run would silently overwrite), a served model that
+no longer matches its catalog digest, key files that lost their
+permissions. Exit code is nonzero on any finding, so it slots into
+cron or a fleet health probe as is:
+
+```console
+$ sudo sibilla apply check
+profile:  MODEL ok (hf.co/bartowski/Qwen_Qwen3-4B-GGUF:Q4_K_M)
+gateway:  Caddyfile matches its render
+model:    digest verified (hf.co/bartowski/Qwen_Qwen3-4B-GGUF:Q4_K_M)
+keys:     /etc/llmd/apikey is 600
+keys:     /etc/llmd/apikeys.d is 700
+check passed: the machine matches its declarations
+```
+
 ## What apply refuses to do
 
 Change the engine: switching between ollama and vLLM is a hardware

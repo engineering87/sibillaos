@@ -47,7 +47,7 @@ write_files:
       # tarball and failed a whole bake
       ollama_ok=0
       for _ in 1 2 3; do
-        if curl -fsSL https://ollama.com/install.sh | OLLAMA_VERSION=0.31.1 sh; then
+        if curl -fsSL https://ollama.com/install.sh | OLLAMA_VERSION=0.32.1 sh; then
           ollama_ok=1
           break
         fi

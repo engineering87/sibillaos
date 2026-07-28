@@ -86,12 +86,21 @@ bake() {
   rm -f "$disk" "$WORK/bake.log"
   qemu-img create -f qcow2 -b "$WORK/$IMG_NAME" -F qcow2 "$disk" "$DISK_SIZE" >/dev/null
   log "baking with $QEMU_BIN (single boot, log in work-cloud/bake.log)"
+  local qrc=0
   timeout "$BAKE_TIMEOUT" "$QEMU_BIN" "${QEMU_ARGS[@]}" \
     -display none -serial "file:$WORK/bake.log" \
     -drive "file=$disk,format=qcow2,if=virtio" \
     -drive "file=$WORK/seed.iso,format=raw,if=virtio,readonly=on" \
     -netdev user,id=n0 -device virtio-net,netdev=n0 \
-    -no-reboot
+    -no-reboot || qrc=$?
+  # a killed qemu can leave the qcow2 with mid-update refcounts even
+  # when the OK marker already reached the serial log: the exit code
+  # wins over the marker
+  if [[ "$qrc" -ne 0 ]]; then
+    echo "bake qemu exited with $qrc (timeout kill?); the image cannot be trusted" >&2
+    tail -40 "$WORK/bake.log" >&2 || true
+    exit 1
+  fi
   if grep -q "SIBILLA_BAKE_FAILED" "$WORK/bake.log"; then
     echo "bake failed; output before the failure marker (systemd noise filtered):" >&2
     grep -B 80 "SIBILLA_BAKE_FAILED" "$WORK/bake.log" \
@@ -112,7 +121,12 @@ finalize() {
   rm -f "$out_img"
   log "compressing into $out_img"
   qemu-img convert -c -O qcow2 "$WORK/sibillaos-cloud.qcow2" "$out_img"
-  log "cloud image ready: $out_img"
+  # integrity gate at birth: a qcow2 with inconsistent metadata must
+  # fail HERE, with a clear owner, not in a downstream deploy job
+  # (a deploy once hit "overlaps with refcount block" at first write)
+  qemu-img check "$out_img" >/dev/null \
+    || { echo "qemu-img check failed on the produced image" >&2; exit 1; }
+  log "cloud image ready and metadata-checked: $out_img"
 }
 
 fetch_image

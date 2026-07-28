@@ -24,12 +24,18 @@ jobs:
             packages/llmd-firstboot/usr/lib/llmd/* \
             packages/llmd-gateway/usr/lib/llmd/* packages/llmd-gateway/usr/bin/* \
             packages/llmd-webui/usr/bin/* packages/llmd-mcp/usr/bin/* \
+            packages/llmd-hw/etc/update-motd.d/* \
             tools/*.sh
           # the MCP server is python: syntax-check it here too
           python3 -m py_compile packages/llmd-mcp/usr/lib/llmd/llmd-mcp-server
       - name: Validate catalog JSON
         run: |
           jq empty catalog/models.json
+          # jq empty exits 0 on a ZERO-BYTE file: an emptied catalog
+          # once sailed past this check with a valid signature over
+          # nothing. Substance is part of validity.
+          jq -e '.models | length > 0' catalog/models.json >/dev/null \
+            || { echo "the catalog has no models"; exit 1; }
           # recorded digests must be well-formed sha256 values
           jq -e '[.models[].digests? // {} | to_entries[] | .value
                   | select(test("^sha256:[0-9a-f]{64}$") | not)] | length == 0' \
@@ -78,6 +84,40 @@ jobs:
           awk '/route \{/{r=1} /respond @unauthorized/{if(r)a=NR} /reverse_proxy \/mcp/{m=NR}
                END{exit !(a && m && m > a)}' "$LLMD_CADDYFILE" \
             || { echo "MCP route is not behind the 401"; exit 1; }
+      - name: Hardware detection matrix
+        # llmd-hw-detect probes plain command names, so PATH-prepended
+        # stubs make every hardware combination testable on a bare
+        # runner: datacenter NVIDIA, consumer NVIDIA, AMD, none.
+        run: |
+          STUB="$RUNNER_TEMP/hwstubs"; mkdir -p "$STUB"
+          DETECT=packages/llmd-hw/usr/lib/llmd/llmd-hw-detect
+          expect() { # expect <json-fragment> <label>
+            grep -q "$1" /tmp/detect.out || { echo "FAIL($2): $(cat /tmp/detect.out)"; exit 1; }
+          }
+          # datacenter NVIDIA (80 GB) -> vllm
+          printf '#!/bin/sh\necho 81920\n' > "$STUB/nvidia-smi"; chmod +x "$STUB/nvidia-smi"
+          PATH="$STUB:$PATH" bash $DETECT --json > /tmp/detect.out
+          expect '"engine":"vllm"' "datacenter nvidia"
+          # consumer NVIDIA (8 GB) -> ollama
+          printf '#!/bin/sh\necho 8192\n' > "$STUB/nvidia-smi"
+          PATH="$STUB:$PATH" bash $DETECT --json > /tmp/detect.out
+          expect '"vendor":"nvidia"' "consumer vendor"; expect '"engine":"ollama"' "consumer nvidia"
+          # AMD (lspci only, rocm-smi absent) -> ollama, vendor amd
+          rm "$STUB/nvidia-smi"
+          printf '#!/bin/sh\necho "03:00.0 VGA compatible controller: AMD Radeon RX 7900 XTX"\n' > "$STUB/lspci"
+          chmod +x "$STUB/lspci"
+          PATH="$STUB:$PATH" bash $DETECT --json > /tmp/detect.out
+          expect '"vendor":"amd"' "amd vendor"; expect '"engine":"ollama"' "amd engine"
+          # AMD APU with rocm-smi reporting VRAM -> still ollama
+          printf '#!/bin/sh\necho "col,vram\ncard0,68719476736"\n' > "$STUB/rocm-smi"; chmod +x "$STUB/rocm-smi"
+          PATH="$STUB:$PATH" bash $DETECT --json > /tmp/detect.out
+          expect '"vendor":"amd"' "apu vendor"
+          # nothing at all -> ollama, vendor none
+          rm "$STUB/lspci" "$STUB/rocm-smi"
+          printf '#!/bin/sh\nexit 0\n' > "$STUB/lspci"; chmod +x "$STUB/lspci"
+          PATH="$STUB:$PATH" bash $DETECT --json > /tmp/detect.out
+          expect '"vendor":"none"' "no gpu"; expect '"engine":"ollama"' "cpu engine"
+          echo "hardware detection matrix OK"
       - name: Validate Quadlet units
         # dry-run the podman systemd generator against our .container
         # files; a unit that fails to convert would be silently absent
@@ -570,6 +610,14 @@ jobs:
                   || { echo "rate limit rule not loaded in the kernel"; RC=1; }
                 $SSH "grep -q 'Unattended-Upgrade .1.' /etc/apt/apt.conf.d/51sibilla-upgrades" \
                   || { echo "unattended upgrades config missing"; RC=1; }
+                # no cloud routing on the engine, ever
+                $SSH "systemctl show ollama.service -p Environment" > ollama-env.out || RC=1
+                grep -q "OLLAMA_NO_CLOUD=1" ollama-env.out \
+                  || { echo "cloud routing is not disabled on the engine"; RC=1; }
+                # the login banner: present on the image, with the real model
+                $SSH "echo sibilla | sudo -S /etc/update-motd.d/10-sibillaos" > motd.out || RC=1
+                grep -q "SibillaOS" motd.out || { echo "motd banner missing on the image"; RC=1; }
+                grep -q "Qwen_Qwen3-0.6B" motd.out || { echo "motd banner does not show the served model"; RC=1; }
                 for u in ollama caddy; do
                   $SSH "systemctl show -p NoNewPrivileges $u.service" | grep -q "=yes" \
                     || { echo "$u.service lost NoNewPrivileges"; RC=1; }
@@ -696,11 +744,18 @@ jobs:
         uses: actions/cache@v4
         with:
           path: gguf-cache
-          key: gguf-9acfc1e0-c159d151-v1
+          key: gguf-9acfc1e0-c159d151-3e243421-v1
       - name: Build debs and a local apt repo
         run: |
           sudo apt-get update
           sudo apt-get install -y apt-utils jq
+          # tag runs carry the real version: the terminal demo recorded
+          # later in this job shows it in the sibilla header, and the
+          # README swap takes the demo from the tag run for exactly
+          # this reason (branch runs would show the dev fallback)
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            export LLMD_VERSION="${GITHUB_REF_NAME#v}"
+          fi
           bash ./packages/build-debs.sh
           mkdir -p localrepo
           cp packages/dist/*.deb localrepo/
@@ -750,6 +805,9 @@ jobs:
           acode=$(curl -s -o /dev/null -w '%{http_code}' \
             -H "Authorization: Bearer $KEY" http://127.0.0.1:8080/v1/models || true)
           [ "$acode" = "200" ] || { echo "authenticated models call was $acode"; RC=1; }
+          # the machine speaks with its own name: no proxy fingerprint
+          curl -s -I -m 10 http://127.0.0.1:8080/v1/models | grep -qi '^server: SibillaOS' \
+            || { echo "gateway does not identify as SibillaOS"; RC=1; }
           # inference is best-effort here (native runner CPU); assert it
           # when it works, report otherwise, do not fail the guest test
           RESP=$(curl -s -m 300 http://127.0.0.1:8080/v1/chat/completions \
@@ -760,6 +818,10 @@ jobs:
           else
             echo "inference not asserted on this box:"; echo "$RESP" | head -c 300; echo
           fi
+          # the engine must never route to ollama.com's cloud: the
+          # hardening drop-in pins OLLAMA_NO_CLOUD=1 on every install
+          sudo systemctl show ollama.service -p Environment | grep -q "OLLAMA_NO_CLOUD=1" \
+            || { echo "cloud routing is not disabled on the engine"; RC=1; }
           # good-guest behavior: setup must not act like an appliance
           [ ! -e /etc/llmd/appliance ] || { echo "setup wrongly created the appliance marker"; RC=1; }
           if command -v ufw >/dev/null 2>&1; then
@@ -769,6 +831,10 @@ jobs:
             grep -q '^Enabled: no' /etc/apt/sources.list.d/sibillaos.sources \
               || { echo "setup flipped the apt source on"; RC=1; }
           fi
+          # a guest never redecorates the login: without the appliance
+          # marker the motd script must print nothing at all
+          [ -z "$(sudo /etc/update-motd.d/10-sibillaos)" ] \
+            || { echo "motd banner leaked onto a guest install"; RC=1; }
           echo "--- sibilla status ---"
           sibilla status || RC=1
           exit "$RC"
@@ -904,6 +970,31 @@ jobs:
           printf 'MODEL=hf.co/bartowski/Qwen_Qwen3-0.6B-GGUF:Q4_K_M\nMETRICS=off\n' > /tmp/profile
           sudo sibilla apply /tmp/profile >/dev/null
           exit "$RC"
+      - name: apply check verifies the machine and catches tampering
+        run: |
+          RC=0
+          # a clean machine must pass
+          sudo sibilla apply check | tee check.out || { echo "clean machine failed the check"; RC=1; }
+          grep -q "check passed" check.out || RC=1
+          # a hand-edited Caddyfile must be caught
+          echo "# hand edit" | sudo tee -a /etc/caddy/Caddyfile >/dev/null
+          if sudo sibilla apply check >tamper.out 2>&1; then
+            echo "tampered Caddyfile passed the check"; RC=1
+          else
+            grep -q "TAMPERED" tamper.out || { echo "unexpected finding:"; cat tamper.out; RC=1; }
+          fi
+          sudo /usr/lib/llmd/llmd-gateway-render >/dev/null
+          sudo systemctl restart caddy.service
+          # drift against a declared profile must be caught
+          printf 'METRICS=on\n' | sudo tee /etc/llmd/profile >/dev/null
+          if sudo sibilla apply check >drift.out 2>&1; then
+            echo "drifted machine passed the check"; RC=1
+          else
+            grep -q "DRIFT" drift.out || { echo "unexpected finding:"; cat drift.out; RC=1; }
+          fi
+          sudo rm -f /etc/llmd/profile
+          sudo sibilla apply check >/dev/null || { echo "machine did not return clean"; RC=1; }
+          exit "$RC"
       - name: Bench renders a shareable table
         run: |
           # same policy as inference on this runner: asserted when the
@@ -919,20 +1010,83 @@ jobs:
           else
             echo "bench not asserted on this box:"; cat bench.err; true
           fi
+      - name: Record the authentic terminal demo
+        run: |
+          # the pipeline runs the real session anyway: record it, so
+          # the README demo is generated, not acted. The cast is the
+          # artifact of record; the svg render is a nicety.
+          sudo apt-get install -y asciinema >/dev/null
+          cat > /tmp/demo.sh <<'DEMO'
+          #!/usr/bin/env bash
+          set -e
+          say() { printf '\n\033[1;32m$\033[0m %s\n' "$*"; sleep 1; }
+          say "sibilla status"
+          sibilla status
+          sleep 1
+          say 'KEY=$(sudo cat /etc/llmd/apikey)  MODEL=$(sudo cat /etc/llmd/model)'
+          KEY=$(sudo cat /etc/llmd/apikey); MODEL=$(sudo cat /etc/llmd/model)
+          sleep 1
+          say 'curl -s localhost:8080/v1/chat/completions -H "Authorization: Bearer $KEY" -d ... | jq -r ".choices[0].message.content"'
+          curl -s -m 300 localhost:8080/v1/chat/completions \
+            -H "Authorization: Bearer $KEY" -H "Content-Type: application/json" \
+            -d "{\"model\": \"$MODEL\", \"messages\": [{\"role\": \"user\", \"content\": \"Reply with one short friendly sentence: hello!\"}], \"max_tokens\": 120}" \
+            | jq -r '.choices[0].message.content // .choices[0].message.reasoning'
+          sleep 2
+          DEMO
+          chmod +x /tmp/demo.sh
+          asciinema rec -c /tmp/demo.sh demo.cast
+          grep -q "chat/completions" demo.cast || { echo "demo did not run the completion"; exit 1; }
+          KEY=$(sudo cat /etc/llmd/apikey)
+          grep -q "$KEY" demo.cast && { echo "demo recording leaked the api key"; exit 1; } || true
+          (sudo npm install -g svg-term-cli >/dev/null 2>&1 \
+            && svg-term --in demo.cast --out demo.svg --window --no-cursor) \
+            || echo "svg render unavailable; the cast still ships"
+      - name: Upload the demo recording
+        uses: actions/upload-artifact@v4
+        with:
+          name: terminal-demo
+          path: |
+            demo.cast
+            demo.svg
+          if-no-files-found: error
       - name: Embeddings through the gateway
         run: |
           RC=0
           KEY=$(sudo cat /etc/llmd/apikey)
-          sudo sibilla model pull hf.co/nomic-ai/nomic-embed-text-v1.5-GGUF:Q8_0 | tee pull.out
+          # pull with the same offline fallback as the chat model: on a
+          # rate-limited runner the cached artifact goes through the
+          # import digest gate instead
+          if ! sudo sibilla model pull hf.co/nomic-ai/nomic-embed-text-v1.5-GGUF:Q8_0 > pull.out 2>&1; then
+            if [ -f gguf-cache/nomic-q8.gguf ]; then
+              echo "pull failed; importing the cached artifact"
+              sudo sibilla model import gguf-cache/nomic-q8.gguf > pull.out 2>&1 || true
+            fi
+          fi
+          cat pull.out
           grep -q "digest verified" pull.out || { echo "embedding model not digest-verified"; RC=1; }
+          # populate the cache for the next run
+          mkdir -p gguf-cache
+          if [ ! -f gguf-cache/nomic-q8.gguf ]; then
+            sudo cp /var/lib/llmd/models/ollama/blobs/sha256-3e24342164b3d94991ba9692fdc0dd08e3fd7362e0aacc396a9a5c54a544c3b7 \
+              gguf-cache/nomic-q8.gguf 2>/dev/null && sudo chown "$USER" gguf-cache/nomic-q8.gguf \
+              || echo "no nomic blob to cache yet"
+          fi
           # pulling must not touch the served chat model
           [ "$(sudo cat /etc/llmd/model)" = "hf.co/bartowski/Qwen_Qwen3-0.6B-GGUF:Q4_K_M" ] \
             || { echo "pull changed the served model"; RC=1; }
+          # the vector itself follows the native-runner inference
+          # policy: llama.cpp's CPU dispatch segfaults on some hosts
+          # of the heterogeneous fleet (the same bug that forced the
+          # Haswell pin on the VMs, where no pin is possible here);
+          # the HARD embedding assert lives in the airgap-test VM
           EMB=$(curl -s -m 300 http://127.0.0.1:8080/v1/embeddings \
             -H "Authorization: Bearer $KEY" -H "Content-Type: application/json" \
             -d '{"model":"hf.co/nomic-ai/nomic-embed-text-v1.5-GGUF:Q8_0","input":"the lighthouse keeps its own hours"}')
-          echo "$EMB" | jq -e '.data[0].embedding | length >= 256' >/dev/null \
-            || { echo "no embedding vector came back:"; echo "$EMB" | head -c 300; echo; RC=1; }
+          if echo "$EMB" | jq -e '.data[0].embedding | length >= 256' >/dev/null 2>&1; then
+            echo "EMBEDDINGS OK"
+          else
+            echo "embedding vector not asserted on this box:"; echo "$EMB" | head -c 300; echo
+          fi
           # an embedding model must never become the chat default
           if sudo sibilla model use hf.co/nomic-ai/nomic-embed-text-v1.5-GGUF:Q8_0 >use-emb.out 2>&1; then
             echo "an embedding model was accepted as the chat default"; RC=1
@@ -943,6 +1097,31 @@ jobs:
           if sudo /usr/lib/llmd/llmd-model-select | grep -q nomic; then
             echo "the selector lists the embedding model as a chat candidate"; RC=1
           fi
+          exit "$RC"
+      - name: The RAG quickstart runs end to end
+        run: |
+          RC=0
+          # exactly the flow the docs give: env from the machine, run
+          sudo sibilla connect --env > sibilla.env
+          set -a; . ./sibilla.env; set +a
+          # the example needs the engine to embed and generate, both
+          # subject to the native-runner CPU dispatch lottery: when the
+          # engine answers, every assert is hard; when it segfaults
+          # (HTTP 500 from llama-server), the run is tolerated here -
+          # the pinned VM in airgap-test carries the hard guarantee
+          if python3 examples/rag-quickstart.py "What port does SibillaOS serve on?" > rag.out 2>rag.err; then
+            cat rag.out
+            grep -q "retrieved: SibillaOS serves an OpenAI-compatible API on port 8080" rag.out \
+              || { echo "retrieval picked the wrong document"; RC=1; }
+            echo "RAG OK"
+          elif grep -qE "HTTP Error 5|api_error" rag.err; then
+            echo "rag not asserted on this box (engine could not serve):"; tail -2 rag.err
+          else
+            echo "the example itself failed:"; cat rag.err; RC=1
+          fi
+          KEY=$(sudo cat /etc/llmd/apikey)
+          grep -q "$KEY" rag.out && { echo "the example echoed the api key"; RC=1; } || true
+          rm -f sibilla.env
           exit "$RC"
       - name: Doctor, connect --write, then a clean removal
         run: |
@@ -980,6 +1159,25 @@ jobs:
             || { echo "--snippet node output incomplete"; RC=1; }
           # an unknown flag must fail, not print a kit with the key
           sudo sibilla connect --snippet rust >/dev/null 2>&1 && { echo "bad snippet lang accepted"; RC=1; } || true
+          # the workstation kit: the generated script must be keyless,
+          # prompt on stdin, refuse a bad key, and write on a good one
+          sudo sibilla connect --remote > remote.sh || RC=1
+          grep -q "$KEY" remote.sh && { echo "the remote script embeds the api key"; RC=1; } || true
+          WSHOME=$(mktemp -d)
+          if echo "wrong-key-123" | HOME="$WSHOME" bash remote.sh >bad.out 2>&1; then
+            echo "the remote script accepted a bad key"; RC=1
+          else
+            grep -q "did not accept the key" bad.out || { echo "unexpected refusal:"; cat bad.out; RC=1; }
+            [ ! -f "$WSHOME/.continue/config.yaml" ] || { echo "wrote files despite bad key"; RC=1; }
+          fi
+          echo "$KEY" | HOME="$WSHOME" bash remote.sh "$WSHOME/myproject" | tee remote.out || RC=1
+          grep -q "authenticated:" remote.out || { echo "remote kit did not authenticate"; RC=1; }
+          grep -q "apiKey: $KEY" "$WSHOME/.continue/config.yaml" || { echo "continue config not written"; RC=1; }
+          grep -q "openai-api-key: $KEY" "$WSHOME/.aider.conf.yml" || { echo "aider config not written"; RC=1; }
+          grep -q "OPENAI_API_KEY=$KEY" "$WSHOME/myproject/.env" || { echo "project .env not written"; RC=1; }
+          for f in "$WSHOME/.continue/config.yaml" "$WSHOME/.aider.conf.yml" "$WSHOME/myproject/.env"; do
+            [ "$(stat -c %a "$f")" = "600" ] || { echo "$f has loose permissions"; RC=1; }
+          done
           # remove: a full, verifiable teardown
           sudo sibilla remove --yes || RC=1
           dpkg -l 2>/dev/null | grep -E '^ii +llmd' && { echo "llmd packages survived"; RC=1; } || true
@@ -1240,6 +1438,10 @@ jobs:
       - name: Deploy and probe
         run: |
           IMG=$(ls cloud-img/*.qcow2 | head -1)
+          # transit integrity: the image is metadata-checked at build,
+          # so a failure here means the artifact round trip broke it
+          qemu-img check "$IMG" >/dev/null \
+            || { echo "downloaded image is corrupt (artifact transit)"; exit 1; }
           if [ "${{ matrix.arch }}" = "arm64" ]; then
             QEMU=qemu-system-aarch64
             KVM="-machine virt -cpu max -bios /usr/share/AAVMF/AAVMF_CODE.fd"
@@ -1374,24 +1576,34 @@ jobs:
         uses: actions/cache@v4
         with:
           path: gguf-cache
-          key: gguf-9acfc1e0-c159d151-v1
+          key: gguf-9acfc1e0-c159d151-3e243421-v1
       - name: Build the payload with the real tool
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
           # a cached artifact makes the build fully offline: the
           # builder recognizes it by digest and skips even the name
-          # resolution on the HF API
+          # resolution on the HF API. The payload carries the chat
+          # model AND the embedding model: this VM (KVM, pinned CPU)
+          # is where the hard embedding assert lives, since the native
+          # runners are subject to the llama.cpp CPU dispatch lottery.
           mkdir -p payload/models
           if [ -f gguf-cache/q4.gguf ]; then
             cp gguf-cache/q4.gguf payload/models/Qwen_Qwen3-0.6B-Q4_K_M.gguf
           fi
+          if [ -f gguf-cache/nomic-q8.gguf ]; then
+            cp gguf-cache/nomic-q8.gguf payload/models/nomic-embed-text-v1.5.Q8_0.gguf
+          fi
           bash ./tools/build-airgap-payload.sh --out payload \
-            --model hf.co/bartowski/Qwen_Qwen3-0.6B-GGUF:Q4_K_M
+            --model hf.co/bartowski/Qwen_Qwen3-0.6B-GGUF:Q4_K_M \
+            --model hf.co/nomic-ai/nomic-embed-text-v1.5-GGUF:Q8_0
           # populate the cache for the next run
           mkdir -p gguf-cache
           if [ ! -f gguf-cache/q4.gguf ]; then
-            cp payload/models/*.gguf gguf-cache/q4.gguf || true
+            cp payload/models/Qwen_Qwen3-0.6B-Q4_K_M.gguf gguf-cache/q4.gguf || true
+          fi
+          if [ ! -f gguf-cache/nomic-q8.gguf ]; then
+            cp payload/models/nomic-embed-text-v1.5.Q8_0.gguf gguf-cache/nomic-q8.gguf || true
           fi
           test -s payload/profile
           grep -q "MODEL=hf.co/bartowski/Qwen_Qwen3-0.6B-GGUF:Q4_K_M" payload/profile
@@ -1406,6 +1618,10 @@ jobs:
       - name: Deploy with no outbound network
         run: |
           IMG=$(ls cloud-img/*.qcow2 | head -1)
+          # transit integrity: the image is metadata-checked at build,
+          # so a failure here means the artifact round trip broke it
+          qemu-img check "$IMG" >/dev/null \
+            || { echo "downloaded image is corrupt (artifact transit)"; exit 1; }
           KVM=""
           if [ -e /dev/kvm ]; then
             sudo chmod 666 /dev/kvm
@@ -1457,6 +1673,8 @@ jobs:
                 || { echo "payload was not detected"; RC=1; }
               grep -q "identified: hf.co/bartowski/Qwen_Qwen3-0.6B-GGUF:Q4_K_M" firstboot-journal.log \
                 || { echo "payload model was not imported through the digest gate"; RC=1; }
+              grep -q "identified: hf.co/nomic-ai/nomic-embed-text-v1.5-GGUF:Q8_0" firstboot-journal.log \
+                || { echo "the embedding model on the payload was not imported"; RC=1; }
               grep -q "model already local, skipping the network pull" firstboot-journal.log \
                 || { echo "firstboot did not skip the pull"; RC=1; }
               # prove the isolation is real from inside the guest
@@ -1465,6 +1683,19 @@ jobs:
                 RC=1
               else
                 echo "outbound network confirmed dead from inside the guest"
+              fi
+              # the HARD embedding assert: this VM runs KVM with the
+              # pinned CPU model, immune to the dispatch lottery that
+              # makes the native runners best-effort
+              EMB=$(curl -s -m 300 http://127.0.0.1:8080/v1/embeddings \
+                -H "Authorization: Bearer $KEY" -H "Content-Type: application/json" \
+                -d '{"model":"hf.co/nomic-ai/nomic-embed-text-v1.5-GGUF:Q8_0","input":"the lighthouse keeps its own hours"}')
+              if echo "$EMB" | jq -e '.data[0].embedding | length >= 256' >/dev/null; then
+                echo "AIRGAP EMBEDDINGS OK"
+              else
+                echo "embedding vector failed in the pinned VM:"
+                echo "$EMB" | head -c 300; echo
+                RC=1
               fi
               # and the machine still does its job: a real completion
               RESP=$(curl -s -m 600 http://127.0.0.1:8080/v1/chat/completions \

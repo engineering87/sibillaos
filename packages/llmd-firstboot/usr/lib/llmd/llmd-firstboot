@@ -57,6 +57,27 @@ fi
 engine=$(cat /etc/llmd/engine 2>/dev/null || echo ollama)
 model=$(cat /etc/llmd/model 2>/dev/null || true)
 
+# AMD GPUs need ollama's ROCm runtime, and the pinned installer only
+# bundles it when it can SEE the GPU at install time - cloud images
+# are baked in a VM with no GPU, so complete the install here, on the
+# deployed hardware. Warn-only: CPU inference works without it.
+# Same pin as sibilla-setup and the image builds.
+if [[ "$engine" == "ollama" ]] && command -v ollama >/dev/null 2>&1 \
+    && [[ ! -d /usr/local/lib/ollama/rocm ]] \
+    && lspci 2>/dev/null | grep -qi 'VGA.*AMD\|Display.*AMD'; then
+  echo "AMD GPU present but the ROCm runtime is missing: completing the engine install"
+  for _ in 1 2 3; do
+    if curl -fsSL https://ollama.com/install.sh | OLLAMA_VERSION=0.32.1 sh; then
+      break
+    fi
+    echo "ollama install failed, retrying in 15s"
+    sleep 15
+  done
+  if [[ ! -d /usr/local/lib/ollama/rocm ]]; then
+    echo "WARNING: ROCm runtime still missing; inference will run on the CPU (docs/validation/gpu.md)"
+  fi
+fi
+
 # 1. API keys: the default key is generated here; extra keys are
 # managed later with sibilla key. llmd-keys-render turns them all
 # into the gateway.env consumed by the Caddy matcher.

@@ -1,0 +1,68 @@
+name: GPU validation report
+description: Results from the GPU tester checklist (docs/validation/gpu.md) - negative results are as valuable as positive ones
+title: "GPU validation: <your hardware>"
+labels: ["gpu-validation"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you - CI proves everything except silicon, and this report is
+        exactly the data the project cannot produce on its own. The tools
+        below print paste-ready output with no secrets in it.
+  - type: input
+    id: hardware
+    attributes:
+      label: Hardware
+      description: GPU model, VRAM, driver version (and CPU/RAM if unusual)
+      placeholder: "RTX 3060 12GB, driver 550.x / Ryzen 7 8845HS APU"
+    validations:
+      required: true
+  - type: dropdown
+    id: path
+    attributes:
+      label: Install path
+      options:
+        - ISO
+        - Cloud image
+        - apt install llmd + sibilla setup
+    validations:
+      required: true
+  - type: textarea
+    id: detect
+    attributes:
+      label: Detection output
+      description: "`sudo /usr/lib/llmd/llmd-hw-detect --json`"
+      render: json
+    validations:
+      required: true
+  - type: textarea
+    id: compute
+    attributes:
+      label: Engine compute line
+      description: "`journalctl -u ollama | grep 'inference compute'` - the library= field is the verdict (cuda/rocm vs cpu)"
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: bench
+    attributes:
+      label: Bench table
+      description: "`sudo sibilla bench` - paste the markdown table as is"
+    validations:
+      required: true
+  - type: input
+    id: hsa
+    attributes:
+      label: HSA_OVERRIDE_GFX_VERSION (APUs only)
+      description: If an override made your APU work, which value? Collecting these pairs is half the reason this template exists.
+      placeholder: "11.0.2"
+  - type: textarea
+    id: doctor
+    attributes:
+      label: Doctor report
+      description: "`sudo sibilla doctor` - secrets are scrubbed by construction"
+      render: text
+  - type: textarea
+    id: notes
+    attributes:
+      label: Anything that surprised you

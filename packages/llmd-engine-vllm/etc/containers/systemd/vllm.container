@@ -11,7 +11,12 @@ Wants=network-online.target
 ConditionPathExists=/etc/llmd/vllm.env
 
 [Container]
-Image=docker.io/vllm/vllm-openai:latest
+# PINNED, like every engine in this project: ":latest" survived here
+# from the PoC and was found during the v0.7 supply-freshness pass.
+# Bump deliberately; the quadlet dry-run in lint and the vllm gating
+# checks in the install test cover the unit, the model serving path
+# stays validated on real GPUs only (see the roadmap).
+Image=docker.io/vllm/vllm-openai:v0.25.1
 # NVIDIA GPU via CDI (nvidia-container-toolkit)
 AddDevice=nvidia.com/gpu=all
 PublishPort=127.0.0.1:8000:8000

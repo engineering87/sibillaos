@@ -35,8 +35,10 @@ Depends: $deps
 Maintainer: SibillaOS contributors
 Description: $desc
 EOF
-  # executable bit for the scripts
-  find "$staging/usr/lib/llmd" "$staging/usr/bin" -type f -exec chmod 755 {} + 2>/dev/null || true
+  # executable bit for the scripts (update-motd.d scripts must be
+  # executable or pam_motd silently skips them)
+  find "$staging/usr/lib/llmd" "$staging/usr/bin" "$staging/etc/update-motd.d" \
+    -type f -exec chmod 755 {} + 2>/dev/null || true
   # a local py_compile (the lint job runs one) must never ship
   find "$staging" -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
   # the curated model catalog ships with llmd-hw, with its detached
@@ -44,6 +46,10 @@ EOF
   # key and the signature exist, the build refuses a catalog that
   # does not verify
   if [[ "$name" == "llmd-hw" ]]; then
+    # a signature can be valid over an empty file: substance is
+    # checked separately before the catalog enters the package
+    jq -e '.models | length > 0' "$DIR/../catalog/models.json" >/dev/null \
+      || { echo "refusing to embed a catalog with no models" >&2; exit 1; }
     install -D -m644 "$DIR/../catalog/models.json" "$staging/usr/share/llmd/models.json"
     if [[ -f "$DIR/../catalog/models.json.asc" ]]; then
       if [[ -f "$DIR/../apt/sibillaos-archive-key.asc" ]]; then
