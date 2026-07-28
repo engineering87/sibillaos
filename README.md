@@ -19,7 +19,7 @@
 <p align="center">
 <img src="branding/demo-quickstart.svg" alt="Example SibillaOS session: sibilla status, then a chat completion through the gateway" width="760"/>
 <br/>
-<sub>Recorded by CI from a real session, on every push.</sub>
+<sub>Example session: the commands are exact, the output is representative.</sub>
 </p>
 
 <br/>

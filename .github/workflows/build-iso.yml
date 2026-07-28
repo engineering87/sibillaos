@@ -749,6 +749,13 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y apt-utils jq
+          # tag runs carry the real version: the terminal demo recorded
+          # later in this job shows it in the sibilla header, and the
+          # README swap takes the demo from the tag run for exactly
+          # this reason (branch runs would show the dev fallback)
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            export LLMD_VERSION="${GITHUB_REF_NAME#v}"
+          fi
           bash ./packages/build-debs.sh
           mkdir -p localrepo
           cp packages/dist/*.deb localrepo/
