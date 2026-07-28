@@ -1213,6 +1213,20 @@ jobs:
             | sudo gpg --batch --yes --dearmor -o /usr/share/keyrings/sibillaos-archive-keyring.gpg
           printf 'Types: deb\nURIs: https://engineering87.github.io/sibillaos/apt/\nSuites: ./\nSigned-By: /usr/share/keyrings/sibillaos-archive-keyring.gpg\n' \
             | sudo tee /etc/apt/sources.list.d/sibillaos.sources
+          # a tag push races publish-apt: this job can knock on Pages
+          # exactly while deploy-pages is replacing the site and get a
+          # transient 404. Wait for the repository to answer instead
+          # of failing on the window.
+          up=0
+          for _ in $(seq 1 10); do
+            if curl -fsS -m 15 https://engineering87.github.io/sibillaos/apt/Release >/dev/null 2>&1; then
+              up=1
+              break
+            fi
+            echo "published repository not answering (deploy window?), retrying in 60s"
+            sleep 60
+          done
+          [ "$up" = 1 ] || { echo "the published apt repository never answered"; exit 1; }
           sudo apt-get update
           sudo apt-get install -y llmd jq
           RELEASED=$(dpkg-query -W -f='${Version}' llmd)
