@@ -72,6 +72,6 @@ Put it right under the tagline, above the first prose line:
 <p align="center"><img src="branding/demo-quickstart.svg" alt="SibillaOS quick start" width="760"/></p>
 ```
 
-Until a real recording exists, `branding/demo-quickstart.svg` in this
-repo is a hand-built stopgap: correct commands, representative output.
-Replace it with your capture as soon as you have a machine to record on.
+Since v0.7.0, `branding/demo-quickstart.svg` IS a CI recording: the
+hand-built stopgap is gone. A hand-made capture on real GPU hardware
+would still outshine it; this section is the recipe for that day.
