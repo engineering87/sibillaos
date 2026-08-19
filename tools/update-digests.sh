@@ -25,6 +25,28 @@ while IFS= read -r id; do
   # jq.exe on Windows emits CRLF line endings and read keeps the CR,
   # which curl then rejects as a malformed URL: strip it always
   id="${id//$'\r'/}"
+
+  # registry-backed entries (large tier): the digest is the sha256 of
+  # the model layer in the ollama.com registry manifest, which is also
+  # the blob name after a pull - same verification, second source
+  if [[ "$id" != hf.co/* ]]; then
+    name="${id%%:*}"
+    tag="${id##*:}"
+    echo "fetching registry manifest for $name:$tag" >&2
+    manifest=$(curl -fsSL \
+      -H "Accept: application/vnd.docker.distribution.manifest.v2+json" \
+      "https://registry.ollama.ai/v2/library/$name/manifests/$tag") || {
+      echo "  fetch failed, skipping" >&2
+      continue
+    }
+    digests=$(echo "$manifest" | jq --arg t "$tag" \
+      '{($t): (.layers[] | select(.mediaType == "application/vnd.ollama.image.model") | .digest)}')
+    jq --arg id "$id" --argjson d "$digests" \
+      '(.models[] | select(.id == $id)) .digests = $d' "$tmp" > "$tmp.new"
+    mv "$tmp.new" "$tmp"
+    continue
+  fi
+
   repo="${id#hf.co/}"
   echo "fetching digests for $repo" >&2
   tree=$(curl -fsSL "https://huggingface.co/api/models/$repo/tree/main") || {
@@ -45,7 +67,7 @@ while IFS= read -r id; do
   jq --arg id "$id" --argjson d "$digests" \
     '(.models[] | select(.id == $id)) .digests = $d' "$tmp" > "$tmp.new"
   mv "$tmp.new" "$tmp"
-done < <(jq -r '.models[] | select(.engines[]? == "ollama") | select(.id | startswith("hf.co/")) | .id' "$CATALOG")
+done < <(jq -r '.models[] | select(.engines[]? == "ollama") | select((.id | startswith("hf.co/")) or .source? == "registry") | .id' "$CATALOG")
 
 # write-then-move: the catalog is replaced only by a complete, valid
 # result, never truncated by a failing pipeline (the redirection in

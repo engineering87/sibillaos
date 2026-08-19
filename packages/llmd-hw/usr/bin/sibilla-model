@@ -26,6 +26,31 @@ EOF
 
 need_root() { [[ $EUID -eq 0 ]] || { echo "run as root (sudo)" >&2; exit 1; }; }
 
+# Large-tier guard: a model bigger than the machine's RAM does not run
+# slowly, it freezes the box in swap - and the download alone is tens
+# of gigabytes. Fail closed BEFORE pulling, with the numbers stated.
+# No --force: a machine below the floor gains nothing from one.
+check_ram_floor() {
+  local model="$1" min_ram ram_gb
+  # match the exact id, the base, or a bare name against a tagged
+  # entry ("gpt-oss" must hit "gpt-oss:120b"): no tag-omission bypass
+  min_ram=$(jq -r --arg id "${model%%:*}" --arg full "$model" \
+    '[.models[] | select(.tier? == "large")
+      | select(.id == $id or .id == $full or (.id | startswith($full + ":")) or (.id | startswith($id + ":")))
+      | .min_ram_gb][0] // empty' \
+    "$CATALOG")
+  [[ -n "$min_ram" ]] || return 0
+  ram_gb=$(awk '/MemTotal/ {print int($2/1024/1024)}' /proc/meminfo 2>/dev/null || echo 0)
+  if [[ "$ram_gb" -lt "$min_ram" ]]; then
+    echo "REFUSING: $model needs ~${min_ram} GB of RAM and this machine has ${ram_gb} GB." >&2
+    echo "A model past the RAM floor does not run slowly, it freezes the box in swap." >&2
+    echo "See 'sibilla model list' for what fits this machine." >&2
+    exit 1
+  fi
+  echo "large model: ~${min_ram} GB RAM needed, ${ram_gb} GB present; layers beyond the GPU spill to RAM"
+  echo "generation will be slower than a model that fits the GPU; the real split shows in: sibilla status"
+}
+
 # catalog trust: a broken signature always aborts; unsigned builds
 # (no project key yet) warn and continue
 check_catalog() {
@@ -47,8 +72,19 @@ cmd_list() {
   check_catalog
   echo "curated models for engine '$ENGINE' (current: ${CURRENT:-none}):"
   jq -r --arg e "$ENGINE" \
-    '.models[] | select(.engines[]? == $e) | select(.role? != "embedding") | "  " + .id + "  [" + .family + ", " + .license + "]"' \
+    '.models[] | select(.engines[]? == $e) | select(.role? != "embedding") | select(.tier? != "large") | "  " + .id + "  [" + .family + ", " + .license + "]"' \
     "$CATALOG"
+  if jq -e --arg e "$ENGINE" \
+       '[.models[] | select(.engines[]? == $e) | select(.tier? == "large")] | length > 0' \
+       "$CATALOG" >/dev/null; then
+    local ram_gb
+    ram_gb=$(awk '/MemTotal/ {print int($2/1024/1024)}' /proc/meminfo 2>/dev/null || echo 0)
+    echo
+    echo "large models (bigger than your GPU: layers spill to RAM; this machine: ${ram_gb} GB):"
+    jq -r --arg e "$ENGINE" \
+      '.models[] | select(.engines[]? == $e) | select(.tier? == "large") | "  " + .id + "  [" + .family + ", " + .license + "]  needs ~" + (.min_ram_gb|tostring) + " GB RAM"' \
+      "$CATALOG"
+  fi
   if jq -e --arg e "$ENGINE" \
        '[.models[] | select(.engines[]? == $e) | select(.role? == "embedding")] | length > 0' \
        "$CATALOG" >/dev/null; then
@@ -82,6 +118,7 @@ cmd_use() {
     echo "then call /v1/embeddings with it; the chat model stays in place" >&2
     exit 1
   fi
+  check_ram_floor "$model"
   # the ollama CLI panics without HOME when run over ssh/sudo
   export HOME="${HOME:-/root}"
   case "$ENGINE" in
@@ -122,6 +159,7 @@ cmd_pull() {
     echo "pull supports the ollama engine; vllm downloads at container start" >&2
     exit 1
   }
+  check_ram_floor "$model"
   # the ollama CLI panics without HOME when run over ssh/sudo
   export HOME="${HOME:-/root}"
   if ollama list 2>/dev/null | awk 'NR>1{print $1}' | grep -Fxq "$model"; then

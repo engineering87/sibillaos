@@ -36,6 +36,15 @@ jobs:
           # nothing. Substance is part of validity.
           jq -e '.models | length > 0' catalog/models.json >/dev/null \
             || { echo "the catalog has no models"; exit 1; }
+          # the second source is a large-tier-only concession (ADR in
+          # architecture changelog v0.13): registry entries must be
+          # tier=large, and every large entry must carry its RAM floor
+          jq -e '[.models[] | select(.source? == "registry") | select(.tier != "large")] | length == 0' \
+            catalog/models.json >/dev/null \
+            || { echo "a registry-sourced entry is not tier=large"; exit 1; }
+          jq -e '[.models[] | select(.tier? == "large") | select((.min_ram_gb? // 0) <= 0)] | length == 0' \
+            catalog/models.json >/dev/null \
+            || { echo "a large entry has no min_ram_gb floor"; exit 1; }
           # recorded digests must be well-formed sha256 values
           jq -e '[.models[].digests? // {} | to_entries[] | .value
                   | select(test("^sha256:[0-9a-f]{64}$") | not)] | length == 0' \
@@ -919,6 +928,19 @@ jobs:
           sudo sibilla model use hf.co/bartowski/Qwen_Qwen3-0.6B-GGUF:Q8_0 | tee use.out
           grep -q "now serving" use.out || { echo "use after import failed"; RC=1; }
           grep -qi "pulling" use.out && { echo "use after import pulled from the network"; RC=1; } || true
+          # the large tier's RAM floor: this runner has ~16 GB, so the
+          # 80 GB entry must be refused BEFORE any download, with the
+          # numbers stated - and the auto-selector must never list it
+          if sudo sibilla model use gpt-oss:120b >large.out 2>&1; then
+            echo "a large model was accepted on a machine below its RAM floor"; RC=1
+          else
+            grep -q "REFUSING: gpt-oss:120b needs ~80 GB" large.out \
+              || { echo "unexpected refusal path:"; cat large.out; RC=1; }
+          fi
+          sudo /usr/lib/llmd/llmd-model-select | grep -q "gpt-oss" \
+            && { echo "the selector lists a large model as an auto candidate"; RC=1; } || true
+          sudo sibilla model list | grep -q "needs ~80 GB RAM" \
+            || { echo "the large section is missing from model list"; RC=1; }
           # an artifact the catalog does not know must be refused
           head -c 1048576 /dev/urandom > /tmp/unknown.gguf
           if sudo sibilla model import /tmp/unknown.gguf >unknown.out 2>&1; then

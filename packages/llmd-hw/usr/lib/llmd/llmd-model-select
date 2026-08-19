@@ -39,7 +39,7 @@ mapfile -t recommended < <(llmfit recommend --json --limit 10 2>/dev/null \
 # ids allowed by the curated catalog for the chosen engine; embedding
 # models serve /v1/embeddings and are never chat candidates
 mapfile -t allowed < <(jq -r --arg e "$engine" \
-  '.models[] | select(.engines[]? == $e) | select(.role? != "embedding") | .id' "$CATALOG")
+  '.models[] | select(.engines[]? == $e) | select(.role? != "embedding") | select(.tier? != "large") | .id' "$CATALOG")
 
 # without --auto, list the curated candidates for this engine and exit
 if [[ $AUTO -eq 0 ]]; then
@@ -57,7 +57,7 @@ done
 # fallback: first catalog model for the engine ("default": true entries first)
 if [[ -z "$pick" ]]; then
   pick=$(jq -r --arg e "$engine" \
-    '[.models[] | select(.engines[]? == $e) | select(.role? != "embedding")] | (map(select(.default == true)) + .)[0].id' "$CATALOG")
+    '[.models[] | select(.engines[]? == $e) | select(.role? != "embedding") | select(.tier? != "large")] | (map(select(.default == true)) + .)[0].id' "$CATALOG")
 fi
 
 [[ -n "$pick" && "$pick" != "null" ]] || { echo "no selectable model" >&2; exit 3; }

@@ -64,6 +64,18 @@ else
   s_kv "gpu:" "none detected (CPU inference)" "$(s_off)"
 fi
 
+# layer placement: the honesty line for large models. ollama ps
+# reports how a loaded model splits between GPU and CPU; printed only
+# when the served model is actually loaded.
+if [[ "$ENGINE" != "vllm" ]] && command -v ollama >/dev/null 2>&1 && [[ -n "$MODEL" ]]; then
+  place=$(HOME="${HOME:-/root}" ollama ps 2>/dev/null \
+    | awk -v m="$MODEL" 'NR>1 && $1==m' \
+    | grep -oE '[0-9]+%(/[0-9]+%)? *(GPU|CPU)(/(GPU|CPU))?' | head -1 || true)
+  if [[ -n "$place" ]]; then
+    s_kv "placement:" "$place"
+  fi
+fi
+
 # gateway reachability, honoring the configured mode
 MODE=http
 TLS_HOSTNAME=""
