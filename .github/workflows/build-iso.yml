@@ -146,6 +146,18 @@ jobs:
           out=$(QUADLET_UNIT_DIRS="$QDIR" "$GEN" -dryrun 2>&1) || { echo "$out"; exit 1; }
           echo "$out" | grep -q "vllm.service" || { echo "vllm quadlet did not convert"; echo "$out"; exit 1; }
           echo "$out" | grep -q "webui.service" || { echo "webui quadlet did not convert"; echo "$out"; exit 1; }
+      - name: Validate man page
+        # a page that does not render would ship broken on every
+        # install; -ww makes groff warnings fatal here
+        run: |
+          src=packages/llmd-hw/usr/share/man/man1/sibilla.1
+          out=$(groff -man -Tascii -ww "$src" 2>&1) || { echo "$out"; exit 1; }
+          plain=$(col -b <<< "$out")
+          grep -q "SIBILLA(1)" <<< "$plain" || { echo "man page did not render"; exit 1; }
+          for c in setup status model key tls metrics webui mcp apply connect bench doctor remove; do
+            grep -q "sibilla $c" <<< "$plain" || { echo "man page missing command: $c"; exit 1; }
+          done
+          echo "man page renders with every command documented"
 
   build:
     needs: lint
@@ -781,6 +793,17 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y llmd
           command -v sibilla
+          # the man page travels gzipped in llmd-hw; minimized runner
+          # images may exclude /usr/share/man at dpkg level, so the
+          # deb content is the deterministic assert and the installed
+          # file check is best-effort
+          dpkg-deb -c packages/dist/llmd-hw_*.deb | grep -q 'usr/share/man/man1/sibilla.1.gz' \
+            || { echo "man page missing from llmd-hw deb"; exit 1; }
+          if [ -f /usr/share/man/man1/sibilla.1.gz ]; then
+            man -w sibilla
+          else
+            echo "dpkg excludes man pages on this image; deb content check passed"
+          fi
       - name: sibilla setup, then a real request through the gateway
         run: |
           RC=0

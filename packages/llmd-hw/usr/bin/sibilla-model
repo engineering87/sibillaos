@@ -198,8 +198,11 @@ cmd_import() {
   echo "hashing $(du -h "$file" | cut -f1) ..."
   local hex match
   hex=$(sha256sum "$file" | cut -d' ' -f1)
+  # registry entries carry their tag inside the id ("gpt-oss:120b",
+  # digest key "120b"), so appending the key would double it
   match=$(jq -r --arg d "sha256:$hex" \
-    '.models[] | .id as $id | (.digests // {}) | to_entries[] | select(.value == $d) | $id + ":" + .key' \
+    '.models[] | .id as $id | (.digests // {}) | to_entries[] | select(.value == $d)
+     | .key as $k | if ($id | endswith(":" + $k)) then $id else $id + ":" + $k end' \
     "$CATALOG")
   if [[ -z "$match" ]]; then
     echo "REFUSING to import: sha256:$hex matches no digest in the catalog." >&2
@@ -226,6 +229,19 @@ cmd_import() {
   }
   echo "imported: $match"
   if [[ "$serve" == "--use" ]]; then
+    # serving guards apply here exactly as in cmd_use: the file may
+    # arrive on any machine, but an embedding model must not become
+    # the chat model and a giant must not be served on a box it would
+    # freeze (the import itself is kept either way)
+    local irole
+    irole=$(jq -r --arg id "${match%%:*}" \
+      '.models[] | select(.id == $id) | .role? // empty' "$CATALOG")
+    if [[ "$irole" == "embedding" ]]; then
+      echo "$match is an embedding model and cannot be the served chat model." >&2
+      echo "it is imported; call /v1/embeddings with it, the chat model stays in place" >&2
+      exit 1
+    fi
+    check_ram_floor "$match"
     echo "$match" > /etc/llmd/model
     echo "now serving: $match"
   else

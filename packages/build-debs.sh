@@ -41,6 +41,10 @@ EOF
     -type f -exec chmod 755 {} + 2>/dev/null || true
   # a local py_compile (the lint job runs one) must never ship
   find "$staging" -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
+  # man pages ship gzipped (Debian policy); -n keeps the build
+  # reproducible by not embedding a timestamp
+  find "$staging/usr/share/man" -type f -name '*.[1-9]' -exec gzip -9n {} + 2>/dev/null || true
+  find "$staging/usr/share/man" -type f -exec chmod 644 {} + 2>/dev/null || true
   # the curated model catalog ships with llmd-hw, with its detached
   # signature when the maintainer has signed it; if both the project
   # key and the signature exist, the build refuses a catalog that
