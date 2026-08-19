@@ -132,12 +132,17 @@ jobs:
         # files; a unit that fails to convert would be silently absent
         # on the installed system
         run: |
-          command -v podman >/dev/null || sudo apt-get install -y podman
+          # gate on the generator, not on the podman command: runner
+          # images have started preinstalling a bare podman binary
+          # without the deb layout, so command -v lies about quadlet
+          GEN=/usr/lib/systemd/system-generators/podman-system-generator
+          [[ -x "$GEN" ]] || sudo apt-get install -y podman
+          [[ -x "$GEN" ]] || GEN=/usr/libexec/podman/quadlet
+          [[ -x "$GEN" ]] || { echo "quadlet generator not found after install"; exit 1; }
           QDIR="$RUNNER_TEMP/quadlet"
           mkdir -p "$QDIR"
           cp packages/llmd-engine-vllm/etc/containers/systemd/vllm.container \
              packages/llmd-webui/etc/containers/systemd/webui.container "$QDIR/"
-          GEN=/usr/lib/systemd/system-generators/podman-system-generator
           out=$(QUADLET_UNIT_DIRS="$QDIR" "$GEN" -dryrun 2>&1) || { echo "$out"; exit 1; }
           echo "$out" | grep -q "vllm.service" || { echo "vllm quadlet did not convert"; echo "$out"; exit 1; }
           echo "$out" | grep -q "webui.service" || { echo "webui quadlet did not convert"; echo "$out"; exit 1; }
