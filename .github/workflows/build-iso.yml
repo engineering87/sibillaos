@@ -155,7 +155,10 @@ jobs:
           if grep -q $'\r' "$src"; then
             echo "man page source contains CRLF line endings"; exit 1
           fi
-          out=$(groff -man -Tascii -ww "$src" 2>&1) || { echo "$out"; exit 1; }
+          # newer grotty emits SGR escapes even for -Tascii, which
+          # col -b does not strip and which break literal greps;
+          # -P-c and GROFF_NO_SGR force the legacy overstrike output
+          out=$(GROFF_NO_SGR=1 groff -man -Tascii -P-c -ww "$src" 2>&1) || { echo "$out"; exit 1; }
           plain=$(col -b <<< "$out")
           if ! grep -q "SIBILLA(1)" <<< "$plain"; then
             echo "man page did not render; first lines of output:"
