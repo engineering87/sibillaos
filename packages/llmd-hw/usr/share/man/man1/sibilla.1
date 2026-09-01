@@ -1,0 +1,171 @@
+.TH SIBILLA 1 "2026-08-19" "SibillaOS" "SibillaOS Manual"
+.SH NAME
+sibilla \- administer the SibillaOS LLM appliance
+.SH SYNOPSIS
+.B sibilla
+.I COMMAND
+.RI [ ARGS ]
+.SH DESCRIPTION
+.B sibilla
+is the single entry point for administering a SibillaOS machine: an
+Ubuntu-based system that serves local language models through one
+authenticated, OpenAI-compatible API on port 8080. Every subcommand
+is also installed as a standalone
+.BI sibilla\- COMMAND
+executable.
+.PP
+The machine serves what it honestly runs: model selection at first
+boot picks a model that fits the detected hardware, and models past
+the machine's RAM are refused rather than attempted. Larger models
+(the "large" catalog tier) are strictly opt-in.
+.SH COMMANDS
+.SS sibilla setup [\-\-model MODEL_ID] [\-\-engine ollama|vllm]
+Turn an already-installed Ubuntu machine into the appliance without
+reinstalling the OS: detect the hardware, install the pinned inference
+engine if missing, select and download a model, bring up the
+authenticated gateway. Run as root.
+.B \-\-model
+overrides the auto-selected model;
+.B \-\-engine
+forces the engine instead of detecting it. This path is a guest on an
+existing system: it does not touch the firewall and does not enable
+the apt source on its own.
+.SS sibilla status
+Health view of the whole stack: engine service state, served models
+straight from the engine, disk usage of the model store, GPU and (for
+a loaded large model) the real GPU/CPU layer placement, gateway
+reachability in the configured mode. Exits nonzero when the engine or
+the gateway is down, so it doubles as a machine check.
+.SS sibilla model SUBCOMMAND
+Model lifecycle against the signed curated catalog.
+.TP
+.B list
+Curated models that fit this machine, large models with the RAM each
+needs, embedding models, and llmfit recommendations for the detected
+hardware.
+.TP
+.BI use " MODEL_ID"
+Download (if needed), verify against the catalog digest and switch the
+served model. Refuses embedding models, refuses large models below the
+RAM floor (fail closed, before any download, no override), and states
+the cost of a large model that does fit.
+.TP
+.BI pull " MODEL_ID"
+Download and digest-verify without switching what is served; how
+embedding models arrive.
+.TP
+.BI import " FILE " [\-\-use]
+Bring a model in from a GGUF file (USB stick, shared drive) instead of
+the network. The file is identified and verified by its sha256 against
+the signed catalog; anything unknown is refused, with no override.
+With
+.B \-\-use
+the imported model becomes the served model, subject to the same
+guards as
+.BR use .
+.TP
+.BI rm " MODEL_ID"
+Remove a downloaded model (refuses the served one).
+.TP
+.B prune
+Remove every downloaded model except the served one.
+.SS sibilla key SUBCOMMAND
+Gateway API keys:
+.B list
+(names and prefixes, never the keys),
+.BI add " NAME" ,
+.BI revoke " NAME" ,
+.B rotate
+.RI [ NAME ].
+New keys print once, on the last line. Changes take effect
+immediately: a revoked or rotated key gets 401 on its next request.
+.SS sibilla tls SUBCOMMAND
+Gateway transport:
+.BI enable " HOSTNAME"
+serves HTTPS on port 8080 with a locally trusted certificate;
+.BI enable " HOSTNAME " "\-\-acme EMAIL"
+serves public HTTPS on port 443 via Let's Encrypt (the hostname must
+resolve to this machine, ports 80/443 open);
+.B disable
+returns to plain HTTP on 8080;
+.B status
+shows the current mode.
+.SS sibilla metrics enable|disable|status
+Prometheus metrics at /metrics/gateway, behind the same bearer token
+as the API. Scrape configuration and a Grafana dashboard ship in
+docs/observability/ in the repository.
+.SS sibilla webui enable|disable|status
+Open WebUI chat interface on port 3000, as an opt-in container wired
+to the local engine.
+.SS sibilla mcp enable|disable|status
+Model Context Protocol endpoint at /mcp, behind the same keys,
+exposing the tools "chat" and "list_models" to MCP clients such as
+Claude Code. Client setup in docs/mcp.md.
+.SS sibilla apply [FILE] | export | check
+Configuration as code. A profile file (plain KEY=value: MODEL, TLS,
+METRICS, MCP, WEBUI; every key optional) declares the desired state;
+.B apply
+converges the machine onto it idempotently, running only the commands
+that close a gap.
+.B export
+prints the current state as a profile.
+.B check
+audits without changing: drift against the declared profile, a
+hand-edited gateway configuration, the served model's digest, key file
+permissions; exits nonzero on findings, so it works as a cron or fleet
+probe. API keys never enter profiles. Details in docs/configuration.md.
+.SS sibilla connect [\-\-write|\-\-env|\-\-mcp|\-\-snippet python|node|\-\-remote]
+Client configuration for editors, agents and SDKs. Without flags,
+prints the full connection kit.
+.B \-\-write
+places Continue and aider configurations (with backups);
+.B \-\-env
+emits .env lines for any OpenAI SDK;
+.B \-\-mcp
+emits the claude mcp add command, key filled in;
+.B \-\-snippet
+emits SDK boilerplate;
+.B \-\-remote
+emits a self-contained script for a developer workstation that prompts
+for the key on stdin, never argv or shell history.
+.SS sibilla bench
+Measure the machine through the authenticated gateway, so the numbers
+are what a client experiences: time to first token and generation
+speed, median of three runs, printed as a paste-ready markdown table
+on stdout.
+.SS sibilla doctor
+Paste-ready diagnostic report for bug reports. Contains no secrets:
+keys are never printed and the whole report is scrubbed of every
+configured key before it reaches the terminal.
+.SS sibilla remove [\-\-yes]
+Clean, reversible teardown. Removes only what SibillaOS put on the
+machine: a pre-existing ollama is left alone and a Caddy configuration
+saved at setup time is restored.
+.SH FILES
+.TP
+.I /etc/llmd/
+Machine state: engine, model, gateway.conf, profile, apikey (and
+additional keys), feature toggles.
+.TP
+.I /usr/share/llmd/models.json
+The curated model catalog, with its detached GPG signature next to it.
+A catalog that fails signature verification is refused.
+.TP
+.I /var/lib/llmd/models/
+The model store.
+.SH ENVIRONMENT
+.TP
+.B NO_COLOR
+When set, or when stdout is not a terminal, all output is plain text
+with no escape sequences; piped output is byte-stable.
+.SH EXIT STATUS
+Commands exit 0 on success and nonzero on failure.
+.B sibilla status
+and
+.B sibilla apply check
+exit nonzero on findings by design.
+.SH SEE ALSO
+Repository and documentation:
+.I https://github.com/engineering87/sibillaos
+(docs/configuration.md, docs/airgap.md, docs/embeddings.md,
+docs/large-models.md, docs/mcp.md).

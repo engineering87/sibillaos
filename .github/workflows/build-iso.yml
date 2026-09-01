@@ -36,6 +36,15 @@ jobs:
           # nothing. Substance is part of validity.
           jq -e '.models | length > 0' catalog/models.json >/dev/null \
             || { echo "the catalog has no models"; exit 1; }
+          # the second source is a large-tier-only concession (ADR in
+          # architecture changelog v0.13): registry entries must be
+          # tier=large, and every large entry must carry its RAM floor
+          jq -e '[.models[] | select(.source? == "registry") | select(.tier != "large")] | length == 0' \
+            catalog/models.json >/dev/null \
+            || { echo "a registry-sourced entry is not tier=large"; exit 1; }
+          jq -e '[.models[] | select(.tier? == "large") | select((.min_ram_gb? // 0) <= 0)] | length == 0' \
+            catalog/models.json >/dev/null \
+            || { echo "a large entry has no min_ram_gb floor"; exit 1; }
           # recorded digests must be well-formed sha256 values
           jq -e '[.models[].digests? // {} | to_entries[] | .value
                   | select(test("^sha256:[0-9a-f]{64}$") | not)] | length == 0' \
@@ -123,15 +132,43 @@ jobs:
         # files; a unit that fails to convert would be silently absent
         # on the installed system
         run: |
-          command -v podman >/dev/null || sudo apt-get install -y podman
+          # gate on the generator, not on the podman command: runner
+          # images have started preinstalling a bare podman binary
+          # without the deb layout, so command -v lies about quadlet
+          GEN=/usr/lib/systemd/system-generators/podman-system-generator
+          [[ -x "$GEN" ]] || sudo apt-get install -y podman
+          [[ -x "$GEN" ]] || GEN=/usr/libexec/podman/quadlet
+          [[ -x "$GEN" ]] || { echo "quadlet generator not found after install"; exit 1; }
           QDIR="$RUNNER_TEMP/quadlet"
           mkdir -p "$QDIR"
           cp packages/llmd-engine-vllm/etc/containers/systemd/vllm.container \
              packages/llmd-webui/etc/containers/systemd/webui.container "$QDIR/"
-          GEN=/usr/lib/systemd/system-generators/podman-system-generator
           out=$(QUADLET_UNIT_DIRS="$QDIR" "$GEN" -dryrun 2>&1) || { echo "$out"; exit 1; }
           echo "$out" | grep -q "vllm.service" || { echo "vllm quadlet did not convert"; echo "$out"; exit 1; }
           echo "$out" | grep -q "webui.service" || { echo "webui quadlet did not convert"; echo "$out"; exit 1; }
+      - name: Validate man page
+        # a page that does not render would ship broken on every
+        # install; -ww makes groff warnings fatal here
+        run: |
+          src=packages/llmd-hw/usr/share/man/man1/sibilla.1
+          # a CR at end of line silently corrupts .TH and every macro
+          if grep -q $'\r' "$src"; then
+            echo "man page source contains CRLF line endings"; exit 1
+          fi
+          # newer grotty emits SGR escapes even for -Tascii, which
+          # col -b does not strip and which break literal greps;
+          # -P-c and GROFF_NO_SGR force the legacy overstrike output
+          out=$(GROFF_NO_SGR=1 groff -man -Tascii -P-c -ww "$src" 2>&1) || { echo "$out"; exit 1; }
+          plain=$(col -b <<< "$out")
+          if ! grep -q "SIBILLA(1)" <<< "$plain"; then
+            echo "man page did not render; first lines of output:"
+            printf '%s\n' "$plain" | head -5
+            exit 1
+          fi
+          for c in setup status model key tls metrics webui mcp apply connect bench doctor remove; do
+            grep -q "sibilla $c" <<< "$plain" || { echo "man page missing command: $c"; exit 1; }
+          done
+          echo "man page renders with every command documented"
 
   build:
     needs: lint
@@ -767,6 +804,17 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y llmd
           command -v sibilla
+          # the man page travels gzipped in llmd-hw; minimized runner
+          # images may exclude /usr/share/man at dpkg level, so the
+          # deb content is the deterministic assert and the installed
+          # file check is best-effort
+          dpkg-deb -c packages/dist/llmd-hw_*.deb | grep -q 'usr/share/man/man1/sibilla.1.gz' \
+            || { echo "man page missing from llmd-hw deb"; exit 1; }
+          if [ -f /usr/share/man/man1/sibilla.1.gz ]; then
+            man -w sibilla
+          else
+            echo "dpkg excludes man pages on this image; deb content check passed"
+          fi
       - name: sibilla setup, then a real request through the gateway
         run: |
           RC=0
@@ -919,6 +967,19 @@ jobs:
           sudo sibilla model use hf.co/bartowski/Qwen_Qwen3-0.6B-GGUF:Q8_0 | tee use.out
           grep -q "now serving" use.out || { echo "use after import failed"; RC=1; }
           grep -qi "pulling" use.out && { echo "use after import pulled from the network"; RC=1; } || true
+          # the large tier's RAM floor: this runner has ~16 GB, so the
+          # 80 GB entry must be refused BEFORE any download, with the
+          # numbers stated - and the auto-selector must never list it
+          if sudo sibilla model use gpt-oss:120b >large.out 2>&1; then
+            echo "a large model was accepted on a machine below its RAM floor"; RC=1
+          else
+            grep -q "REFUSING: gpt-oss:120b needs ~80 GB" large.out \
+              || { echo "unexpected refusal path:"; cat large.out; RC=1; }
+          fi
+          sudo /usr/lib/llmd/llmd-model-select | grep -q "gpt-oss" \
+            && { echo "the selector lists a large model as an auto candidate"; RC=1; } || true
+          sudo sibilla model list | grep -q "needs ~80 GB RAM" \
+            || { echo "the large section is missing from model list"; RC=1; }
           # an artifact the catalog does not know must be refused
           head -c 1048576 /dev/urandom > /tmp/unknown.gguf
           if sudo sibilla model import /tmp/unknown.gguf >unknown.out 2>&1; then

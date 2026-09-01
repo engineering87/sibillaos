@@ -1,2 +1,4 @@
 catalog/models.json text eol=lf
 catalog/models.json.asc text eol=lf
+# troff sources: a CR at end of line corrupts .TH and the rendered page
+*.1 text eol=lf

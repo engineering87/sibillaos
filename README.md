@@ -97,7 +97,7 @@ The installer detects your hardware and makes the decisions a human would otherw
 |---|---|
 | **Engine selection** | vLLM in an OCI container on datacenter GPUs (24 GB VRAM and up), Ollama everywhere else, CPU-only machines included. |
 | **Model sizing** | [llmfit](https://github.com/AlexsJones/llmfit) recommends only models that actually fit your VRAM and RAM, with the best quantization and a speed estimate. |
-| **Curated catalog** | Permissively licensed (Apache-2.0/MIT), non-gated Hugging Face repos only. Verified ids, signed list. |
+| **Curated catalog** | Permissively licensed (Apache-2.0/MIT), non-gated Hugging Face repos; the large tier alone adds the ollama.com registry, with the same sha256 digest verification. Verified ids, signed list. |
 | **Resilient download** | The model is pulled from Hugging Face during install and resumed at first boot if the connection drops. |
 | **Single endpoint** | One OpenAI-compatible API on port 8080 with mandatory bearer tokens: multiple keys with per-key revocation (`sibilla key`), structured access logs. Engines stay on loopback. `sibilla tls enable HOSTNAME` switches the gateway to HTTPS (local CA, or Let's Encrypt with `--acme`). |
 | **One CLI** | `sibilla status` is a health view of the whole stack: engine, served models, disk usage of the model store, GPU utilization, gateway reachability. |
@@ -109,6 +109,7 @@ The installer detects your hardware and makes the decisions a human would otherw
 | **Config as code** | Declare the desired state (model, TLS, metrics, MCP, WebUI) in one profile file; `sibilla apply` converges the machine onto it, idempotently. `apply export` turns a configured machine into a profile; cloud-init or a fleet tool drops the file and first boot picks it up. See [docs/configuration.md](docs/configuration.md). |
 | **Air-gapped** | Machines with no outbound network install from a companion payload volume: models travel by USB stick, verified against the signed catalog digests on both ends. CI proves it on every push in a network-restricted VM. See [docs/airgap.md](docs/airgap.md). |
 | **Local RAG** | `/v1/embeddings` through the same gateway and keys: pull a catalog embedding model (`sibilla model pull`) and point any OpenAI-compatible RAG framework at this machine. See [docs/embeddings.md](docs/embeddings.md). |
+| **Large models** | A dedicated catalog tier for models bigger than your GPU (layers spill to RAM), strictly opt-in: first boot never picks one. `sibilla model list` shows what your machine can hold, `use` refuses anything past the RAM floor before downloading a single byte and states the speed cost when it fits, `status` shows the real GPU/CPU placement and `bench` tells the truth about the speed. See [docs/large-models.md](docs/large-models.md). |
 
 The base install is a headless server; a desktop variant is on the roadmap.
 

@@ -42,15 +42,24 @@ The cycle in detail:
 - Configuration audit, the third piece of the config track: `sibilla apply check` verifies without changing - drift against the declared profile, a Caddyfile that differs from its render (hand edits, which the next toggle would silently overwrite), the served model against its catalog digest, key file permissions - and exits nonzero on findings, so it doubles as a cron or fleet health probe. CI proves it passes on a clean machine and catches a tampered Caddyfile and a drifted profile. Done.
 - Local RAG quickstart on the embeddings endpoint: a zero-dependency worked example (examples/rag-quickstart.py, ~100 lines of stdlib, environment straight from sibilla connect --env) plus LangChain and LlamaIndex configurations with the local-endpoint gotchas stated. CI runs the documented flow; the hard inference guarantee lives in the pinned VM, where the airgap payload now carries the embedding model too. Done.
 
-## v0.8 (the harvest)
+## v0.8 (released)
 
-The cycle that spends what v0.7 built. Its core is not code: publish, listen, respond.
+The big-model bet. The v0.7 distribution push met silence, recorded here without varnish; the response was not louder posting but a bet on the loudest niche there is: running very large models on hardware you own. Shipped: the large catalog tier (two Apache-2.0 MoE entries, RAM floor refusal, real GPU/CPU placement in status, docs/large-models.md), the registry as the tier's verified second source, the serving guards closed on the import path, the coexistence design for the future third engine recorded, and man pages. Release notes in [docs/releases/v0.8.0.md](docs/releases/v0.8.0.md).
 
-- Distribution execution: the prepared posts go out (r/LocalLLaMA first, then Discord, LinkedIn, Show HN when the comments can be minded), with `sibilla bench` as the call to action and the GPU issue form as the funnel. Every received bench table lands in the result records - the file that fills up is the social proof.
-- vLLM on physical datacenter GPUs, if the posts do not recruit it: a rented GPU instance for a few hours, guide in hand. The standing v1.0 debt does not survive another cycle unaddressed.
+One principle bounds this whole cycle: the big-model work is ADDITIVE SUPPORT, never the default. SibillaOS's identity is that first boot serves what the machine honestly runs - so no large model is ever auto-selected, the RAM floor refuses (fail closed, no --force) anything past what physical memory carries, and opting in prints what it will cost before a byte is downloaded. A cycle that made the giant the default would not extend the philosophy, it would break it.
+
+- Big-model mode on the engine we already ship, re-scoped by the spike that opened the cycle: the pinned ollama does layer offload (larger than VRAM) but no expert streaming from disk (an open upstream request), so that is the honest claim. Large models on HF are almost always sharded GGUF, which the hf.co pull path does not support, so the HF-only source policy is extended FOR THE LARGE TIER ONLY to the ollama.com registry, whose manifests carry sha256 digests - the whole verification machinery survives the second source. Shipped as a registry-backed entry type in the signed catalog and the digest updater, large MoE entries, layer-offload guidance surfaced by the tooling, and `sibilla bench` as the honest measure of what offload costs. Done.
+- ds4 (DwarfStar) as the third engine and the owner of the "larger than RAM" story, promoted from exploratory but GATED: the spike found zero releases, tags or binary assets upstream (the original veto morphed into "nothing to pin"). Step one, the upstream issue requesting tagged releases with the Debian packaging offered in exchange, was posted on 2026-08-20 - SibillaOS's first visible ecosystem participation; the integration now waits on the answer. When something pinnable exists, the integration follows the llmfit playbook: repackaged deb, hardened unit, its OpenAI-compatible API behind the same gateway and keys, llmd-hw-detect learning the unified-memory tier (Strix Halo, DGX Spark, 96GB+ Macs). Design decided (architecture changelog v0.13): ds4 COEXISTS with ollama on that tier rather than replacing it - a deliberately single-model engine must not cost the machine its embeddings, small models and RAG - with llama-swap (pinnable zero-dependency Go binary, real release cadence) between the gateway and the engines, routing by the model field and stopping/starting upstreams so the resident model yields RAM to the giant when requested. Every other machine keeps the straight gateway-to-engine path unchanged.
+- The tier's completion pass: a second large entry (qwen3:235b, Apache-2.0, ~170 GB floor) so the tier is a choice rather than a single model; docs/large-models.md stating what the tier promises, how to read the placement line, how to measure the cost with bench and when the giant is the wrong call; and the serving guards closed on the import path too - `import --use` now enforces the same embedding refusal and RAM floor as `use`, and registry ids no longer double their tag on import. Done.
+- Man pages, deferred from v0.7: sibilla(1) documents every subcommand, ships gzipped in llmd-hw, and CI both renders it fatally-on-warnings and asserts it inside the deb. Done.
+## v0.9 (next)
+
+Scope to be set with the lesson of two quiet cycles in hand. What carries over regardless:
+
+- Tell the big-model story: it shipped and it is a genuinely new reason to post, not a repost. The distribution pack this time leads with the large tier and the honest refusal.
+- The ds4 answer: if upstream tags a release, the coexistence integration (llama-swap between the gateway and the engines, design recorded in architecture changelog v0.13) becomes this cycle's core; if not, the gate holds and the tier stays "larger than VRAM".
+- vLLM on physical datacenter GPUs: the standing v1.0 debt, rented instance if no tester appears.
 - Manual validation of Open WebUI (docs/validation/webui.md), carried since v0.2: one real machine, thirty minutes, a filled result record.
-- First-run response: fast turnaround on whatever the posts surface; `sibilla doctor` reports become the triage queue.
-- Engine pin refresh as recurring discipline, when upstream ships something worth the run through the fourteen jobs.
 
 ## Toward v1.0: open validation debts
 
@@ -84,8 +93,12 @@ The release where the "proof of concept" label comes off. Criteria, not features
 Ideas that look promising but need a use case or a champion:
 
 - Speech endpoints: whisper.cpp for transcription behind the same gateway.
-- ds4 (DwarfStar) as a third engine for high-memory unified-RAM machines (DGX Spark, Strix Halo, 96 GB and up): a narrow native engine for DeepSeek V4 Flash/PRO with an HTTP API and SSD streaming for models larger than RAM. Philosophically close to this project, but explicitly beta today and with a deliberately volatile model-support policy (upstream may drop a model when a better one appears), which conflicts with our pinning discipline. Revisit when it stabilizes; track upstream at github.com/antirez/ds4.
-- Man pages for the sibilla commands: the professionalism of a real distro, noted during the v0.7 polish pass and deferred as effort disproportionate to that cycle.
+- ds4 (DwarfStar): promoted in v0.8, then gated on upstream having anything to pin; the upstream issue is posted and the coexistence design recorded. Tracked in v0.9 above, kept here only as the category's origin.
+- kimi-k3-in-c (2026 survey): Kimi K3, 2.78T parameters from a 1.56 TB checkpoint, in 8.24 GB of RAM - portable C99, Apache-2.0, CI and byte-identical determinism, 5.7k stars. Second viral single-model disk-streaming project after ds4, which proves the category's pull; but CLI-only (no server, no API), 26.5 s/token on 8 GB, base model without a chat template, no confirmable tagged release. Not an engine candidate; watch as the category's proof of demand.
+- KTransformers as an alternative big-model backend: CPU/GPU hybrid MoE inference, 100B+ models on a single consumer GPU, SOSP-published. Powerful but dependency-heavy relative to this project's pinning discipline; watch, do not integrate yet.
+- exo and distributed-llama for multi-machine inference: model sharding across the devices of a household or office LAN. A different product story (many machines, one model) that would pair naturally with the fleet/profile work; needs a champion and a use case.
+- ik_llama.cpp, the llama.cpp fork with state-of-the-art quants and performance work: better quants mean more model in the same RAM, which is the big-model bet attacked from the compression side. Watch its stability and whether its gains land upstream.
+- BitNet (Microsoft's 1-bit LLM framework): the "large capability on small hardware" problem attacked from the opposite end. Model availability is the constraint; watch.
 - LDAP or OIDC authentication on the gateway for team deployments.
 - A Debian stable base variant for shops that prefer it over Ubuntu.
 

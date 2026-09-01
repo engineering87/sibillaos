@@ -19,8 +19,10 @@ fi
 base="${MODEL%%:*}"
 quant="${MODEL##*:}"
 
-digest=$(jq -r --arg id "$base" --arg q "$quant" \
-  '.models[] | select(.id == $id) | .digests[$q]? // empty' "$CATALOG" 2>/dev/null || true)
+# HF entries are keyed by base id (the tag is the quant); registry
+# entries carry the tag in the id itself, so match both shapes
+digest=$(jq -r --arg id "$base" --arg full "$MODEL" --arg q "$quant" \
+  '.models[] | select(.id == $id or .id == $full) | .digests[$q]? // empty' "$CATALOG" 2>/dev/null || true)
 if [[ -z "$digest" ]]; then
   echo "no digest recorded for $MODEL in the catalog" >&2
   exit 2
