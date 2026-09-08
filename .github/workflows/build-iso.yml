@@ -46,6 +46,15 @@ jobs:
           jq -e '[.models[] | select(.tier? == "large") | select((.min_ram_gb? // 0) <= 0)] | length == 0' \
             catalog/models.json >/dev/null \
             || { echo "a large entry has no min_ram_gb floor"; exit 1; }
+          # every downloadable ollama entry must CARRY digests: a stale
+          # catalog copy without the recorded digests once replaced the
+          # real one, and a valid signature over it would have hidden
+          # the loss from every other check
+          jq -e '[.models[] | select(.engines[]? == "ollama")
+                  | select((.id | startswith("hf.co/")) or .source? == "registry")
+                  | select((.digests? // {} | length) == 0)] | length == 0' \
+            catalog/models.json >/dev/null \
+            || { echo "an ollama entry has no recorded digests (stale catalog copy?)"; exit 1; }
           # recorded digests must be well-formed sha256 values
           jq -e '[.models[].digests? // {} | to_entries[] | .value
                   | select(test("^sha256:[0-9a-f]{64}$") | not)] | length == 0' \
@@ -1030,8 +1039,10 @@ jobs:
             sleep 3
           done
           echo "transcription: $OUT"
-          echo "$OUT" | jq -e '.text | test("hello"; "i")' >/dev/null \
-            || { echo "transcription did not contain the spoken word"; RC=1; }
+          echo "$OUT" | jq -e '(.text // "") | test("hello"; "i")' >/dev/null \
+            || { echo "transcription did not contain the spoken word"
+                 sudo journalctl -u llmd-speech.service --no-pager | tail -30
+                 RC=1; }
           # disable must close the endpoint: the request falls through
           # to the engine, which does not serve /v1/audio
           sudo sibilla speech disable

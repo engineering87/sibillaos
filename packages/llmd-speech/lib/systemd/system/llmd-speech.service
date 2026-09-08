@@ -6,6 +6,10 @@ After=network.target
 [Service]
 Type=simple
 ExecStart=/usr/lib/llmd/llmd-speech-server
+# the server writes its ffmpeg conversion temp files in the working
+# directory, which under ProtectSystem=strict must be somewhere
+# writable: the private /tmp is exactly that
+WorkingDirectory=/tmp
 Restart=on-failure
 RestartSec=2
 # Loopback only; authentication lives at the gateway, this unit never
