@@ -16,6 +16,7 @@ CADDYFILE="${LLMD_CADDYFILE:-/etc/caddy/Caddyfile}"
 ENGINE_FILE="${LLMD_ENGINE_FILE:-/etc/llmd/engine}"
 ACCESS_LOG="${LLMD_ACCESS_LOG:-/var/log/caddy/sibilla-access.log}"
 MCP_FILE="${LLMD_MCP_FILE:-/etc/llmd/mcp}"
+SPEECH_FILE="${LLMD_SPEECH_FILE:-/etc/llmd/speech}"
 MODE=http
 TLS_HOSTNAME=""
 ACME_EMAIL=""
@@ -23,6 +24,7 @@ METRICS=off
 # shellcheck disable=SC1090
 [[ -r "$CONF" ]] && . "$CONF"
 mcp=$(cat "$MCP_FILE" 2>/dev/null || echo off)
+speech=$(cat "$SPEECH_FILE" 2>/dev/null || echo off)
 
 engine=$(cat "$ENGINE_FILE" 2>/dev/null || echo ollama)
 case "$engine" in
@@ -102,6 +104,11 @@ BLOCK
     # the keys, the 401 above is its whole authentication story
     echo "		reverse_proxy /mcp 127.0.0.1:8765"
   fi
+  if [[ "$speech" == "on" ]]; then
+    # whisper-server (llmd-speech.service) on loopback; like the MCP
+    # server it never sees the keys, the 401 above covers it
+    echo "		reverse_proxy /v1/audio/* 127.0.0.1:8090"
+  fi
   cat <<BLOCK
 		reverse_proxy $upstream {
 			header_up Host {upstream_hostport}
@@ -139,4 +146,4 @@ case "$MODE" in
     } > "$CADDYFILE"
     ;;
 esac
-echo "gateway config rendered: mode=$MODE upstream=$upstream metrics=$METRICS mcp=$mcp"
+echo "gateway config rendered: mode=$MODE upstream=$upstream metrics=$METRICS mcp=$mcp speech=$speech"

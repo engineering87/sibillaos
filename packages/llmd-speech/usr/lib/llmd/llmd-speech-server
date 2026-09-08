@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# llmd-speech-server: launcher for the repackaged whisper.cpp server.
+# The upstream tarball layout is not contractual, so the binary and
+# its shared libraries are located at start rather than hardcoded.
+set -euo pipefail
+
+ROOT=/usr/lib/llmd/whisper
+MODEL=/var/lib/llmd/models/whisper/ggml-base.bin
+
+BIN=$(find "$ROOT" -name whisper-server -type f 2>/dev/null | head -1)
+[[ -n "$BIN" && -x "$BIN" ]] || { echo "whisper-server not found under $ROOT" >&2; exit 1; }
+[[ -f "$MODEL" ]] || { echo "speech model missing: $MODEL (run: sudo sibilla speech enable)" >&2; exit 1; }
+
+# shared libraries ship next to the binary in the upstream tarball
+libdirs=$(find "$ROOT" -name '*.so*' -type f 2>/dev/null -exec dirname {} \; | sort -u | paste -sd: -)
+[[ -n "$libdirs" ]] && export LD_LIBRARY_PATH="$libdirs${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+
+# ffmpeg unlocks conversion of arbitrary input formats; without it the
+# server accepts 16 kHz WAV, which sibilla speech enable states
+args=()
+command -v ffmpeg >/dev/null 2>&1 && args+=(--convert)
+
+exec "$BIN" \
+  --host 127.0.0.1 --port 8090 \
+  --inference-path /v1/audio/transcriptions \
+  --model "$MODEL" \
+  "${args[@]}"

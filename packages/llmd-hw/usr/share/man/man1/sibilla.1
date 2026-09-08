@@ -101,6 +101,12 @@ to the local engine.
 Model Context Protocol endpoint at /mcp, behind the same keys,
 exposing the tools "chat" and "list_models" to MCP clients such as
 Claude Code. Client setup in docs/mcp.md.
+.SS sibilla speech enable|disable|status
+Local speech-to-text at /v1/audio/transcriptions, behind the same
+keys, speaking the OpenAI transcription shape (multipart "file"
+field). The Whisper model arrives digest-verified from the signed
+catalog. Without ffmpeg the endpoint accepts 16 kHz WAV only; with
+ffmpeg installed it converts most audio formats.
 .SS sibilla apply [FILE] | export | check
 Configuration as code. A profile file (plain KEY=value: MODEL, TLS,
 METRICS, MCP, WEBUI; every key optional) declares the desired state;

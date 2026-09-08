@@ -24,6 +24,7 @@ jobs:
             packages/llmd-firstboot/usr/lib/llmd/* \
             packages/llmd-gateway/usr/lib/llmd/* packages/llmd-gateway/usr/bin/* \
             packages/llmd-webui/usr/bin/* packages/llmd-mcp/usr/bin/* \
+            packages/llmd-speech/usr/bin/* packages/llmd-speech/usr/lib/llmd/* \
             packages/llmd-hw/etc/update-motd.d/* \
             tools/*.sh
           # the MCP server is python: syntax-check it here too
@@ -71,9 +72,11 @@ jobs:
           export LLMD_ENGINE_FILE="$RUNNER_TEMP/engine"
           export LLMD_ACCESS_LOG="$RUNNER_TEMP/access.log"
           export LLMD_MCP_FILE="$RUNNER_TEMP/mcp"
+          export LLMD_SPEECH_FILE="$RUNNER_TEMP/speech"
           export LLMD_KEYS_ALT="lintkey1|lintkey2"
           echo ollama > "$LLMD_ENGINE_FILE"
           echo off > "$LLMD_MCP_FILE"
+          echo off > "$LLMD_SPEECH_FILE"
           for conf in 'MODE=http' \
                       'MODE=http\nMETRICS=on' \
                       'MODE=internal\nTLS_HOSTNAME=sibillaos.test' \
@@ -93,6 +96,54 @@ jobs:
           awk '/route \{/{r=1} /respond @unauthorized/{if(r)a=NR} /reverse_proxy \/mcp/{m=NR}
                END{exit !(a && m && m > a)}' "$LLMD_CADDYFILE" \
             || { echo "MCP route is not behind the 401"; exit 1; }
+          # same contract for the speech route
+          echo on > "$LLMD_SPEECH_FILE"
+          bash packages/llmd-gateway/usr/lib/llmd/llmd-gateway-render
+          caddy validate --adapter caddyfile --config "$LLMD_CADDYFILE"
+          grep -q "reverse_proxy /v1/audio/\* 127.0.0.1:8090" "$LLMD_CADDYFILE"
+          awk '/route \{/{r=1} /respond @unauthorized/{if(r)a=NR} /reverse_proxy \/v1\/audio/{s=NR}
+               END{exit !(a && s && s > a)}' "$LLMD_CADDYFILE" \
+            || { echo "speech route is not behind the 401"; exit 1; }
+      - name: First-boot model menu behavior
+        # the menu is pure logic over files, so its whole contract is
+        # testable here: selection changes the model, timeout/EOF and
+        # invalid input keep it, automation gates silence it entirely
+        run: |
+          M=packages/llmd-firstboot/usr/lib/llmd/llmd-model-menu
+          T="$RUNNER_TEMP/menu"; mkdir -p "$T"; touch "$T/appliance" "$T/out"
+          echo ollama > "$T/engine"
+          export LLMD_MENU_CATALOG=catalog/models.json \
+                 LLMD_MENU_ENGINE_FILE="$T/engine" LLMD_MENU_MARKER="$T/appliance" \
+                 LLMD_MENU_NOMENU="$T/nomenu" LLMD_MENU_PROFILE="$T/profile" \
+                 LLMD_MENU_TTY="$T/out" LLMD_MENU_MODEL_FILE="$T/model" LLMD_MENU_TIMEOUT=2
+          DEFAULT="hf.co/bartowski/Qwen_Qwen3-4B-GGUF"
+          # selection 3 changes the model
+          echo "$DEFAULT" > "$T/model"; echo 3 > "$T/in"
+          LLMD_MENU_IN="$T/in" bash "$M"
+          [ "$(cat "$T/model")" != "$DEFAULT" ] || { echo "selection did not change the model"; exit 1; }
+          # EOF (the timeout path) keeps the default
+          echo "$DEFAULT" > "$T/model"
+          LLMD_MENU_IN=/dev/null bash "$M"
+          [ "$(cat "$T/model")" = "$DEFAULT" ] || { echo "timeout did not keep the default"; exit 1; }
+          # out-of-range input keeps the default
+          echo 99 > "$T/in"
+          LLMD_MENU_IN="$T/in" bash "$M"
+          [ "$(cat "$T/model")" = "$DEFAULT" ] || { echo "invalid input changed the model"; exit 1; }
+          # the menu never offers large or embedding or speech entries
+          if grep -qE "gpt-oss|qwen3:235b|nomic|whisper" "$T/out"; then
+            echo "menu listed a non-chat or large entry"; exit 1
+          fi
+          # automation gates: nomenu, declared profile, guest (no marker)
+          for gate in nomenu profile; do
+            : > "$T/out"; echo x > "$T/$gate"; echo 3 > "$T/in"
+            LLMD_MENU_IN="$T/in" bash "$M"
+            [ ! -s "$T/out" ] || { echo "menu appeared despite $gate gate"; exit 1; }
+            rm "$T/$gate"
+          done
+          rm "$T/appliance"; : > "$T/out"
+          LLMD_MENU_IN="$T/in" bash "$M"
+          [ ! -s "$T/out" ] || { echo "menu appeared on a guest install"; exit 1; }
+          echo "model menu behavior OK"
       - name: Hardware detection matrix
         # llmd-hw-detect probes plain command names, so PATH-prepended
         # stubs make every hardware combination testable on a bare
@@ -165,7 +216,7 @@ jobs:
             printf '%s\n' "$plain" | head -5
             exit 1
           fi
-          for c in setup status model key tls metrics webui mcp apply connect bench doctor remove; do
+          for c in setup status model key tls metrics webui mcp speech apply connect bench doctor remove; do
             grep -q "sibilla $c" <<< "$plain" || { echo "man page missing command: $c"; exit 1; }
           done
           echo "man page renders with every command documented"
@@ -781,7 +832,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: gguf-cache
-          key: gguf-9acfc1e0-c159d151-3e243421-v1
+          key: gguf-9acfc1e0-c159d151-3e243421-60ed5bc3-v1
+          restore-keys: |
+            gguf-9acfc1e0-c159d151-3e243421-v1
       - name: Build debs and a local apt repo
         run: |
           sudo apt-get update
@@ -938,6 +991,54 @@ jobs:
           # which does not serve /mcp: anything but a 200 proves closure
           [ "$code" != "200" ] || { echo "MCP still answering after disable"; RC=1; }
           sudo sibilla mcp enable
+          exit "$RC"
+      - name: Speech endpoint through the gateway
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          RC=0
+          # the model rides the artifact cache like the GGUFs; a
+          # pre-placed verified file makes enable skip the download
+          mkdir -p gguf-cache
+          if [ -f gguf-cache/whisper-base.bin ]; then
+            sudo mkdir -p /var/lib/llmd/models/whisper
+            sudo cp gguf-cache/whisper-base.bin /var/lib/llmd/models/whisper/ggml-base.bin
+          fi
+          sudo HF_TOKEN="${HF_TOKEN:-}" sibilla speech enable | tee speech.out
+          grep -q "speech model.*verified" speech.out \
+            || { echo "enable did not verify the model digest"; RC=1; }
+          sudo cp /var/lib/llmd/models/whisper/ggml-base.bin gguf-cache/whisper-base.bin
+          sudo chown "$USER" gguf-cache/whisper-base.bin
+          # a spoken wav the transcription must actually understand;
+          # whisper-server without ffmpeg wants 16 kHz mono
+          sudo apt-get install -y espeak-ng ffmpeg >/dev/null
+          espeak-ng -w /tmp/raw.wav "hello hello hello"
+          ffmpeg -y -loglevel error -i /tmp/raw.wav -ar 16000 -ac 1 /tmp/hello.wav
+          KEY=$(sudo cat /etc/llmd/apikey)
+          # unauthenticated requests must die at the gateway
+          code=$(curl -s -o /dev/null -w '%{http_code}' -m 10 \
+            -X POST http://127.0.0.1:8080/v1/audio/transcriptions \
+            -F file=@/tmp/hello.wav || true)
+          [ "$code" = "401" ] || { echo "unauthenticated speech request got $code"; RC=1; }
+          # first request may hit the model still loading: short retry
+          OUT=""
+          for _ in 1 2 3 4 5; do
+            OUT=$(curl -s -m 120 -X POST http://127.0.0.1:8080/v1/audio/transcriptions \
+              -H "Authorization: Bearer $KEY" \
+              -F file=@/tmp/hello.wav -F response_format=json || true)
+            echo "$OUT" | jq -e '.text' >/dev/null 2>&1 && break
+            sleep 3
+          done
+          echo "transcription: $OUT"
+          echo "$OUT" | jq -e '.text | test("hello"; "i")' >/dev/null \
+            || { echo "transcription did not contain the spoken word"; RC=1; }
+          # disable must close the endpoint: the request falls through
+          # to the engine, which does not serve /v1/audio
+          sudo sibilla speech disable
+          code=$(curl -s -o /dev/null -w '%{http_code}' -m 10 \
+            -X POST http://127.0.0.1:8080/v1/audio/transcriptions \
+            -H "Authorization: Bearer $KEY" -F file=@/tmp/hello.wav || true)
+          [ "$code" != "200" ] || { echo "speech still answering after disable"; RC=1; }
           exit "$RC"
       - name: Offline model import, gated by the signed catalog
         env:

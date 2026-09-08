@@ -118,6 +118,15 @@ cmd_use() {
     echo "then call /v1/embeddings with it; the chat model stays in place" >&2
     exit 1
   fi
+  # a catalog entry that no current engine serves (e.g. the speech
+  # model, owned by sibilla speech) must not reach the engine's pull
+  if jq -e --arg id "${model%%:*}" --arg e "$ENGINE" \
+       '[.models[] | select(.id == $id)] | length > 0 and ([.[] | select(.engines[]? == $e)] | length == 0)' \
+       "$CATALOG" >/dev/null; then
+    echo "$model is not served by the $ENGINE engine." >&2
+    [[ "$role" == "speech" ]] && echo "it is the speech model: sudo sibilla speech enable manages it" >&2
+    exit 1
+  fi
   check_ram_floor "$model"
   # the ollama CLI panics without HOME when run over ssh/sudo
   export HOME="${HOME:-/root}"

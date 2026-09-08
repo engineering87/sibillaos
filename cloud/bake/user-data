@@ -47,7 +47,7 @@ write_files:
       # tarball and failed a whole bake
       ollama_ok=0
       for _ in 1 2 3; do
-        if curl -fsSL https://ollama.com/install.sh | OLLAMA_VERSION=0.32.1 sh; then
+        if curl -fsSL https://ollama.com/install.sh | OLLAMA_VERSION=0.33.2 sh; then
           ollama_ok=1
           break
         fi
@@ -62,6 +62,9 @@ write_files:
         install -D -m644 /mnt/seed/ci-model /etc/llmd/model
       fi
       install -D -m644 /dev/null /etc/llmd/appliance
+      # cloud machines are automation: the first-boot model menu
+      # never appears there (cloud-init and profiles own the choice)
+      install -D -m644 /dev/null /etc/llmd/nomenu
       systemctl enable llmd-firstboot.service
       umount /mnt/seed
       # reseal: wipe cloud-init state and the machine identity so

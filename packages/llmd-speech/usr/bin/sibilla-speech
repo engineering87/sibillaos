@@ -1,0 +1,107 @@
+#!/usr/bin/env bash
+# sibilla-speech: local speech-to-text behind the gateway, on or off.
+set -euo pipefail
+
+STATE=/etc/llmd/speech
+CATALOG=/usr/share/llmd/models.json
+MODEL_DIR=/var/lib/llmd/models/whisper
+MODEL_FILE="$MODEL_DIR/ggml-base.bin"
+MODEL_ID="hf.co/ggerganov/whisper.cpp"
+MODEL_URL="https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin"
+
+usage() {
+  cat <<USAGE
+usage: sibilla-speech COMMAND
+
+  enable    serve speech-to-text at /v1/audio/transcriptions
+  disable   remove the endpoint
+  status    show whether speech is enabled
+
+The endpoint answers with the same bearer keys as the API and speaks
+the OpenAI transcription shape (multipart "file" field). Without
+ffmpeg installed the server accepts 16 kHz WAV only; with ffmpeg it
+converts most audio formats. Details in docs/speech.md in the
+SibillaOS repository.
+USAGE
+  exit 1
+}
+
+need_root() { [[ $EUID -eq 0 ]] || { echo "run as root (sudo)" >&2; exit 1; }; }
+
+check_catalog() {
+  local rc=0
+  /usr/lib/llmd/llmd-catalog-verify "$CATALOG" >/dev/null 2>&1 || rc=$?
+  if [[ "$rc" -eq 1 ]]; then
+    echo "REFUSING to use the catalog: signature verification failed" >&2
+    exit 1
+  fi
+}
+
+# The model arrives like every other catalog artifact: identified and
+# verified against the sha256 digest in the signed catalog, fail
+# closed, no override. A file already in place that matches the digest
+# is kept (air-gapped delivery: put it there by hand, enable verifies).
+ensure_model() {
+  local want have
+  want=$(jq -r --arg id "$MODEL_ID" \
+    '.models[] | select(.id == $id) | .digests.base // empty' "$CATALOG")
+  [[ -n "$want" ]] || { echo "no digest for $MODEL_ID in the catalog" >&2; exit 1; }
+  if [[ -f "$MODEL_FILE" ]]; then
+    have="sha256:$(sha256sum "$MODEL_FILE" | cut -d' ' -f1)"
+    if [[ "$have" == "$want" ]]; then
+      echo "speech model already present and verified"
+      return 0
+    fi
+    echo "REFUSING to keep $MODEL_FILE: sha256 does not match the catalog digest" >&2
+    exit 1
+  fi
+  mkdir -p "$MODEL_DIR"
+  echo "downloading the speech model (~148 MB, verified after download) ..."
+  local tmp
+  tmp=$(mktemp -p "$MODEL_DIR")
+  local -a auth=()
+  [[ -n "${HF_TOKEN:-}" ]] && auth=(-H "Authorization: Bearer $HF_TOKEN")
+  curl -fL --retry 3 "${auth[@]}" -o "$tmp" "$MODEL_URL" \
+    || { rm -f "$tmp"; echo "download failed" >&2; exit 1; }
+  have="sha256:$(sha256sum "$tmp" | cut -d' ' -f1)"
+  if [[ "$have" != "$want" ]]; then
+    rm -f "$tmp"
+    echo "REFUSING to keep the download: sha256 does not match the catalog digest" >&2
+    exit 1
+  fi
+  mv "$tmp" "$MODEL_FILE"
+  chmod 644 "$MODEL_FILE"
+  echo "speech model verified: $want"
+}
+
+render_restart() {
+  /usr/lib/llmd/llmd-gateway-render
+  systemctl restart caddy.service
+}
+
+case "${1:-}" in
+  enable)
+    need_root
+    check_catalog
+    ensure_model
+    echo on > "$STATE"
+    systemctl enable --now llmd-speech.service
+    render_restart
+    echo "speech enabled at /v1/audio/transcriptions (same API keys as the API)"
+    if ! command -v ffmpeg >/dev/null 2>&1; then
+      echo "note: ffmpeg not installed, the endpoint accepts 16 kHz WAV only"
+      echo "      (sudo apt install ffmpeg, then sudo sibilla speech enable again)"
+    fi
+    ;;
+  disable)
+    need_root
+    echo off > "$STATE"
+    systemctl disable --now llmd-speech.service
+    render_restart
+    echo "speech disabled"
+    ;;
+  status)
+    echo "speech: $(cat "$STATE" 2>/dev/null || echo off)"
+    ;;
+  *) usage ;;
+esac

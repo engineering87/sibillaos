@@ -1,0 +1,93 @@
+#!/usr/bin/env bash
+# llmd-model-menu: the model selection screen, on the console, at the
+# appliance's first boot. Interactive when someone is watching, and
+# invisible to automation: a timeout keeps the already-selected model,
+# so unattended installs behave exactly as before this menu existed.
+#
+# The menu never appears when a machine is driven by automation: a
+# declared profile, an air-gapped payload profile, the cloud images
+# (which bake /etc/llmd/nomenu) and non-appliance guests all skip it.
+# It offers only what runs at full speed: no large tier, no embedding
+# models - the giant stays an explicit sibilla model use away.
+set -uo pipefail
+
+CATALOG="${LLMD_MENU_CATALOG:-/usr/share/llmd/models.json}"
+MODEL_FILE="${LLMD_MENU_MODEL_FILE:-/etc/llmd/model}"
+ENGINE_FILE="${LLMD_MENU_ENGINE_FILE:-/etc/llmd/engine}"
+TTY="${LLMD_MENU_TTY:-/dev/tty1}"
+# input normally IS the tty; the override exists because a test that
+# redirects output to a file would otherwise truncate its own input
+IN="${LLMD_MENU_IN:-$TTY}"
+TIMEOUT="${LLMD_MENU_TIMEOUT:-30}"
+MARKER="${LLMD_MENU_MARKER:-/etc/llmd/appliance}"
+NOMENU="${LLMD_MENU_NOMENU:-/etc/llmd/nomenu}"
+PROFILE="${LLMD_MENU_PROFILE:-/etc/llmd/profile}"
+
+# automation and guests: silently not our moment
+[[ -e "$MARKER" ]] || exit 0
+[[ -e "$NOMENU" ]] && exit 0
+[[ -s "$PROFILE" ]] && exit 0
+[[ -r "$CATALOG" ]] || exit 0
+[[ -w "$TTY" && -r "$IN" ]] || exit 0
+
+engine=$(cat "$ENGINE_FILE" 2>/dev/null || echo ollama)
+current=$(cat "$MODEL_FILE" 2>/dev/null || true)
+
+# the same allowed set the auto-selector uses: engine match, no
+# embedding role, no large tier
+mapfile -t ids < <(jq -r --arg e "$engine" \
+  '.models[] | select(.engines[]? == $e) | select(.role? != "embedding") | select(.tier? != "large") | .id' \
+  "$CATALOG" 2>/dev/null)
+[[ ${#ids[@]} -gt 0 ]] || exit 0
+
+# no current selection yet (cloud-style boot): the first default entry
+# stands in as the menu default, and the auto-selector still runs later
+default="$current"
+if [[ -z "$default" ]]; then
+  default=$(jq -r --arg e "$engine" \
+    '[.models[] | select(.engines[]? == $e) | select(.role? != "embedding") | select(.tier? != "large")] | (map(select(.default == true)) + .)[0].id' \
+    "$CATALOG" 2>/dev/null)
+fi
+
+# everything from here talks to the console; a failure to draw or read
+# must never cost the boot, so the default always survives
+{
+  exec > "$TTY" 2>&1 || exit 0
+  # shellcheck source=/dev/null
+  [[ -r /usr/lib/llmd/sibilla-style ]] && . /usr/lib/llmd/sibilla-style
+  echo
+  s_hdr "model menu" 2>/dev/null || echo ".:: sibilla ::. model menu"
+  echo "This machine will serve the model marked [default]."
+  echo "Pick a number to change it, or wait ${TIMEOUT}s to keep it."
+  echo
+  i=0
+  for id in "${ids[@]}"; do
+    i=$((i + 1))
+    line="  $i) $id"
+    fam=$(jq -r --arg id "$id" '.models[] | select(.id == $id) | "[" + .family + ", " + (.tier // "cpu") + "]"' "$CATALOG" 2>/dev/null)
+    [[ -n "$fam" ]] && line="$line  $fam"
+    [[ "$id" == "$default" ]] && line="$line  [default]"
+    echo "$line"
+  done
+  echo
+  echo "Larger and embedding models stay one command away after boot:"
+  echo "  sibilla model list"
+  echo
+  choice=""
+  if read -r -t "$TIMEOUT" -p "model [default: keep] > " choice < "$IN"; then
+    if [[ "$choice" =~ ^[0-9]+$ ]] && [[ "$choice" -ge 1 && "$choice" -le ${#ids[@]} ]]; then
+      picked="${ids[$((choice - 1))]}"
+      mkdir -p "$(dirname "$MODEL_FILE")"
+      echo "$picked" > "$MODEL_FILE"
+      echo "selected: $picked"
+    else
+      [[ -n "$choice" ]] && echo "not a listed number, keeping the default"
+    fi
+  else
+    echo
+    echo "no choice made, keeping the default"
+  fi
+  [[ -s "$MODEL_FILE" ]] && echo "this machine will serve: $(cat "$MODEL_FILE")"
+} || true
+
+exit 0

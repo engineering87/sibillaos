@@ -70,7 +70,7 @@ autoinstall:
     # 3. Inference engine, PINNED version for reproducible builds (bump
     #    deliberately; the CI install test validates it). llmfit ships as
     #    a deb in the ISO payload since v0.2.
-    - curtin in-target -- bash -c 'ok=0; for i in 1 2 3; do curl -fsSL https://ollama.com/install.sh | OLLAMA_VERSION=0.32.1 sh && { ok=1; break; }; echo "ollama install failed, retrying in 15s"; sleep 15; done; [ "$ok" -eq 1 ]'
+    - curtin in-target -- bash -c 'ok=0; for i in 1 2 3; do curl -fsSL https://ollama.com/install.sh | OLLAMA_VERSION=0.33.2 sh && { ok=1; break; }; echo "ollama install failed, retrying in 15s"; sleep 15; done; [ "$ok" -eq 1 ]'
     # 4. Hardware detection and default model pick (non-fatal: firstboot
     #    still brings the gateway up without a preselected model)
     - curtin in-target -- /usr/lib/llmd/llmd-hw-detect --write /etc/llmd/engine
@@ -82,6 +82,10 @@ autoinstall:
     #    source only on the images, not on `sibilla setup` installs
     - curtin in-target -- install -D -m644 /dev/null /etc/llmd/appliance
     - curtin in-target -- systemctl enable llmd-firstboot.service
+    #    the first-boot model menu is the ISO's interactive moment;
+    #    a timeout keeps the installer's choice, so unattended
+    #    installs (CI included) behave exactly as before
+    - curtin in-target -- systemctl enable llmd-model-menu.service
     # 5. Branding and serial console on the installed system
     - curtin in-target -- bash -c 'install -D -m644 /opt/sibilla/wallpaper.png /usr/share/backgrounds/sibillaos/wallpaper.png || true'
     - curtin in-target -- sed -i 's/GRUB_CMDLINE_LINUX_DEFAULT="/&console=tty0 console=ttyS0,115200n8 /' /etc/default/grub

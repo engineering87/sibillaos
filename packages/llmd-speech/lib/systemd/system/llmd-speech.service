@@ -1,0 +1,26 @@
+[Unit]
+Description=SibillaOS speech-to-text server (whisper.cpp)
+Documentation=https://github.com/engineering87/sibillaos
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/lib/llmd/llmd-speech-server
+Restart=on-failure
+RestartSec=2
+# Loopback only; authentication lives at the gateway, this unit never
+# reads the API keys. Standard SibillaOS sandbox: a dynamic user with
+# read access to the model store and nothing else.
+DynamicUser=yes
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+
+[Install]
+WantedBy=multi-user.target
