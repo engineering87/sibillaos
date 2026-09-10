@@ -107,6 +107,12 @@ keys, speaking the OpenAI transcription shape (multipart "file"
 field). The Whisper model arrives digest-verified from the signed
 catalog. Without ffmpeg the endpoint accepts 16 kHz WAV only; with
 ffmpeg installed it converts most audio formats.
+.SS sibilla oidc enable ISSUER_URL CLIENT_ID [EXTERNAL_URL] | disable | status
+OIDC login for the WebUI against the team's own provider (Entra,
+Keycloak, Google, ...). The client secret is read from stdin, never
+from arguments. Protects the WebUI only: API clients keep their bearer
+keys. The provider must allow EXTERNAL_URL/oauth2/callback as a
+redirect URI.
 .SS sibilla apply [FILE] | export | check
 Configuration as code. A profile file (plain KEY=value: MODEL, TLS,
 METRICS, MCP, WEBUI; every key optional) declares the desired state;

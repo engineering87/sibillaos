@@ -26,6 +26,10 @@ case "${1:-}" in
     # --no-block: the first start pulls a multi-GB image and a plain
     # start would sit silent until the download finishes
     systemctl start --no-block webui.service
+    # the gateway fronts the interface on :3000 (the container itself
+    # is loopback-only), so the Caddyfile must learn the new block
+    /usr/lib/llmd/llmd-gateway-render
+    systemctl restart caddy.service
     echo "Open WebUI enabled: http://$(hostname -I 2>/dev/null | awk '{print $1}'):3000"
     echo "The first pull of the container image can take several minutes;"
     echo "follow it with: journalctl -u webui.service -f"
@@ -39,6 +43,8 @@ case "${1:-}" in
     systemctl stop webui.service 2>/dev/null || true
     rm -f "$FLAG"
     systemctl daemon-reload
+    /usr/lib/llmd/llmd-gateway-render
+    systemctl restart caddy.service
     echo "Open WebUI disabled."
     ;;
   status)

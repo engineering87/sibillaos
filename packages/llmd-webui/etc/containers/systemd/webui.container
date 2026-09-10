@@ -10,10 +10,13 @@ ConditionPathExists=/etc/llmd/webui.enabled
 [Container]
 Image=ghcr.io/open-webui/open-webui:main
 # Host networking so the container reaches ollama on 127.0.0.1:11434
-# (ollama is deliberately loopback-only). PORT avoids clashing with the
-# gateway on 8080. Open WebUI has its own login on first access.
+# (ollama is deliberately loopback-only). Since v0.9 the interface
+# itself binds to loopback 3001 and Caddy fronts it on :3000 - one
+# uniform posture, and the OIDC proxy can sit in the middle when
+# enabled. Open WebUI has its own login on first access.
 Network=host
-Environment=PORT=3000
+Environment=HOST=127.0.0.1
+Environment=PORT=3001
 Environment=OLLAMA_BASE_URL=http://127.0.0.1:11434
 # the interface presents itself as part of the appliance; upstream
 # appends "(Open WebUI)" on its own, which is fair attribution

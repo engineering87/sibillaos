@@ -17,6 +17,8 @@ ENGINE_FILE="${LLMD_ENGINE_FILE:-/etc/llmd/engine}"
 ACCESS_LOG="${LLMD_ACCESS_LOG:-/var/log/caddy/sibilla-access.log}"
 MCP_FILE="${LLMD_MCP_FILE:-/etc/llmd/mcp}"
 SPEECH_FILE="${LLMD_SPEECH_FILE:-/etc/llmd/speech}"
+WEBUI_FLAG="${LLMD_WEBUI_FLAG:-/etc/llmd/webui.enabled}"
+OIDC_FILE="${LLMD_OIDC_FILE:-/etc/llmd/oidc}"
 MODE=http
 TLS_HOSTNAME=""
 ACME_EMAIL=""
@@ -25,6 +27,9 @@ METRICS=off
 [[ -r "$CONF" ]] && . "$CONF"
 mcp=$(cat "$MCP_FILE" 2>/dev/null || echo off)
 speech=$(cat "$SPEECH_FILE" 2>/dev/null || echo off)
+webui=off
+[[ -e "$WEBUI_FLAG" ]] && webui=on
+oidc=$(cat "$OIDC_FILE" 2>/dev/null || echo off)
 
 engine=$(cat "$ENGINE_FILE" 2>/dev/null || echo ollama)
 case "$engine" in
@@ -117,6 +122,26 @@ BLOCK
 BLOCK
 }
 
+# The WebUI site: the container listens on loopback 3001 and Caddy
+# fronts it on :3000 whenever the WebUI is enabled - one uniform
+# posture. With OIDC on, oauth2-proxy (loopback 4180, proxy mode:
+# native login redirects, no forward_auth 401 gymnastics) sits in the
+# middle; with OIDC off, the WebUI keeps its own login, unchanged.
+webui_block() {
+  local up="127.0.0.1:3001"
+  [[ "$oidc" == "on" ]] && up="127.0.0.1:4180"
+  cat <<BLOCK
+
+:3000 {
+	header {
+		Server "SibillaOS"
+		defer
+	}
+	reverse_proxy $up
+}
+BLOCK
+}
+
 case "$MODE" in
   internal)
     [[ -n "$TLS_HOSTNAME" ]] || { echo "internal mode needs TLS_HOSTNAME" >&2; exit 1; }
@@ -126,6 +151,7 @@ case "$MODE" in
       echo "	tls internal"
       site_body
       echo "}"
+      if [[ "$webui" == "on" ]]; then webui_block; fi
     } > "$CADDYFILE"
     ;;
   acme)
@@ -135,6 +161,7 @@ case "$MODE" in
       echo "$TLS_HOSTNAME {"
       site_body
       echo "}"
+      if [[ "$webui" == "on" ]]; then webui_block; fi
     } > "$CADDYFILE"
     ;;
   *)
@@ -143,7 +170,8 @@ case "$MODE" in
       echo ":8080 {"
       site_body
       echo "}"
+      if [[ "$webui" == "on" ]]; then webui_block; fi
     } > "$CADDYFILE"
     ;;
 esac
-echo "gateway config rendered: mode=$MODE upstream=$upstream metrics=$METRICS mcp=$mcp speech=$speech"
+echo "gateway config rendered: mode=$MODE upstream=$upstream metrics=$METRICS mcp=$mcp speech=$speech webui=$webui oidc=$oidc"

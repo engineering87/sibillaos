@@ -2,8 +2,10 @@
 
 `sudo sibilla speech enable` puts a transcription endpoint on the same
 gateway, behind the same keys, as everything else this machine serves.
-The engine is whisper.cpp, repackaged from its pinned upstream release
-exactly like llmfit (recorded sha256, no installer scripts), and the
+The engine is [whisper.cpp](https://github.com/ggml-org/whisper.cpp),
+repackaged from its pinned upstream release exactly like
+[llmfit](https://github.com/AlexsJones/llmfit) (recorded sha256, no
+installer scripts), and the
 Whisper model arrives like every other catalog artifact: verified
 against the digest in the GPG-signed catalog, refused on mismatch,
 with no override. Audio is transcribed on this machine and goes

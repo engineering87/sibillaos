@@ -103,7 +103,7 @@ The installer detects your hardware and makes the decisions a human would otherw
 | **One CLI** | `sibilla status` is a health view of the whole stack: engine, served models, disk usage of the model store, GPU utilization, gateway reachability. |
 | **Model management** | `sibilla model list` shows what fits your machine, `sibilla model use ID` downloads and switches the served model, `import FILE` brings one in from a USB stick or shared drive (accepted only if it matches the signed catalog digests), `rm` and `prune` reclaim disk. |
 | **Observability** | `sibilla metrics enable` serves Prometheus metrics behind the same API key; Grafana dashboard included in [docs/observability](docs/observability/). |
-| **Chat interface** | `sibilla webui enable` starts Open WebUI on port 3000 as an opt-in container, wired to the local engine. |
+| **Chat interface** | `sibilla webui enable` starts Open WebUI on port 3000 as an opt-in container, wired to the local engine; `sibilla oidc enable` puts it behind your organization's OIDC provider (Entra, Keycloak, Google), secret on stdin, API keys untouched. See [docs/oidc.md](docs/oidc.md). |
 | **Editor hookup** | `sibilla connect` prints ready-to-paste configuration for VS Code (Continue, Cline), aider and any OpenAI-compatible client. |
 | **Agent hookup** | `sibilla mcp enable` exposes the local model to MCP clients (Claude Code and other agent frameworks) as `chat` and `list_models` tools, behind the same API keys. See [docs/mcp.md](docs/mcp.md). |
 | **Config as code** | Declare the desired state (model, TLS, metrics, MCP, WebUI) in one profile file; `sibilla apply` converges the machine onto it, idempotently. `apply export` turns a configured machine into a profile; cloud-init or a fleet tool drops the file and first boot picks it up. See [docs/configuration.md](docs/configuration.md). |
@@ -175,6 +175,20 @@ bench` and `sibilla doctor` produce paste-ready, secret-free results.
 
 Contributions are welcome. [CONTRIBUTING.md](CONTRIBUTING.md) covers the build setup, the CI test suite your change has to pass, and the criteria for model catalog additions.
 
+## Built on
+
+SibillaOS is an integration: the value it adds lives around excellent upstream projects, each pinned to an exact release and verified against recorded or published checksums.
+
+| Project | What it does here | License |
+|---|---|---|
+| [Ollama](https://github.com/ollama/ollama) | The default inference engine | MIT |
+| [vLLM](https://github.com/vllm-project/vllm) | The datacenter-GPU inference engine | Apache-2.0 |
+| [llmfit](https://github.com/AlexsJones/llmfit) by Alex Jones | Hardware-aware model recommendation: which models actually fit this machine, at which quantization ([llmfit.org](https://www.llmfit.org/)) | MIT |
+| [whisper.cpp](https://github.com/ggml-org/whisper.cpp) by Georgi Gerganov and the ggml authors | Local speech-to-text behind the gateway | MIT |
+| [oauth2-proxy](https://github.com/oauth2-proxy/oauth2-proxy) | OIDC login for the WebUI | MIT |
+| [Caddy](https://github.com/caddyserver/caddy) | The authenticated gateway | Apache-2.0 |
+| [Open WebUI](https://github.com/open-webui/open-webui) | The opt-in chat interface | BSD-3-Clause based |
+
 ## License
 
-Apache-2.0, see [LICENSE](LICENSE). Bundled components keep their own licenses: vLLM (Apache-2.0), Ollama (MIT), llmfit (MIT). NVIDIA drivers are not redistributed by this repository; the ISO installs them from the Ubuntu `restricted` component.
+Apache-2.0, see [LICENSE](LICENSE). Bundled components keep their own licenses, listed above. NVIDIA drivers are not redistributed by this repository; the ISO installs them from the Ubuntu `restricted` component. Models are downloaded by the user from Hugging Face or, for the large tier, the ollama.com registry, under their respective licenses.

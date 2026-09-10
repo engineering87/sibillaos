@@ -1,0 +1,27 @@
+[Unit]
+Description=SibillaOS OIDC authentication proxy for the WebUI (oauth2-proxy)
+Documentation=https://github.com/engineering87/sibillaos
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# systemd reads the environment file as root before dropping to the
+# dynamic user, so the secrets stay 600 root-owned
+EnvironmentFile=/etc/llmd/oidc.env
+ExecStart=/usr/lib/llmd/llmd-oidc-server
+Restart=on-failure
+RestartSec=2
+DynamicUser=yes
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+
+[Install]
+WantedBy=multi-user.target

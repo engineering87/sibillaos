@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# llmd-oidc-server: launcher for the repackaged oauth2-proxy. The
+# upstream tarball nests the binary in a versioned directory, so it is
+# located at start rather than hardcoded.
+set -euo pipefail
+
+ROOT=/usr/lib/llmd/oauth2-proxy
+BIN=$(find "$ROOT" -name oauth2-proxy -type f 2>/dev/null | head -1)
+[[ -n "$BIN" && -x "$BIN" ]] || { echo "oauth2-proxy not found under $ROOT" >&2; exit 1; }
+exec "$BIN"

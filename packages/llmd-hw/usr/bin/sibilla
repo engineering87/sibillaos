@@ -17,6 +17,7 @@ usage: sibilla COMMAND [ARGS]
   webui ...      enable or disable the Open WebUI chat interface
   mcp ...        expose the local model to MCP clients, on or off
   speech ...     local speech-to-text at /v1/audio/transcriptions
+  oidc ...       OIDC login for the WebUI (bring your own provider)
   apply          reconcile the machine onto a declared profile file
                  (export prints the current state; check audits drift,
                  hand edits, model digest and key permissions)
@@ -44,6 +45,7 @@ case "$cmd" in
   webui)   exec sibilla-webui "$@" ;;
   mcp)     exec sibilla-mcp "$@" ;;
   speech)  exec sibilla-speech "$@" ;;
+  oidc)    exec sibilla-oidc "$@" ;;
   apply)   exec /usr/lib/llmd/sibilla-apply "$@" ;;
   connect) exec sibilla-connect "$@" ;;
   bench)   exec /usr/lib/llmd/sibilla-bench "$@" ;;

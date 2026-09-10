@@ -1,0 +1,87 @@
+#!/usr/bin/env bash
+# sibilla-oidc: OIDC authentication for the WebUI, on or off.
+# The client secret arrives on stdin, never argv: arguments land in
+# shell history and process listings, secrets must not.
+set -uo pipefail
+
+STATE=/etc/llmd/oidc
+ENVF=/etc/llmd/oidc.env
+
+usage() {
+  cat <<USAGE
+usage: sibilla-oidc COMMAND
+
+  enable ISSUER_URL CLIENT_ID [EXTERNAL_URL]
+            put the WebUI behind the team's OIDC provider; the client
+            secret is read from stdin (prompted on a terminal).
+            EXTERNAL_URL is how browsers reach the WebUI (default
+            http://FIRST_IP:3000); the provider must allow
+            EXTERNAL_URL/oauth2/callback as a redirect URI
+  disable   back to the WebUI's own login
+  status    show whether OIDC is enabled
+
+Protects the WebUI only: API clients keep their bearer keys. The
+provider is yours (Entra, Keycloak, Google, ...); the appliance
+bundles none. Details in docs/oidc.md in the SibillaOS repository.
+USAGE
+  exit 1
+}
+
+need_root() { [[ $EUID -eq 0 ]] || { echo "run as root (sudo)" >&2; exit 1; }; }
+
+render_restart() {
+  /usr/lib/llmd/llmd-gateway-render
+  systemctl restart caddy.service
+}
+
+case "${1:-}" in
+  enable)
+    need_root
+    [[ $# -ge 3 ]] || usage
+    issuer="$2"; client_id="$3"
+    external="${4:-http://$(hostname -I 2>/dev/null | awk '{print $1}'):3000}"
+    [[ "$issuer" =~ ^https?:// ]] || { echo "ISSUER_URL must be a URL" >&2; exit 1; }
+    if [[ -t 0 ]]; then
+      read -rs -p "client secret (not echoed): " client_secret; echo
+    else
+      read -r client_secret
+    fi
+    [[ -n "$client_secret" ]] || { echo "empty client secret" >&2; exit 1; }
+    cookie_secret=$(head -c32 /dev/urandom | base64 | tr '+/' '-_')
+    umask 077
+    cat > "$ENVF" <<EOF
+OAUTH2_PROXY_PROVIDER=oidc
+OAUTH2_PROXY_OIDC_ISSUER_URL=$issuer
+OAUTH2_PROXY_CLIENT_ID=$client_id
+OAUTH2_PROXY_CLIENT_SECRET=$client_secret
+OAUTH2_PROXY_COOKIE_SECRET=$cookie_secret
+OAUTH2_PROXY_REDIRECT_URL=$external/oauth2/callback
+OAUTH2_PROXY_HTTP_ADDRESS=127.0.0.1:4180
+OAUTH2_PROXY_UPSTREAMS=http://127.0.0.1:3001
+OAUTH2_PROXY_EMAIL_DOMAINS=*
+OAUTH2_PROXY_SKIP_PROVIDER_BUTTON=true
+OAUTH2_PROXY_COOKIE_SECURE=false
+OAUTH2_PROXY_REVERSE_PROXY=true
+EOF
+    echo on > "$STATE"
+    systemctl enable --now llmd-oidc.service
+    render_restart
+    echo "OIDC enabled: browsers on $external authenticate against $issuer"
+    echo "the provider must allow this redirect URI: $external/oauth2/callback"
+    echo "API clients are untouched: bearer keys as before"
+    ;;
+  disable)
+    need_root
+    echo off > "$STATE"
+    systemctl disable --now llmd-oidc.service
+    render_restart
+    echo "OIDC disabled: the WebUI is back on its own login"
+    ;;
+  status)
+    echo "oidc: $(cat "$STATE" 2>/dev/null || echo off)"
+    if [[ -r "$ENVF" ]]; then
+      sed -n 's/^OAUTH2_PROXY_OIDC_ISSUER_URL=/issuer: /p' "$ENVF"
+    fi
+    ;;
+  *) usage ;;
+esac
