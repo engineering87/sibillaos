@@ -1112,7 +1112,7 @@ jobs:
             -v /tmp/dex.yaml:/etc/dex/config.yaml \
             ghcr.io/dexidp/dex:v2.45.1 dex serve /etc/dex/config.yaml
           for _ in $(seq 1 30); do
-            curl -fsS -o /dev/null http://127.0.0.1:5556/dex/.well-known/openid-configuration && break
+            curl -fs -o /dev/null http://127.0.0.1:5556/dex/.well-known/openid-configuration && break
             sleep 2
           done
           curl -fsS -o /dev/null http://127.0.0.1:5556/dex/.well-known/openid-configuration \
@@ -1137,9 +1137,22 @@ jobs:
           FINAL=$(curl -s -c "$JAR" -b "$JAR" -L -o /tmp/final -w '%{url_effective}' \
             -d 'login=admin@example.com&password=password' "$AUTH_URL")
           echo "landed on: $FINAL"
+          # recent dex routes through /approval with an hmac even when
+          # the approval screen is configured away: confirm it like the
+          # auto-submitting browser form would, then land for real
+          if ! grep -q "SIBILLA-WEBUI-STANDIN" /tmp/final && [[ "$FINAL" == *"/approval"* ]]; then
+            REQ=$(sed -n 's/.*[?&]req=\([^&]*\).*/\1/p' <<< "$FINAL")
+            HMAC=$(sed -n 's/.*[?&]hmac=\([^&]*\).*/\1/p' <<< "$FINAL")
+            FINAL=$(curl -s -c "$JAR" -b "$JAR" -L -o /tmp/final -w '%{url_effective}' \
+              -d "req=$REQ&approval=approve&hmac=$HMAC" \
+              "http://127.0.0.1:5556/dex/approval?req=$REQ&hmac=$HMAC")
+            echo "after approval: $FINAL"
+          fi
           grep -q "SIBILLA-WEBUI-STANDIN" /tmp/final \
             || { echo "authenticated request did not reach the WebUI upstream"
                  head -c 300 /tmp/final; echo
+                 echo "--- dex log:"; sudo podman logs dex 2>&1 | tail -20
+                 echo "--- oauth2-proxy log:"
                  sudo journalctl -u llmd-oidc.service --no-pager | tail -20; RC=1; }
           # disable returns the WebUI to its own login: direct access
           sudo sibilla oidc disable
