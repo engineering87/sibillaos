@@ -107,6 +107,21 @@ keys, speaking the OpenAI transcription shape (multipart "file"
 field). The Whisper model arrives digest-verified from the signed
 catalog. Without ffmpeg the endpoint accepts 16 kHz WAV only; with
 ffmpeg installed it converts most audio formats.
+.SS sibilla fleet apply [PROFILE] | check | status
+The declared profile across many machines, over the operator's own
+SSH (config, agent and keys; this tool manages no credentials).
+.B apply
+pushes the profile to every host listed in
+.I /etc/llmd/fleet
+(one SSH destination per line) and converges each;
+.B check
+aggregates every host's
+.B sibilla apply check
+and exits nonzero on any finding, so it works as a fleet cron probe;
+.B status
+reports each host's health. Remote hosts need the llmd packages and
+passwordless sudo, or a root login. Profiles carry no secrets by
+design, so pushing one is safe by construction.
 .SS sibilla oidc enable ISSUER_URL CLIENT_ID [EXTERNAL_URL] | disable | status
 OIDC login for the WebUI against the team's own provider (Entra,
 Keycloak, Google, ...). The client secret is read from stdin, never

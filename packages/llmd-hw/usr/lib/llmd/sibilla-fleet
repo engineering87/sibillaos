@@ -1,0 +1,133 @@
+#!/usr/bin/env bash
+# sibilla-fleet: the declarative profile, pushed to many machines.
+# Everything rides the operator's own SSH (config, agent, keys - this
+# tool adds no transport and manages no credentials), and profiles
+# carry no secrets by design, so pushing one is safe by construction.
+set -uo pipefail
+
+# shellcheck source=/dev/null
+. /usr/lib/llmd/sibilla-style
+
+HOSTS_FILE="${LLMD_FLEET_HOSTS:-/etc/llmd/fleet}"
+SSH_OPTS=(-o BatchMode=yes -o ConnectTimeout=10)
+
+usage() {
+  cat <<USAGE
+usage: sibilla-fleet COMMAND [ARGS]
+
+  apply [PROFILE]   push PROFILE (default /etc/llmd/profile) to every
+                    host and converge each onto it
+  check             run 'sibilla apply check' on every host: drift,
+                    hand edits, model digest, key permissions;
+                    exits nonzero if any host has findings
+  status            engine, model and gateway health per host;
+                    exits nonzero if any host is unhealthy
+
+The fleet is a plain file, one SSH destination per line (# comments
+allowed): $HOSTS_FILE, overridable with LLMD_FLEET_HOSTS. Destinations
+are anything your ssh accepts (host, user@host, a ~/.ssh/config
+alias). The remote side needs the llmd packages and passwordless sudo
+(or connect as root). Details in docs/fleet.md.
+USAGE
+  exit 1
+}
+
+read_hosts() {
+  [[ -r "$HOSTS_FILE" ]] || {
+    echo "no fleet file at $HOSTS_FILE (one SSH destination per line)" >&2
+    exit 1
+  }
+  mapfile -t HOSTS < <(sed 's/#.*//' "$HOSTS_FILE" | awk 'NF')
+  [[ ${#HOSTS[@]} -gt 0 ]] || { echo "the fleet file lists no hosts" >&2; exit 1; }
+}
+
+# one remote command, output captured; the caller decides what failure
+# means. sudo -n: a password prompt over a batch channel would hang
+# forever, better an instant, named failure.
+remote() { # remote HOST CMD...
+  local host="$1"; shift
+  ssh "${SSH_OPTS[@]}" "$host" "$@" 2>&1
+}
+
+sudo_hint() {
+  echo "           (sudo needs a password there: configure passwordless sudo or connect as root@)"
+}
+
+cmd_apply() {
+  local profile="${1:-/etc/llmd/profile}"
+  [[ -r "$profile" ]] || { echo "no readable profile at $profile" >&2; exit 1; }
+  read_hosts
+  s_hdr fleet
+  echo "applying $profile to ${#HOSTS[@]} host(s)"
+  local failed=0 host out rc
+  for host in "${HOSTS[@]}"; do
+    s_rule
+    s_kv "host:" "$host"
+    out=$(remote "$host" "sudo -n tee /etc/llmd/profile >/dev/null && sudo -n sibilla apply /etc/llmd/profile" < "$profile"); rc=$?
+    if [[ $rc -eq 0 ]]; then
+      echo "$out" | sed 's/^/           /'
+      s_kv "result:" "converged" "$(s_ok)"
+    else
+      failed=$((failed + 1))
+      echo "$out" | tail -5 | sed 's/^/           /'
+      s_kv "result:" "FAILED (rc=$rc)" "$(s_warn)"
+      echo "$out" | grep -qi "sudo.*password" && sudo_hint
+    fi
+  done
+  s_rule
+  echo "fleet apply: $(( ${#HOSTS[@]} - failed )) converged, $failed failed"
+  exit "$(( failed > 0 ))"
+}
+
+cmd_check() {
+  read_hosts
+  s_hdr fleet
+  local findings=0 host out rc
+  for host in "${HOSTS[@]}"; do
+    s_rule
+    s_kv "host:" "$host"
+    out=$(remote "$host" "sudo -n sibilla apply check"); rc=$?
+    if [[ $rc -eq 0 ]]; then
+      s_kv "check:" "passed" "$(s_ok)"
+    else
+      findings=$((findings + 1))
+      echo "$out" | tail -8 | sed 's/^/           /'
+      s_kv "check:" "FINDINGS (rc=$rc)" "$(s_warn)"
+      echo "$out" | grep -qi "sudo.*password" && sudo_hint
+    fi
+  done
+  s_rule
+  echo "fleet check: $(( ${#HOSTS[@]} - findings )) clean, $findings with findings"
+  exit "$(( findings > 0 ))"
+}
+
+cmd_status() {
+  read_hosts
+  s_hdr fleet
+  local down=0 host out rc
+  for host in "${HOSTS[@]}"; do
+    s_rule
+    s_kv "host:" "$host"
+    # sibilla status exits nonzero when the engine or gateway is down;
+    # NO_COLOR keeps the nested output byte-stable inside ours
+    out=$(remote "$host" "NO_COLOR=1 sudo -n sibilla status"); rc=$?
+    echo "$out" | sed 's/^/           /'
+    if [[ $rc -eq 0 ]]; then
+      s_kv "health:" "serving" "$(s_ok)"
+    else
+      down=$((down + 1))
+      s_kv "health:" "UNHEALTHY (rc=$rc)" "$(s_warn)"
+      echo "$out" | grep -qi "sudo.*password" && sudo_hint
+    fi
+  done
+  s_rule
+  echo "fleet status: $(( ${#HOSTS[@]} - down )) serving, $down unhealthy"
+  exit "$(( down > 0 ))"
+}
+
+case "${1:-}" in
+  apply)  shift; cmd_apply "$@" ;;
+  check)  cmd_check ;;
+  status) cmd_status ;;
+  *)      usage ;;
+esac
