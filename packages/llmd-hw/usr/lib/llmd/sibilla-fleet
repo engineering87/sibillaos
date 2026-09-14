@@ -43,10 +43,19 @@ read_hosts() {
 
 # one remote command, output captured; the caller decides what failure
 # means. sudo -n: a password prompt over a batch channel would hang
-# forever, better an instant, named failure.
+# forever, better an instant, named failure. Client-side expansion of
+# the command is intentional: every command is a fixed string built in
+# this file, never operator input.
 remote() { # remote HOST CMD...
   local host="$1"; shift
+  # shellcheck disable=SC2029
   ssh "${SSH_OPTS[@]}" "$host" "$@" 2>&1
+}
+
+# nested output sits indented under its host line
+indent() {
+  local line
+  while IFS= read -r line; do printf '           %s\n' "$line"; done
 }
 
 sudo_hint() {
@@ -65,11 +74,11 @@ cmd_apply() {
     s_kv "host:" "$host"
     out=$(remote "$host" "sudo -n tee /etc/llmd/profile >/dev/null && sudo -n sibilla apply /etc/llmd/profile" < "$profile"); rc=$?
     if [[ $rc -eq 0 ]]; then
-      echo "$out" | sed 's/^/           /'
+      indent <<< "$out"
       s_kv "result:" "converged" "$(s_ok)"
     else
       failed=$((failed + 1))
-      echo "$out" | tail -5 | sed 's/^/           /'
+      tail -5 <<< "$out" | indent
       s_kv "result:" "FAILED (rc=$rc)" "$(s_warn)"
       echo "$out" | grep -qi "sudo.*password" && sudo_hint
     fi
@@ -91,7 +100,7 @@ cmd_check() {
       s_kv "check:" "passed" "$(s_ok)"
     else
       findings=$((findings + 1))
-      echo "$out" | tail -8 | sed 's/^/           /'
+      tail -8 <<< "$out" | indent
       s_kv "check:" "FINDINGS (rc=$rc)" "$(s_warn)"
       echo "$out" | grep -qi "sudo.*password" && sudo_hint
     fi
@@ -111,7 +120,7 @@ cmd_status() {
     # sibilla status exits nonzero when the engine or gateway is down;
     # NO_COLOR keeps the nested output byte-stable inside ours
     out=$(remote "$host" "NO_COLOR=1 sudo -n sibilla status"); rc=$?
-    echo "$out" | sed 's/^/           /'
+    indent <<< "$out"
     if [[ $rc -eq 0 ]]; then
       s_kv "health:" "serving" "$(s_ok)"
     else
