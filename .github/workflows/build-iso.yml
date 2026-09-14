@@ -1200,6 +1200,15 @@ jobs:
           grep -q "1 clean, 1 with findings" fleet-red.out \
             || { echo "unreachable host not aggregated"; cat fleet-red.out; RC=1; }
           echo "$(whoami)@127.0.0.1" | sudo tee /etc/llmd/fleet >/dev/null
+          # leave the machine as found: the later config-as-code step
+          # asserts the METRICS=off baseline, and a test that does not
+          # clean up after itself is a test that breaks its neighbors
+          printf 'METRICS=off\n' > /tmp/fleet-profile-off
+          sibilla fleet apply /tmp/fleet-profile-off | tee fleet-restore.out || RC=1
+          grep -q "1 converged, 0 failed" fleet-restore.out \
+            || { echo "fleet apply did not converge the restore"; RC=1; }
+          sudo sibilla apply export | grep -q "METRICS=off" \
+            || { echo "metrics baseline not restored"; RC=1; }
           exit "$RC"
       - name: Offline model import, gated by the signed catalog
         env:
