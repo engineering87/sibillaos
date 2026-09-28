@@ -7,6 +7,7 @@
 #   METRICS=on|off
 #   MCP=on|off
 #   WEBUI=on|off
+#   SPEECH=on|off
 #
 # Every key is optional: absent means "leave it as it is", so partial
 # profiles compose. API keys are deliberately not part of a profile:
@@ -60,6 +61,7 @@ read_state() {
   esac
   CUR_METRICS=$(conf_get METRICS); CUR_METRICS=${CUR_METRICS:-off}
   CUR_MCP=$(cat /etc/llmd/mcp 2>/dev/null || echo off)
+  CUR_SPEECH=$(cat /etc/llmd/speech 2>/dev/null || echo off)
   CUR_WEBUI=off
   # a bare `[[ ... ]] && x` as the last statement of a function makes
   # the function fail under set -e when the condition is false
@@ -79,6 +81,7 @@ cmd_export() {
   echo "METRICS=$CUR_METRICS"
   echo "MCP=$CUR_MCP"
   echo "WEBUI=$CUR_WEBUI"
+  echo "SPEECH=$CUR_SPEECH"
 }
 
 # every toggle goes through the command that owns it; a profile that
@@ -93,7 +96,7 @@ cmd_apply() {
   [[ $EUID -eq 0 ]] || { echo "run as root (sudo)" >&2; exit 1; }
   [[ -r "$file" ]] || { echo "no readable profile at $file" >&2; usage; }
 
-  local MODEL="" TLS="" METRICS="" MCP="" WEBUI=""
+  local MODEL="" TLS="" METRICS="" MCP="" WEBUI="" SPEECH=""
   # shellcheck disable=SC1090
   . "$file"
 
@@ -103,7 +106,7 @@ cmd_apply() {
     exit 1
   fi
   local key val
-  for key in METRICS MCP WEBUI; do
+  for key in METRICS MCP WEBUI SPEECH; do
     val="${!key}"
     if [[ -n "$val" && "$val" != on && "$val" != off ]]; then
       echo "invalid $key value '$val' (on or off)" >&2
@@ -180,6 +183,18 @@ cmd_apply() {
     fi
   fi
 
+  if [[ -n "$SPEECH" ]]; then
+    if [[ "$SPEECH" == "$CUR_SPEECH" ]]; then
+      echo "speech:  ok ($SPEECH)"
+      kept=$((kept + 1))
+    else
+      echo "speech:  $CUR_SPEECH -> $SPEECH"
+      need_cmd sibilla-speech
+      if [[ "$SPEECH" == on ]]; then sibilla-speech enable; else sibilla-speech disable; fi
+      changes=$((changes + 1))
+    fi
+  fi
+
   echo "profile applied: $changes change(s), $kept already in place"
 }
 
@@ -197,11 +212,11 @@ cmd_check() {
   read_state
 
   if [[ -s /etc/llmd/profile ]]; then
-    local MODEL="" TLS="" METRICS="" MCP="" WEBUI=""
+    local MODEL="" TLS="" METRICS="" MCP="" WEBUI="" SPEECH=""
     # shellcheck disable=SC1091
     . /etc/llmd/profile
     local key want cur
-    for key in MODEL TLS METRICS MCP WEBUI; do
+    for key in MODEL TLS METRICS MCP WEBUI SPEECH; do
       want="${!key}"
       [[ -n "$want" ]] || continue
       case "$key" in
@@ -210,6 +225,7 @@ cmd_check() {
         METRICS) cur="$CUR_METRICS" ;;
         MCP)     cur="$CUR_MCP" ;;
         WEBUI)   cur="$CUR_WEBUI" ;;
+        SPEECH)  cur="$CUR_SPEECH" ;;
       esac
       if [[ "$want" == "$cur" ]]; then
         echo "profile:  $key ok ($cur)"

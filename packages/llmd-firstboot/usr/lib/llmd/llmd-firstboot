@@ -67,7 +67,7 @@ if [[ "$engine" == "ollama" ]] && command -v ollama >/dev/null 2>&1 \
     && lspci 2>/dev/null | grep -qi 'VGA.*AMD\|Display.*AMD'; then
   echo "AMD GPU present but the ROCm runtime is missing: completing the engine install"
   for _ in 1 2 3; do
-    if curl -fsSL https://ollama.com/install.sh | OLLAMA_VERSION=0.32.1 sh; then
+    if curl -fsSL https://ollama.com/install.sh | OLLAMA_VERSION=0.33.2 sh; then
       break
     fi
     echo "ollama install failed, retrying in 15s"

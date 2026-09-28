@@ -107,8 +107,88 @@ build_pkg llmd-engine-ollama "Hardened systemd drop-in for Ollama"              
 build_pkg llmd-engine-vllm   "vLLM OCI container (podman Quadlet)"                    "podman (>= 4.4)"
 build_pkg llmd-gateway       "Unified OpenAI-compatible gateway (Caddy)"              "caddy"
 build_pkg llmd-firstboot     "First boot model download and service setup"            "llmd-hw, jq, curl"
-build_pkg llmd-webui         "Open WebUI chat interface (opt-in container)"           "podman (>= 4.4)"
+build_pkg llmd-webui         "Open WebUI chat interface (opt-in container)"           "podman (>= 4.4), llmd-gateway"
 build_pkg llmd-mcp           "Model Context Protocol server (opt-in, sibilla mcp)"    "python3, llmd-gateway"
+
+# oauth2-proxy is repackaged from the pinned upstream release; unlike
+# whisper.cpp, upstream publishes a per-asset checksum file, so the
+# verification mirrors llmfit exactly
+OAUTH2_PROXY_VERSION="v7.15.4"
+build_llmd_oidc() {
+  local staging asset base
+  base="https://github.com/oauth2-proxy/oauth2-proxy/releases/download/$OAUTH2_PROXY_VERSION"
+  asset="oauth2-proxy-$OAUTH2_PROXY_VERSION.linux-$DEB_ARCH.tar.gz"
+  if [[ ! -f "$DIST/$asset" ]]; then
+    curl -fL --retry 3 -o "$DIST/$asset" "$base/$asset"
+    curl -fL --retry 3 -o "$DIST/$asset-sha256sum.txt" "$base/$asset-sha256sum.txt"
+  fi
+  (cd "$DIST" && sha256sum -c "$asset-sha256sum.txt")
+  staging=$(mktemp -d)
+  cp -a "$DIR/llmd-oidc/." "$staging/"
+  mkdir -p "$staging/DEBIAN" "$staging/usr/lib/llmd/oauth2-proxy"
+  tar -xzf "$DIST/$asset" -C "$staging/usr/lib/llmd/oauth2-proxy"
+  [[ -n "$(find "$staging/usr/lib/llmd/oauth2-proxy" -name oauth2-proxy -type f)" ]] \
+    || { echo "oauth2-proxy not present in the upstream tarball, refusing to build" >&2; exit 1; }
+  find "$staging/usr/lib/llmd" "$staging/usr/bin" -type f -exec chmod 755 {} + 2>/dev/null || true
+  cat > "$staging/DEBIAN/control" <<EOF
+Package: llmd-oidc
+Version: $VERSION
+Section: admin
+Priority: optional
+Architecture: $DEB_ARCH
+Depends: llmd-gateway
+Maintainer: SibillaOS contributors
+Description: OIDC authentication for the WebUI (oauth2-proxy $OAUTH2_PROXY_VERSION, opt-in)
+EOF
+  dpkg-deb --build --root-owner-group "$staging" "$DIST/llmd-oidc_${VERSION}_${DEB_ARCH}.deb"
+  rm -rf "$staging"
+  echo "OK llmd-oidc ($DEB_ARCH, oauth2-proxy $OAUTH2_PROXY_VERSION)"
+}
+build_llmd_oidc
+
+# whisper.cpp is repackaged from the pinned upstream release like
+# llmfit; upstream publishes no checksum file, so the expected hashes
+# are recorded here at pin time and the build fails closed on any
+# mismatch or on a missing recording
+WHISPER_TAG="v1.9.1"
+WHISPER_SHA256_AMD64="f3bf3b4369a99b54665b0f19b88483b30de27f25963b0414235dea03198515c5"
+WHISPER_SHA256_ARM64="e0b66cd551ff6f2a28fabe3c6e89691eea037bb76833493abb9a71ca788994b3"
+build_llmd_speech() {
+  local staging asset base want
+  base="https://github.com/ggml-org/whisper.cpp/releases/download/$WHISPER_TAG"
+  case "$DEB_ARCH" in
+    amd64) asset="whisper-bin-ubuntu-x64.tar.gz";   want="$WHISPER_SHA256_AMD64" ;;
+    arm64) asset="whisper-bin-ubuntu-arm64.tar.gz"; want="$WHISPER_SHA256_ARM64" ;;
+  esac
+  [[ -n "$want" ]] || { echo "whisper asset hash not recorded for $DEB_ARCH, refusing to build" >&2; exit 1; }
+  if [[ ! -f "$DIST/$asset" ]]; then
+    curl -fL --retry 3 -o "$DIST/$asset" "$base/$asset"
+  fi
+  echo "$want  $DIST/$asset" | sha256sum -c - \
+    || { echo "whisper asset does not match the recorded sha256, refusing to build" >&2; exit 1; }
+  staging=$(mktemp -d)
+  cp -a "$DIR/llmd-speech/." "$staging/"
+  mkdir -p "$staging/DEBIAN" "$staging/usr/lib/llmd/whisper"
+  tar -xzf "$DIST/$asset" -C "$staging/usr/lib/llmd/whisper"
+  [[ -n "$(find "$staging/usr/lib/llmd/whisper" -name whisper-server -type f)" ]] \
+    || { echo "whisper-server not present in the upstream tarball, refusing to build" >&2; exit 1; }
+  find "$staging/usr/lib/llmd" "$staging/usr/bin" -type f -exec chmod 755 {} + 2>/dev/null || true
+  cat > "$staging/DEBIAN/control" <<EOF
+Package: llmd-speech
+Version: $VERSION
+Section: admin
+Priority: optional
+Architecture: $DEB_ARCH
+Depends: llmd-gateway, llmd-hw, curl, jq
+Recommends: ffmpeg
+Maintainer: SibillaOS contributors
+Description: Local speech-to-text behind the gateway (whisper.cpp $WHISPER_TAG, opt-in)
+EOF
+  dpkg-deb --build --root-owner-group "$staging" "$DIST/llmd-speech_${VERSION}_${DEB_ARCH}.deb"
+  rm -rf "$staging"
+  echo "OK llmd-speech ($DEB_ARCH, whisper.cpp $WHISPER_TAG)"
+}
+build_llmd_speech
 
 # llmfit is repackaged from the pinned upstream release so the ISO does
 # not depend on external installers at install time; the tarball is
@@ -155,7 +235,7 @@ Version: $VERSION
 Section: admin
 Priority: optional
 Architecture: all
-Depends: llmd-hw, llmd-engine-ollama, llmd-engine-vllm, llmd-gateway, llmd-firstboot, llmd-webui, llmd-mcp, llmd-llmfit
+Depends: llmd-hw, llmd-engine-ollama, llmd-engine-vllm, llmd-gateway, llmd-firstboot, llmd-webui, llmd-mcp, llmd-speech, llmd-oidc, llmd-llmfit
 Maintainer: SibillaOS contributors
 Description: SibillaOS LLM stack (metapackage)
  Pulls the SibillaOS components onto an existing Ubuntu system. After

@@ -1,0 +1,24 @@
+[Unit]
+Description=SibillaOS first boot model selection menu
+Documentation=https://github.com/engineering87/sibillaos
+# the menu must have the console before getty claims it, and must
+# finish before firstboot downloads whatever the choice is
+Before=llmd-firstboot.service getty@tty1.service
+After=systemd-user-sessions.service
+ConditionPathExists=!/var/lib/llmd/firstboot.done
+ConditionPathExists=/etc/llmd/appliance
+ConditionPathExists=!/etc/llmd/nomenu
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/llmd/llmd-model-menu
+RemainAfterExit=true
+StandardInput=tty
+TTYPath=/dev/tty1
+TTYReset=yes
+TTYVHangup=yes
+# the menu is a convenience: whatever happens to it, the boot goes on
+SuccessExitStatus=0 1
+
+[Install]
+WantedBy=multi-user.target
