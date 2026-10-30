@@ -76,7 +76,7 @@ ensure_model() {
 
 render_restart() {
   /usr/lib/llmd/llmd-gateway-render
-  systemctl restart caddy.service
+  systemctl reload-or-restart caddy.service
 }
 
 case "${1:-}" in
