@@ -26,7 +26,7 @@ need_root() { [[ $EUID -eq 0 ]] || { echo "run as root (sudo)" >&2; exit 1; }; }
 
 render_restart() {
   /usr/lib/llmd/llmd-gateway-render
-  systemctl restart caddy.service
+  systemctl reload-or-restart caddy.service
 }
 
 case "${1:-}" in
