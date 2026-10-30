@@ -113,7 +113,9 @@ build_pkg llmd-mcp           "Model Context Protocol server (opt-in, sibilla mcp
 # oauth2-proxy is repackaged from the pinned upstream release; unlike
 # whisper.cpp, upstream publishes a per-asset checksum file, so the
 # verification mirrors llmfit exactly
-OAUTH2_PROXY_VERSION="v7.15.4"
+# v7.15.5 fixes two Critical auth-bypass advisories (GHSA-63jm-59jj-478j,
+# GHSA-wr5q-7wxw-x568); OIDC must not ship on anything older
+OAUTH2_PROXY_VERSION="v7.15.5"
 build_llmd_oidc() {
   local staging asset base
   base="https://github.com/oauth2-proxy/oauth2-proxy/releases/download/$OAUTH2_PROXY_VERSION"
