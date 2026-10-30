@@ -55,7 +55,7 @@ One principle bounds this whole cycle: the big-model work is ADDITIVE SUPPORT, n
 
 ## v0.9 (released)
 
-The appliance grows senses and a span: a voice (local speech-to-text behind the gateway), an organization's front door (OIDC for the WebUI, bring-your-own IdP), a reach across machines (fleet orchestration over plain SSH) and a human moment at first boot (the model selection menu) - plus the freshness pass and proper credits for every pinned upstream. Release notes in [docs/releases/v0.9.0.md](docs/releases/v0.9.0.md).
+The appliance grows senses and a span: a voice (local speech-to-text behind the gateway), an organization's front door (OIDC for the WebUI, bring-your-own IdP), a reach across machines (fleet orchestration over plain SSH) and a human moment at first boot (the model selection menu) - plus the freshness pass and proper credits for every pinned upstream. Published as 0.9.1: between the 0.9.0 tag and publication, upstream fixed two Critical authentication bypasses in oauth2-proxy (v7.15.5), so the first 0.9 artifacts anyone can download already carry the fix - the project's first security patch release. Release notes in [docs/releases/v0.9.1.md](docs/releases/v0.9.1.md).
 
 The cycle in detail:
 
@@ -70,9 +70,11 @@ Scope to be set; what carries over regardless:
 
 - Tell the story, finally: two releases of substance since the last push (the honest large tier, then voice, SSO and fleet) - the distribution pack leads with the refusal that no `curl | sh` gives you, and the adoption question gets its third, best-armed attempt.
 - The ds4 answer: if upstream tags a release, the coexistence integration (llama-swap between the gateway and the engines, design recorded in architecture changelog v0.13) becomes the cycle's core; if not, the gate holds and the tier stays "larger than VRAM".
-- HTTPS for the WebUI listener, noted as a limit in the OIDC docs: the gateway knows how to do TLS, the :3000 block should learn it.
+- Supply freshness, the big one: ollama 0.33.2 -> 0.40.11 (new engine generation; every integration point re-verified before the bump - ollama ps placement format, OLLAMA_NO_CLOUD, installer pinning, /v1 surface, registry manifest mediaTypes - all intact; noted: default context is now 4096), vLLM container v0.27.1 -> v0.32.0 (three GHSAs fixed including chat-template resource exhaustion; the CORS default change does not touch us, nothing browser-facing talks to vLLM directly), whisper.cpp re-pinned to the binary build matching v1.9.5 after an upstream policy change - semantic tags no longer carry binary assets, builds do - with fresh recorded hashes. The CI pipeline is the safety net, OLLAMA_NO_CLOUD asserts included.
+- HTTPS for the WebUI listener, noted as a limit in the OIDC docs and closed as this cycle opened: the :3000 block inherits the gateway's TLS mode (local CA in internal, the already-obtained certificate in acme - certificates belong to hostnames, not ports), the OIDC redirect URL defaults to https accordingly and the session cookie turns Secure. Lint renders and validates every variant. Done.
 - vLLM on physical datacenter GPUs: the standing v1.0 debt, rented instance if no tester appears.
 - Manual validation of Open WebUI (docs/validation/webui.md), carried since v0.2: one real machine, thirty minutes, a filled result record.
+- The base itself, surveyed 2026-10: within the 24.04 series nothing is owed - the build resolves the current point release dynamically from the official SHA256SUMS, so 24.04.x refreshes arrive on their own, checksum-verified. Ubuntu 26.04 LTS exists and has its .1 (support to 2031), while 24.04 holds until 2029: the series jump is a DEDICATED CYCLE, not a bump - subiquity behavior, archive versions of caddy/podman/python, the ROCm and driver stacks, and the whole CI contract all move together. It opens with a spike (both install paths built and exercised against 26.04 on a branch) and should land by choice before GitHub flips ubuntu-latest and tests our apt path on 26.04 for us.
 
 ## Toward v1.0: open validation debts
 
@@ -116,4 +118,4 @@ Ideas that look promising but need a use case or a champion:
 
 ## Non-goals
 
-Things SibillaOS deliberately does not try to be: a Kubernetes distribution (use the engines' own charts), a model marketplace (the catalog stays small and curated), or a managed service.
+Things SibillaOS deliberately does not try to be: a Kubernetes distribution (use the engines' own charts), a model marketplace (the catalog stays small and curated), or a managed service. The base is LTS-only, always: interim Ubuntu releases carry nine months of support, and an appliance whose promise is "apt upgrade keeps this machine alive" cannot stand on a base that dies under it (decided 2026-10 when 26.10 came out; the standing plan remains the 26.04 LTS cycle).

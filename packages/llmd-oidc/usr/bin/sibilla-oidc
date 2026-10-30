@@ -39,7 +39,15 @@ case "${1:-}" in
     need_root
     [[ $# -ge 3 ]] || usage
     issuer="$2"; client_id="$3"
-    external="${4:-http://$(hostname -I 2>/dev/null | awk '{print $1}'):3000}"
+    # the default external URL follows the gateway's TLS mode: never
+    # promise http where the listener will answer https
+    gw_mode=$(sed -n 's/^MODE=//p' /etc/llmd/gateway.conf 2>/dev/null | head -1)
+    gw_host=$(sed -n 's/^TLS_HOSTNAME=//p' /etc/llmd/gateway.conf 2>/dev/null | head -1)
+    case "$gw_mode" in
+      internal|acme) default_external="https://$gw_host:3000" ;;
+      *)             default_external="http://$(hostname -I 2>/dev/null | awk '{print $1}'):3000" ;;
+    esac
+    external="${4:-$default_external}"
     [[ "$issuer" =~ ^https?:// ]] || { echo "ISSUER_URL must be a URL" >&2; exit 1; }
     if [[ -t 0 ]]; then
       read -rs -p "client secret (not echoed): " client_secret; echo
@@ -48,6 +56,8 @@ case "${1:-}" in
     fi
     [[ -n "$client_secret" ]] || { echo "empty client secret" >&2; exit 1; }
     cookie_secret=$(head -c32 /dev/urandom | base64 | tr '+/' '-_')
+    cookie_secure=false
+    [[ "$external" == https://* ]] && cookie_secure=true
     umask 077
     cat > "$ENVF" <<EOF
 OAUTH2_PROXY_PROVIDER=oidc
@@ -60,7 +70,7 @@ OAUTH2_PROXY_HTTP_ADDRESS=127.0.0.1:4180
 OAUTH2_PROXY_UPSTREAMS=http://127.0.0.1:3001
 OAUTH2_PROXY_EMAIL_DOMAINS=*
 OAUTH2_PROXY_SKIP_PROVIDER_BUTTON=true
-OAUTH2_PROXY_COOKIE_SECURE=false
+OAUTH2_PROXY_COOKIE_SECURE=$cookie_secure
 OAUTH2_PROXY_REVERSE_PROXY=true
 EOF
     echo on > "$STATE"

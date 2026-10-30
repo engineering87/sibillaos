@@ -152,9 +152,11 @@ build_llmd_oidc
 # llmfit; upstream publishes no checksum file, so the expected hashes
 # are recorded here at pin time and the build fails closed on any
 # mismatch or on a missing recording
-WHISPER_TAG="v1.9.1"
-WHISPER_SHA256_AMD64="f3bf3b4369a99b54665b0f19b88483b30de27f25963b0414235dea03198515c5"
-WHISPER_SHA256_ARM64="e0b66cd551ff6f2a28fabe3c6e89691eea037bb76833493abb9a71ca788994b3"
+# binary builds live on numbered releases since upstream moved assets off
+# semantic tags; b5454 is the build matching v1.9.5 (ggml hardening fixes)
+WHISPER_TAG="b5454"
+WHISPER_SHA256_AMD64="a72becf15d7917f990f6313867a52638b82b7f9ef237fb0c980dac56a135781c"
+WHISPER_SHA256_ARM64="6b95ebfc60447df48e70ef00a73bdc3f41679ed2d01ef465827206a2ff325149"
 build_llmd_speech() {
   local staging asset base want
   base="https://github.com/ggml-org/whisper.cpp/releases/download/$WHISPER_TAG"

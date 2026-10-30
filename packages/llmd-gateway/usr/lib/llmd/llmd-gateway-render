@@ -127,12 +127,27 @@ BLOCK
 # posture. With OIDC on, oauth2-proxy (loopback 4180, proxy mode:
 # native login redirects, no forward_auth 401 gymnastics) sits in the
 # middle; with OIDC off, the WebUI keeps its own login, unchanged.
+# The listener inherits the gateway's TLS: internal mode serves the
+# local-CA certificate for the same hostname, acme mode reuses the
+# certificate Caddy already obtained for it (certificates belong to
+# hostnames, not ports), plain http mode stays plain.
 webui_block() {
   local up="127.0.0.1:3001"
   [[ "$oidc" == "on" ]] && up="127.0.0.1:4180"
+  echo
+  case "$MODE" in
+    internal)
+      echo "https://$TLS_HOSTNAME:3000 {"
+      echo "	tls internal"
+      ;;
+    acme)
+      echo "https://$TLS_HOSTNAME:3000 {"
+      ;;
+    *)
+      echo ":3000 {"
+      ;;
+  esac
   cat <<BLOCK
-
-:3000 {
 	header {
 		Server "SibillaOS"
 		defer

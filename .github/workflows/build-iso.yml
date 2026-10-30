@@ -131,6 +131,19 @@ jobs:
           caddy validate --adapter caddyfile --config "$LLMD_CADDYFILE"
           grep -A6 ":3000" "$LLMD_CADDYFILE" | grep -q "reverse_proxy 127.0.0.1:4180" \
             || { echo "webui block does not route through oauth2-proxy with oidc on"; exit 1; }
+          # the WebUI listener inherits the gateway's TLS mode
+          printf 'MODE=internal\nTLS_HOSTNAME=sibillaos.test\n' > "$LLMD_GATEWAY_CONF"
+          bash packages/llmd-gateway/usr/lib/llmd/llmd-gateway-render
+          caddy validate --adapter caddyfile --config "$LLMD_CADDYFILE"
+          grep -q "https://sibillaos.test:3000" "$LLMD_CADDYFILE" \
+            || { echo "webui listener did not inherit internal TLS"; exit 1; }
+          grep -A2 "https://sibillaos.test:3000" "$LLMD_CADDYFILE" | grep -q "tls internal" \
+            || { echo "webui TLS listener missing the local CA directive"; exit 1; }
+          printf 'MODE=acme\nTLS_HOSTNAME=example.org\nACME_EMAIL=ops@example.org\n' > "$LLMD_GATEWAY_CONF"
+          bash packages/llmd-gateway/usr/lib/llmd/llmd-gateway-render
+          caddy validate --adapter caddyfile --config "$LLMD_CADDYFILE"
+          grep -q "https://example.org:3000" "$LLMD_CADDYFILE" \
+            || { echo "webui listener did not inherit acme TLS"; exit 1; }
           rm "$LLMD_WEBUI_FLAG"
       - name: First-boot model menu behavior
         # the menu is pure logic over files, so its whole contract is
