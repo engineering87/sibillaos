@@ -257,7 +257,7 @@ jobs:
             printf '%s\n' "$plain" | head -5
             exit 1
           fi
-          for c in setup status model key tls metrics webui mcp speech oidc fleet apply connect bench doctor remove; do
+          for c in setup status model key tls metrics webui mcp speech oidc kernel fleet apply connect bench doctor remove; do
             grep -q "sibilla $c" <<< "$plain" || { echo "man page missing command: $c"; exit 1; }
           done
           echo "man page renders with every command documented"
@@ -964,6 +964,19 @@ jobs:
           # hardening drop-in pins OLLAMA_NO_CLOUD=1 on every install
           sudo systemctl show ollama.service -p Environment | grep -q "OLLAMA_NO_CLOUD=1" \
             || { echo "cloud routing is not disabled on the engine"; RC=1; }
+          # the context window is governed, not discovered: the drop-in
+          # pins 8192 and sibilla model context changes it deliberately
+          sudo systemctl show ollama.service -p Environment | grep -q "OLLAMA_CONTEXT_LENGTH=8192" \
+            || { echo "context window is not governed by default"; RC=1; }
+          sudo sibilla model context 4096
+          sudo systemctl show ollama.service -p Environment | grep -q "OLLAMA_CONTEXT_LENGTH=4096" \
+            || { echo "context override did not land"; RC=1; }
+          sibilla model context | grep -q "4096" \
+            || { echo "context show does not report the override"; RC=1; }
+          sudo sibilla model context default
+          if sudo systemctl show ollama.service -p Environment | grep -q "OLLAMA_CONTEXT_LENGTH=4096"; then
+            echo "context default did not remove the override"; RC=1
+          fi
           # good-guest behavior: setup must not act like an appliance
           [ ! -e /etc/llmd/appliance ] || { echo "setup wrongly created the appliance marker"; RC=1; }
           if command -v ufw >/dev/null 2>&1; then
@@ -1176,6 +1189,14 @@ jobs:
           sudo rm -f /etc/llmd/webui.enabled
           sudo /usr/lib/llmd/llmd-gateway-render && sudo systemctl restart caddy.service
           exit "$RC"
+      - name: Kernel stack command
+        run: |
+          # status works and tells the truth about this runner
+          sibilla kernel status | tee kernel.out
+          grep -qE "running: +$(uname -r)" kernel.out \
+            || { echo "kernel status does not report the running kernel"; exit 1; }
+          grep -qE "stack: +(GA|HWE)" kernel.out \
+            || { echo "kernel status does not name the stack"; exit 1; }
       - name: Fleet over real SSH (loopback is a fleet of one)
         run: |
           RC=0
@@ -1466,6 +1487,27 @@ jobs:
           fi
           KEY=$(sudo cat /etc/llmd/apikey)
           grep -q "$KEY" rag.out && { echo "the example echoed the api key"; RC=1; } || true
+          rm -f sibilla.env
+          exit "$RC"
+      - name: Structured outputs example, same discrimination policy
+        run: |
+          RC=0
+          sudo sibilla connect --env > sibilla.env
+          set -a; . ./sibilla.env; set +a
+          # exit 3 is the example naming an engine 5xx: tolerated on
+          # the native runner; anything else nonzero is our fault
+          src=0
+          python3 examples/structured-output.py > so.out 2>so.err || src=$?
+          if [ "$src" = "0" ]; then
+            cat so.out
+            python3 -c "import json,sys; d=json.load(open('so.out')); sys.exit(0 if 'city' in d and 'condition' in d else 1)" \
+              || { echo "answer did not match the schema"; RC=1; }
+            echo "STRUCTURED OUTPUT OK"
+          elif [ "$src" = "3" ]; then
+            echo "structured output not asserted on this box (engine could not serve):"; tail -2 so.err
+          else
+            echo "the example itself failed (rc=$src):"; cat so.err; RC=1
+          fi
           rm -f sibilla.env
           exit "$RC"
       - name: Doctor, connect --write, then a clean removal

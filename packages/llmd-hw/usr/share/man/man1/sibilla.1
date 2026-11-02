@@ -69,6 +69,14 @@ Remove a downloaded model (refuses the served one).
 .TP
 .B prune
 Remove every downloaded model except the served one.
+.TP
+.BR context " [" N "]"
+Show or set the context window (ollama engine). Ungoverned, the engine
+sizes its KV cache from visible memory, which on unified-memory
+machines silently reserves far more RAM than the conversation needs;
+SibillaOS pins 8192 tokens by default.
+.B context default
+removes the override.
 .SS sibilla key SUBCOMMAND
 Gateway API keys:
 .B list
@@ -122,6 +130,14 @@ and exits nonzero on any finding, so it works as a fleet cron probe;
 reports each host's health. Remote hosts need the llmd packages and
 passwordless sudo, or a root login. Profiles carry no secrets by
 design, so pushing one is safe by construction.
+.SS sibilla kernel status | hwe
+The kernel stack, stated and switchable. The GA kernel is the default
+and is supported for the whole LTS life;
+.B hwe
+installs the rolling HWE stack for hardware the GA kernel predates
+(recent AMD APUs among them). HWE rolls to newer kernel series every
+few months; the GA kernel stays installed and bootable. A reboot is
+required after enabling.
 .SS sibilla oidc enable ISSUER_URL CLIENT_ID [EXTERNAL_URL] | disable | status
 OIDC login for the WebUI against the team's own provider (Entra,
 Keycloak, Google, ...). The client secret is read from stdin, never

@@ -20,8 +20,50 @@ usage: sibilla-model COMMAND
                  match a digest in the signed catalog. --use serves it
   rm MODEL_ID    remove a downloaded model (refuses the served one)
   prune          remove every downloaded model except the served one
+  context [N]    show or set the context window (ollama engine).
+                 Left ungoverned, the engine sizes its KV cache from
+                 visible memory, which on unified-memory machines
+                 reserves tens of GB nobody asked for. Default 8192;
+                 'context default' removes the override
 EOF
   exit 1
+}
+
+CONTEXT_OVERRIDE=/etc/systemd/system/ollama.service.d/context.conf
+CONTEXT_DEFAULT=8192
+
+context_current() {
+  local v
+  v=$(sed -n 's/^Environment=OLLAMA_CONTEXT_LENGTH=//p' "$CONTEXT_OVERRIDE" 2>/dev/null | head -1)
+  echo "${v:-$CONTEXT_DEFAULT}"
+}
+
+cmd_context() {
+  local want="${1:-}"
+  if [[ -z "$want" ]]; then
+    echo "context: $(context_current) tokens (default $CONTEXT_DEFAULT; set with: sibilla model context N)"
+    return 0
+  fi
+  need_root
+  [[ "$ENGINE" == "ollama" ]] || { echo "context is governed on the ollama engine; vllm sizes per request" >&2; exit 1; }
+  if [[ "$want" == "default" ]]; then
+    rm -f "$CONTEXT_OVERRIDE"
+    systemctl daemon-reload
+    systemctl restart ollama.service
+    echo "context back to the default ($CONTEXT_DEFAULT tokens)"
+    return 0
+  fi
+  [[ "$want" =~ ^[0-9]+$ ]] && [[ "$want" -ge 512 ]] \
+    || { echo "context must be a number of tokens (>= 512) or 'default'" >&2; exit 1; }
+  mkdir -p "$(dirname "$CONTEXT_OVERRIDE")"
+  {
+    echo "# SibillaOS: deliberate context override (sibilla model context)"
+    echo "[Service]"
+    echo "Environment=OLLAMA_CONTEXT_LENGTH=$want"
+  } > "$CONTEXT_OVERRIDE"
+  systemctl daemon-reload
+  systemctl restart ollama.service
+  echo "context: $want tokens (KV cache grows with it; bigger context, more RAM)"
 }
 
 need_root() { [[ $EUID -eq 0 ]] || { echo "run as root (sudo)" >&2; exit 1; }; }
@@ -316,5 +358,6 @@ case "${1:-}" in
   import) [[ $# -ge 2 ]] || usage; cmd_import "$2" "${3:-}" ;;
   rm)     [[ $# -ge 2 ]] || usage; cmd_rm "$2" ;;
   prune)  cmd_prune ;;
+  context) shift; cmd_context "${1:-}" ;;
   *)      usage ;;
 esac

@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+# sibilla-kernel: the kernel stack, stated and switchable.
+# The appliance default is the GA kernel (6.8 on 24.04): supported for
+# the whole LTS life, never surprises. The HWE stack is the opt-in for
+# hardware the GA kernel predates - Strix Halo and friends simply do
+# not exist for 6.8's amdgpu - and it ROLLS: Canonical moves it to
+# newer kernel series every few months, which is exactly the kind of
+# movement an appliance should opt into, not wake up to.
+set -euo pipefail
+
+# shellcheck source=/dev/null
+. /usr/lib/llmd/sibilla-style
+
+HWE_META="linux-generic-hwe-24.04"
+
+usage() {
+  cat <<USAGE
+usage: sibilla-kernel COMMAND
+
+  status    running kernel, installed stack, and what HWE would bring
+  hwe       install the HWE kernel stack (newer kernel, rolling)
+
+The GA kernel stays the default: it is supported for the whole LTS
+life. HWE is for hardware the GA kernel predates (AMD Strix Halo and
+other recent GPUs/APUs/NPUs): it rolls to newer kernel series every
+few months, so expect kernel jumps with regular updates. A reboot is
+required after enabling. Details in docs/validation/gpu.md.
+USAGE
+  exit 1
+}
+
+need_root() { [[ $EUID -eq 0 ]] || { echo "run as root (sudo)" >&2; exit 1; }; }
+
+cmd_status() {
+  s_hdr kernel
+  s_kv "running:" "$(uname -r)"
+  if dpkg -l "$HWE_META" 2>/dev/null | grep -q '^ii'; then
+    s_kv "stack:" "HWE ($HWE_META installed, rolling)" "$(s_ok)"
+  else
+    s_kv "stack:" "GA (supported for the whole LTS life)"
+    echo
+    echo "HWE would bring a newer kernel series: needed for GPUs and"
+    echo "APUs the GA kernel predates (AMD Strix Halo among them)."
+    echo "Enable deliberately with: sudo sibilla kernel hwe"
+  fi
+}
+
+cmd_hwe() {
+  need_root
+  if dpkg -l "$HWE_META" 2>/dev/null | grep -q '^ii'; then
+    echo "HWE stack already installed (running: $(uname -r))"
+    echo "a newer kernel may be pending a reboot"
+    exit 0
+  fi
+  echo "Installing the HWE kernel stack ($HWE_META)."
+  echo "This stack ROLLS: Canonical moves it to newer kernel series"
+  echo "every few months, so kernel jumps arrive with regular updates."
+  echo "The GA kernel stays installed and bootable from GRUB."
+  apt-get update
+  apt-get install -y "$HWE_META"
+  echo
+  s_kv "installed:" "$HWE_META" "$(s_ok)"
+  echo "reboot to run the new kernel: sudo reboot"
+}
+
+case "${1:-}" in
+  status) cmd_status ;;
+  hwe)    cmd_hwe ;;
+  *)      usage ;;
+esac

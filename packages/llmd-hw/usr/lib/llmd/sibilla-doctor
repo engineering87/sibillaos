@@ -39,6 +39,15 @@ elif lspci 2>/dev/null | grep -qi 'VGA.*AMD\|Display.*AMD'; then
 else
   echo "gpu:       none detected"
 fi
+# the engine's own word on where the last loaded model landed: the
+# "offloaded N/M layers to GPU" line is the proof the accelerator is
+# actually in use, and N<M quantifies the spill
+journalctl -u ollama --no-pager 2>/dev/null \
+  | grep -oE "offloaded [0-9]+/[0-9]+ layers to GPU" | tail -1 \
+  | sed 's/^/layers:    /' || true
+journalctl -u ollama --no-pager 2>/dev/null \
+  | grep -oE "inference compute.*" | tail -1 \
+  | sed 's/^/compute:   /' | cut -c1-120 || true
 line
 
 echo "[packages]"
