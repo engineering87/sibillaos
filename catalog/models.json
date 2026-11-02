@@ -1,6 +1,6 @@
 {
   "schema": 2,
-  "updated": "2026-08-19",
+  "updated": "2026-11-02",
   "note": "SibillaOS curated list. Permissively licensed (Apache-2.0/MIT) models only. Source is Hugging Face, except the LARGE TIER where source=registry entries come from the ollama.com registry (its manifests carry sha256 layer digests, so verification is unchanged; policy recorded in architecture changelog v0.13). Optional per-quant digests are the sha256 of the GGUF file on Hugging Face (LFS oid) or of the registry model layer, which is also the ollama blob name after a pull; tools/update-digests.sh refreshes both kinds. Entries with role=embedding serve /v1/embeddings and are never selected as the chat default. Entries with tier=large carry min_ram_gb and sibilla model use refuses them on machines below it.",
   "models": [
     {
@@ -47,7 +47,6 @@
         "ollama"
       ],
       "tier": "cpu",
-      "default": true,
       "verified": true,
       "digests": {
         "IQ2_M": "sha256:0aa56060b35246fb4f826e9242843b7f2faae20e771c193e0b7216c63f4dff9d",
@@ -119,7 +118,6 @@
         "ollama"
       ],
       "tier": "consumer-gpu",
-      "default": true,
       "verified": true,
       "digests": {
         "IQ2_M": "sha256:2c4d9143e2cd3827a1d4cf56da13e64918bdd664f8908ae4b6d86e55cf8d4bff",
@@ -263,7 +261,7 @@
       "min_ram_gb": 80,
       "verified": true,
       "digests": {
-        "120b": "sha256:6be6d66a3f546d8c19b130dc41dc24b2fc159f84ffbc76a0ee0676205083cf5a"
+        "120b": "sha256:a5b03e4c678e1671191c0115861445b61529f518e751ce38a2bb6030cca9b1d0"
       }
     },
     {
@@ -314,6 +312,152 @@
       "verified": true,
       "digests": {
         "base": "sha256:60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe"
+      }
+    },
+    {
+      "id": "hf.co/bartowski/Qwen_Qwen3.5-4B-GGUF",
+      "family": "Qwen3.5 4B",
+      "license": "Apache-2.0",
+      "engines": [
+        "ollama"
+      ],
+      "tier": "cpu",
+      "default": true,
+      "verified": true,
+      "digests": {
+        "IQ2_M": "sha256:fd6c12b5d4f76be174edbf4769d2a27b0384da020f5cf1241463679798a9f4ec",
+        "IQ3_M": "sha256:5ad76abae6b7a27d1463d90e6d86886850769e34906a88cfa4347cae72c91502",
+        "IQ3_XS": "sha256:ecb30836d260d1e44f09edd2d814c473637ba12345ab474c6cde07af3b84b9be",
+        "IQ3_XXS": "sha256:37046243577d6b44e98137680623b807ae92b147982a91d5726e4c0c64e7508e",
+        "IQ4_NL": "sha256:f007c3dbf67df668354d37ae13d87fd5789059704977959187e8342aec03b66f",
+        "IQ4_XS": "sha256:628124c61a806897d3f28dcd416be6daff94f62f731eb900d4381875eac9e412",
+        "Q2_K": "sha256:8875934081d3b9b51b41de628e34d964a15d3fac5b5592baf2c01c5a04460c9a",
+        "Q2_K_L": "sha256:63d3cbc85cb8531175566c006970974d992943888da55a1c83aa76c05137d93d",
+        "Q3_K_L": "sha256:41c3f1bf47e477693dab332e73347c7138d5e9fbfe74c6d2eaba590be1f3d20a",
+        "Q3_K_M": "sha256:049c71be191fb980a2851ee4d141f437feb50f001191e9b51bd4f6ab2b04146a",
+        "Q3_K_S": "sha256:b4fd1933335ebefeb0cc3fde07a439485f3d5b16a21c25e1b9afdaa165492017",
+        "Q3_K_XL": "sha256:f124b26768806bdfda0ff97d0f6c27c3fa489e0fcedc439927256baf74d40a33",
+        "Q4_0": "sha256:3e977de32dfb9377ff827f210091cce5d3c05c7b0f0b9b0c8005df7c0677a49b",
+        "Q4_1": "sha256:3ff4832c848351354ee0d9c6d87d80485e36dbb6419dd22acf46b82ffb94ef7a",
+        "Q4_K_L": "sha256:2986654fa857ff6c7a0ebe8957e11c1a376b43be9d3bd905285d778342da22b8",
+        "Q4_K_M": "sha256:13c16f426047e2de38cd075bdade4a7bcbc8c774384876f677740cda65f8a983",
+        "Q4_K_S": "sha256:3a6e5e8144696a87d17f136b06fce7fe5008a42737938056df13e11ddba4a01b",
+        "Q5_K_L": "sha256:4e10523c570b7f5c680a7e74c61a19b82c7546c88bb3ec5fcc525d03bc345551",
+        "Q5_K_M": "sha256:21c4643259ce62ffd979848e5819ce03823fd9e9902279ab54cc0d572d83d33e",
+        "Q5_K_S": "sha256:e4b59fdb8cd1dedb2591dc4eb368b63cb8c321447ff9512e33b7d42fd3f35e12",
+        "Q6_K": "sha256:5a5bc7a3f9375b395e9f81fb69109038cf160c84606b8192f13cbb8355ca59f2",
+        "Q6_K_L": "sha256:0d7931a7f143ccfdf675c0d84d542c387cd9255af94ee9c8fb5fa6f6df7c08a0",
+        "Q8_0": "sha256:5c74c0ede371924357dff0cb6ba145bd67208b9b2389ded681adfff3f7608db7",
+        "bf16": "sha256:714270d4eb1d336bca9a8dcf0446982e45721be0399d810586a6b82e727dfee5",
+        "imatrix": "sha256:f1dba8ed29370cd5a8c0ba9438edb130f9895599a0b1a657c939d27a12c41b6b"
+      }
+    },
+    {
+      "id": "hf.co/bartowski/Qwen_Qwen3.5-9B-GGUF",
+      "family": "Qwen3.5 9B",
+      "license": "Apache-2.0",
+      "engines": [
+        "ollama"
+      ],
+      "tier": "consumer-gpu",
+      "default": true,
+      "verified": true,
+      "digests": {
+        "IQ2_M": "sha256:da40cabfce82b6e1b23262634ff45c45bbc078ba788a54c4ffd80287b38dff8c",
+        "IQ2_S": "sha256:08a0276ab3175a9b3bda93e6eed2cbfbc25eec4d54e62f9d88bfa916c35dc983",
+        "IQ3_M": "sha256:cbeadcf49deaf24c756516c4b98e88b88ec8719108553038623d52907f84522d",
+        "IQ3_XS": "sha256:120ef957b56c90668993d4ea2220ca8608a4b0e48874f3e509ee0c912a330eb9",
+        "IQ3_XXS": "sha256:478d619ab6f27ca84c8e8650667329ba54bb5cecda5d732a19dc91c6fd6b6948",
+        "IQ4_NL": "sha256:7ccef125bab36831ac2c6cff91d3367431dac82661339ae8484ed69d895c472d",
+        "IQ4_XS": "sha256:7d977cc96c2e08616016d967f232083e354691a8a16f345b26f7d782ee5c9601",
+        "Q2_K": "sha256:8c5a0b383c07703e256c92c169e5fe474d1379ec8bbb39944a4ca0f12c483160",
+        "Q2_K_L": "sha256:8c4bed1eb901ae25908712ac81eb734cd528d1a8036567041be01cf3dddb275e",
+        "Q3_K_L": "sha256:b322281bc890c1edf55e6df5dcc09b45a96b0341a312b6c835635ff9b0e95277",
+        "Q3_K_M": "sha256:24fccd8416fcdca792f939de4a2240eb57795b0f7a9ba92e62398eab3ec5c11e",
+        "Q3_K_S": "sha256:951daaf25645c6debf0d20a45b0ccea56361543ee323d3c91647ef065b59946d",
+        "Q3_K_XL": "sha256:8e36d3a4e8adfdbb6496dc74325ca380619d4a711fe479bbe383348b5a5c29e8",
+        "Q4_0": "sha256:a44b0e06af0c97cece312f6dca52b3639d038d1a74a2e194b22e159f9ccdbb21",
+        "Q4_1": "sha256:49c9428139e1173e88eccb42de09cfc124069a731cd63bf3a607038f612dea35",
+        "Q4_K_L": "sha256:f2113638e0aa3d5081ce8e0b33aca38573805cd470254a60fd2c28c3847cd32d",
+        "Q4_K_M": "sha256:d784ce9eda1a5a7b51e8f705a9e6310844bf4f173654d115823c775fdea56d43",
+        "Q4_K_S": "sha256:25bacefaea1654a359bab316793f217a646da8610ee7973a26548fb2d624c7a9",
+        "Q5_K_L": "sha256:3b25609c1f780789519f812ba6a7d4b000912830edfaac98ee9b91339a399017",
+        "Q5_K_M": "sha256:a686d88ec1e6881f9bf161526826cd6d6874b7f0e80e0f79acf6144a132c5d7e",
+        "Q5_K_S": "sha256:20597afa8e22d8e984c8adc7495a4de7fc97e9a7c41533827def2887de774a9a",
+        "Q6_K": "sha256:073a9275e65d9c8cd2819cf5f77b99fbaa6e87ba591da6bbaa86ec073a64bfef",
+        "Q6_K_L": "sha256:23a91e941634ce922058558cd6c055ed8440ba710daee57613b12a2da7356111",
+        "Q8_0": "sha256:b58fe056b5435070240de259f3f981aa38fee96825bbd78c088d5fd90e46f2b5",
+        "bf16": "sha256:cbffa57f1473e22e7a09a4205da743a4f625131ffb9603eabd741df3ad78898a",
+        "imatrix": "sha256:2bcdd8d949b096c988d7c05cfb6d4e7af16c34e9f327349a43cf1a3b56066091"
+      }
+    },
+    {
+      "id": "hf.co/bartowski/Qwen_Qwen3.5-27B-GGUF",
+      "family": "Qwen3.5 27B",
+      "license": "Apache-2.0",
+      "engines": [
+        "ollama"
+      ],
+      "tier": "consumer-gpu",
+      "verified": true,
+      "digests": {
+        "IQ2_M": "sha256:ae1c8d413f7fcca80b37f595fae0dec245d6d84485ae73687c51d93c4daea20f",
+        "IQ2_S": "sha256:3f5961005ad2b47804c58a72978bdd3e595eaabb4314c46c798ddc16b50820d6",
+        "IQ2_XS": "sha256:17dadc19f3024a53a6005e79d437fc49d9c8bb859b45747e1fb674fe61578c4a",
+        "IQ2_XXS": "sha256:5ccd27a1ab2c909b1c0c3ccaeefde21d0c5c5f277eca2b607b813c18ad4a687e",
+        "IQ3_M": "sha256:0894786f90d67062ce748d5355da37bbd557629762edc0eada3f7c7fa8ea8677",
+        "IQ3_XS": "sha256:ff46c9e3b9285f30a1018d3fab1557fcba03bb74d94594803810619db377f07c",
+        "IQ3_XXS": "sha256:3a6f6b5700ffd94ff5d69d3c347934ba38b1b5bc75393e65dba8f7a17d645bfe",
+        "IQ4_NL": "sha256:8cfdf9dc6760aaf0dc751b94ce196b9c55207da5785e709827ab70d80f6fe63a",
+        "IQ4_XS": "sha256:ba16d22534b3e295a29717e80fd4734100db4e312edebe70f66ddd5a72deb611",
+        "Q2_K": "sha256:dff1bad22133530f19b0c7c4c5bb7f39b1c6caa08218a6e7e8be9844f79fcc45",
+        "Q2_K_L": "sha256:87f27c052b0cc8c7fd3a7b3239af09aeaeccc624dbb8c985b8fe7f29df0749a9",
+        "Q3_K_L": "sha256:fe3fa88169b3ef20179dc0fbe8e771f0bfcb0d360ce4f81151badc6ba2df316b",
+        "Q3_K_M": "sha256:e0297a1d3ff19aa31f045c931585065bf4cb279c259bf34c1946cbc7e2724d60",
+        "Q3_K_S": "sha256:7780eb402494b01986570fb576be478141c0cc554f6f9df1bb456704bfc3c36a",
+        "Q3_K_XL": "sha256:fcf9b18eef417ea31ea7f0d8ef579bdcb383737fbe0fd2ab9c3572e24cf152fb",
+        "Q4_0": "sha256:c7ac9d115b32f7ece2071ac9b8ecc2687aff5d1bff2ccb2354b6dd30ede3bafa",
+        "Q4_1": "sha256:d9fab3618d24c10a36df11597030328bdbe453a2144a5f235ec4cabd49bfe94d",
+        "Q4_K_L": "sha256:2ae70b8d83437e7c893739ac33603b0f85f5d16fa980ecd1a8bb72ac9bfb71d1",
+        "Q4_K_M": "sha256:81657841d62f1821c748d0fea6c260b7d3508844fe4e9250253ef81c4e4d9edf",
+        "Q4_K_S": "sha256:ee9c6728bfc95f42f6e73d9dd87412c9e031b7cb77a9b8ae5dd1c8986c2ca868",
+        "Q5_K_L": "sha256:8a67330e81f9e7e451c663cd5566eeb9f562b6dc23c500709e4dff22a5cc6be2",
+        "Q5_K_M": "sha256:960ba023bdb406e3531f937bea2c4f68507e80df7ec18b9aa459470c98a1abdd",
+        "Q5_K_S": "sha256:7abb4cb0837078092aaf920f00b0a4bf6ad45f33540951de9923a442193bf895",
+        "Q6_K": "sha256:4ff5483e25023c9bfc8744f43be8c408a4266d8db2bf0782fcb6ca2aafe38043",
+        "Q6_K_L": "sha256:a3a68096543b7fc0fa1d14d13134d734d9a0327e7b9d75b9edbea0537a354629",
+        "Q8_0": "sha256:f32f1a642b18b5cc83d7a4986cc8bb8e9759150f369186b29a4db98441d5bd9e",
+        "imatrix": "sha256:bdd4ccc9867a8ec53e3514b74200a5940216c981d1ebc6996652c7313a8938ec"
+      }
+    },
+    {
+      "id": "hf.co/Qwen/Qwen3-Embedding-0.6B-GGUF",
+      "family": "Qwen3-Embedding 0.6B",
+      "license": "Apache-2.0",
+      "engines": [
+        "ollama"
+      ],
+      "tier": "cpu",
+      "role": "embedding",
+      "verified": true,
+      "digests": {
+        "Q8_0": "sha256:06507c7b42688469c4e7298b0a1e16deff06caf291cf0a5b278c308249c3e439",
+        "f16": "sha256:421a27e58d165478cc7acb984a688c2aa41404968b0203e7cd743ece44c54340"
+      }
+    },
+    {
+      "id": "qwen3.5:122b",
+      "family": "Qwen3.5 122B MoE (10B active)",
+      "license": "Apache-2.0",
+      "engines": [
+        "ollama"
+      ],
+      "tier": "large",
+      "source": "registry",
+      "min_ram_gb": 100,
+      "verified": true,
+      "digests": {
+        "122b": "sha256:93c83617a40560a61cda911ee327efdb5b5fbd39caa8b777a4ec565c0af1af3d"
       }
     }
   ]
