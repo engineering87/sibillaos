@@ -53,8 +53,10 @@ cmd_context() {
     echo "context back to the default ($CONTEXT_DEFAULT tokens)"
     return 0
   fi
-  [[ "$want" =~ ^[0-9]+$ ]] && [[ "$want" -ge 512 ]] \
-    || { echo "context must be a number of tokens (>= 512) or 'default'" >&2; exit 1; }
+  if ! [[ "$want" =~ ^[0-9]+$ && "$want" -ge 512 ]]; then
+    echo "context must be a number of tokens (>= 512) or 'default'" >&2
+    exit 1
+  fi
   mkdir -p "$(dirname "$CONTEXT_OVERRIDE")"
   {
     echo "# SibillaOS: deliberate context override (sibilla model context)"
