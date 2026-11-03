@@ -1,64 +1,91 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 560" font-family="'DejaVu Sans','Segoe UI',Arial,sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 680" font-family="'DejaVu Sans','Segoe UI',Arial,sans-serif">
   <defs>
     <marker id="arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
       <path d="M 0 0 L 10 5 L 0 10 z" fill="#3ddc84"/>
     </marker>
   </defs>
 
-  <rect x="0" y="0" width="760" height="560" rx="12" fill="#081b11"/>
+  <rect x="0" y="0" width="760" height="680" rx="12" fill="#081b11"/>
 
   <!-- clients -->
-  <g font-size="14" fill="#a8e063" text-anchor="middle">
-    <rect x="130" y="26" width="110" height="34" rx="17" fill="#0e2a1c" stroke="#2e9e63"/>
-    <text x="185" y="48">curl / SDKs</text>
-    <rect x="256" y="26" width="110" height="34" rx="17" fill="#0e2a1c" stroke="#2e9e63"/>
-    <text x="311" y="48">VS Code</text>
-    <rect x="382" y="26" width="110" height="34" rx="17" fill="#0e2a1c" stroke="#2e9e63"/>
-    <text x="437" y="48">aider</text>
-    <rect x="508" y="26" width="120" height="34" rx="17" fill="#0e2a1c" stroke="#2e9e63"/>
-    <text x="568" y="48">Open WebUI</text>
+  <g font-size="13.5" fill="#a8e063" text-anchor="middle">
+    <rect x="96" y="24" width="124" height="34" rx="17" fill="#0e2a1c" stroke="#2e9e63"/>
+    <text x="158" y="46">curl / SDKs</text>
+    <rect x="236" y="24" width="124" height="34" rx="17" fill="#0e2a1c" stroke="#2e9e63"/>
+    <text x="298" y="46">editors / aider</text>
+    <rect x="376" y="24" width="140" height="34" rx="17" fill="#0e2a1c" stroke="#2e9e63"/>
+    <text x="446" y="46">agents (MCP)</text>
+    <rect x="532" y="24" width="132" height="34" rx="17" fill="#0e2a1c" stroke="#2e9e63"/>
+    <text x="598" y="46">browsers</text>
   </g>
 
-  <!-- arrow clients -> gateway -->
-  <line x1="380" y1="66" x2="380" y2="102" stroke="#3ddc84" stroke-width="2.5" marker-end="url(#arr)"/>
-  <text x="396" y="90" font-size="12.5" fill="#7fbf9a">:8080</text>
+  <!-- arrows clients -> gateway -->
+  <line x1="330" y1="64" x2="330" y2="100" stroke="#3ddc84" stroke-width="2.5" marker-end="url(#arr)"/>
+  <text x="318" y="88" font-size="12.5" fill="#7fbf9a" text-anchor="end">:8080 API, MCP, audio</text>
+  <line x1="598" y1="64" x2="598" y2="100" stroke="#3ddc84" stroke-width="2.5" marker-end="url(#arr)"/>
+  <text x="612" y="88" font-size="12.5" fill="#7fbf9a">:3000 WebUI</text>
 
   <!-- gateway -->
-  <rect x="90" y="108" width="580" height="74" rx="10" fill="#0e2a1c" stroke="#3ddc84" stroke-width="2"/>
-  <text x="380" y="139" font-size="17" font-weight="bold" fill="#3ddc84" text-anchor="middle">llmd-gateway (Caddy)</text>
-  <text x="380" y="164" font-size="13" fill="#9fc7b2" text-anchor="middle">one OpenAI-compatible API &#183; bearer keys &#183; TLS &#183; metrics &#183; access logs</text>
-
-  <!-- gateway is the only door -->
-  <text x="380" y="205" font-size="12.5" fill="#f5c542" text-anchor="middle">the gateway is the only door in</text>
+  <rect x="80" y="106" width="600" height="96" rx="10" fill="#0e2a1c" stroke="#3ddc84" stroke-width="2"/>
+  <text x="380" y="135" font-size="17" font-weight="bold" fill="#3ddc84" text-anchor="middle">llmd-gateway (Caddy)</text>
+  <text x="380" y="159" font-size="13" fill="#9fc7b2" text-anchor="middle">bearer keys &#183; TLS &#183; OIDC in front of the WebUI &#183; metrics &#183; rate limit &#183; access logs</text>
+  <text x="380" y="185" font-size="12.5" fill="#f5c542" text-anchor="middle">the only door in</text>
 
   <!-- loopback boundary -->
-  <rect x="90" y="220" width="580" height="130" rx="10" fill="none" stroke="#2e9e63" stroke-width="1.5" stroke-dasharray="7 5"/>
-  <text x="108" y="243" font-size="12.5" fill="#7fbf9a">loopback only</text>
+  <rect x="80" y="240" width="600" height="222" rx="10" fill="none" stroke="#2e9e63" stroke-width="1.5" stroke-dasharray="7 5"/>
+  <text x="98" y="263" font-size="12.5" fill="#7fbf9a">loopback only</text>
 
-  <!-- arrows gateway -> engines -->
-  <line x1="240" y1="182" x2="240" y2="256" stroke="#3ddc84" stroke-width="2" marker-end="url(#arr)"/>
-  <line x1="520" y1="182" x2="520" y2="256" stroke="#3ddc84" stroke-width="2" marker-end="url(#arr)"/>
+  <!-- arrows gateway -> services -->
+  <line x1="200" y1="202" x2="200" y2="268" stroke="#3ddc84" stroke-width="2" marker-end="url(#arr)"/>
+  <line x1="380" y1="202" x2="380" y2="268" stroke="#3ddc84" stroke-width="2" marker-end="url(#arr)"/>
+  <line x1="560" y1="202" x2="560" y2="268" stroke="#3ddc84" stroke-width="2" marker-end="url(#arr)"/>
 
-  <!-- engines -->
-  <rect x="130" y="260" width="220" height="70" rx="10" fill="#0e2a1c" stroke="#2e9e63" stroke-width="1.5"/>
-  <text x="240" y="289" font-size="15.5" font-weight="bold" fill="#a8e063" text-anchor="middle">Ollama&#160;&#160;:11434</text>
-  <text x="240" y="312" font-size="12.5" fill="#9fc7b2" text-anchor="middle">systemd service, hardened</text>
+  <!-- row 1: engines + speech -->
+  <g text-anchor="middle">
+    <rect x="110" y="272" width="180" height="64" rx="10" fill="#0e2a1c" stroke="#2e9e63" stroke-width="1.5"/>
+    <text x="200" y="298" font-size="14.5" font-weight="bold" fill="#a8e063">Ollama  :11434</text>
+    <text x="200" y="319" font-size="11.5" fill="#9fc7b2">chat &#183; embeddings &#183; large tier</text>
 
-  <rect x="410" y="260" width="220" height="70" rx="10" fill="#0e2a1c" stroke="#2e9e63" stroke-width="1.5"/>
-  <text x="520" y="289" font-size="15.5" font-weight="bold" fill="#a8e063" text-anchor="middle">vLLM&#160;&#160;:8000</text>
-  <text x="520" y="312" font-size="12.5" fill="#9fc7b2" text-anchor="middle">OCI container (podman Quadlet)</text>
+    <rect x="290" y="272" width="180" height="64" rx="10" fill="#0e2a1c" stroke="#2e9e63" stroke-width="1.5"/>
+    <text x="380" y="298" font-size="14.5" font-weight="bold" fill="#a8e063">vLLM  :8000</text>
+    <text x="380" y="319" font-size="11.5" fill="#9fc7b2">datacenter GPUs (container)</text>
+
+    <rect x="470" y="272" width="180" height="64" rx="10" fill="#0e2a1c" stroke="#2e9e63" stroke-width="1.5"/>
+    <text x="560" y="298" font-size="14.5" font-weight="bold" fill="#a8e063">whisper  :8090</text>
+    <text x="560" y="319" font-size="11.5" fill="#9fc7b2">/v1/audio/transcriptions</text>
+  </g>
+
+  <!-- row 2: mcp, oauth2-proxy, webui -->
+  <g text-anchor="middle">
+    <rect x="110" y="356" width="180" height="64" rx="10" fill="#0e2a1c" stroke="#2e9e63" stroke-width="1.5"/>
+    <text x="200" y="382" font-size="14.5" font-weight="bold" fill="#a8e063">llmd-mcp  :8765</text>
+    <text x="200" y="403" font-size="11.5" fill="#9fc7b2">chat + list_models as tools</text>
+
+    <rect x="290" y="356" width="180" height="64" rx="10" fill="#0e2a1c" stroke="#2e9e63" stroke-width="1.5"/>
+    <text x="380" y="382" font-size="14.5" font-weight="bold" fill="#a8e063">oauth2-proxy  :4180</text>
+    <text x="380" y="403" font-size="11.5" fill="#9fc7b2">your IdP, when OIDC is on</text>
+
+    <rect x="470" y="356" width="180" height="64" rx="10" fill="#0e2a1c" stroke="#2e9e63" stroke-width="1.5"/>
+    <text x="560" y="382" font-size="14.5" font-weight="bold" fill="#a8e063">Open WebUI  :3001</text>
+    <text x="560" y="403" font-size="11.5" fill="#9fc7b2">opt-in container, loopback</text>
+  </g>
+
+  <text x="380" y="444" font-size="11.5" fill="#7fbf9a" text-anchor="middle">every service above answers only through the gateway; none of them ever sees a key</text>
 
   <!-- picks label between boundary and hw -->
-  <line x1="380" y1="350" x2="380" y2="388" stroke="#3ddc84" stroke-width="2" marker-end="url(#arr)"/>
-  <text x="396" y="374" font-size="12.5" fill="#7fbf9a">picked at install / first boot</text>
+  <line x1="380" y1="462" x2="380" y2="496" stroke="#3ddc84" stroke-width="2" marker-end="url(#arr)"/>
+  <text x="396" y="485" font-size="12.5" fill="#7fbf9a">picked at install / first boot</text>
 
   <!-- hw layer -->
-  <rect x="90" y="394" width="580" height="64" rx="10" fill="#0e2a1c" stroke="#2e9e63" stroke-width="1.5"/>
-  <text x="380" y="421" font-size="15.5" font-weight="bold" fill="#a8e063" text-anchor="middle">llmd-hw + llmfit</text>
-  <text x="380" y="444" font-size="12.5" fill="#9fc7b2" text-anchor="middle">detects the hardware &#183; picks the engine and a model that fits &#183; signed catalog</text>
+  <rect x="80" y="502" width="600" height="60" rx="10" fill="#0e2a1c" stroke="#2e9e63" stroke-width="1.5"/>
+  <text x="380" y="527" font-size="15" font-weight="bold" fill="#a8e063" text-anchor="middle">llmd-hw + llmfit</text>
+  <text x="380" y="549" font-size="11.5" fill="#9fc7b2" text-anchor="middle">detects the hardware &#183; picks the engine and a model that fit &#183; signed catalog &#183; governed context</text>
 
   <!-- base layer -->
-  <rect x="90" y="474" width="580" height="60" rx="10" fill="#0e2a1c" stroke="#f5c542" stroke-width="1.5"/>
-  <text x="380" y="500" font-size="15.5" font-weight="bold" fill="#f5c542" text-anchor="middle">Ubuntu 24.04 LTS</text>
-  <text x="380" y="522" font-size="12.5" fill="#9fc7b2" text-anchor="middle">ISO &#183; cloud image (amd64 / arm64) &#183; apt install llmd on an existing system</text>
+  <rect x="80" y="578" width="600" height="60" rx="10" fill="#0e2a1c" stroke="#f5c542" stroke-width="1.5"/>
+  <text x="380" y="603" font-size="15" font-weight="bold" fill="#f5c542" text-anchor="middle">Ubuntu 24.04 LTS</text>
+  <text x="380" y="625" font-size="12.5" fill="#9fc7b2" text-anchor="middle">ISO &#183; cloud image (amd64 / arm64) &#183; apt install llmd &#183; GA kernel, HWE by choice</text>
+
+  <!-- fleet footnote -->
+  <text x="380" y="668" font-size="12.5" fill="#7fbf9a" text-anchor="middle">and past one machine: a declared profile, pushed and audited over your own ssh &#8212; <tspan fill="#a8e063">sibilla fleet</tspan></text>
 </svg>
