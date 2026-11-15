@@ -43,10 +43,13 @@ autoinstall:
       Acquire::Languages "none";
       Acquire::Retries "3";
   packages:
+    # only packages the cdrom pool carries (main/restricted): on 26.04
+    # subiquity installs these while the target's online sources are
+    # still disabled, so anything from universe must wait for the
+    # late-commands below (caddy learned this the hard way)
     - curl
     - jq
     - pciutils
-    - caddy
     - ufw
     - unattended-upgrades
   drivers:
@@ -68,6 +71,12 @@ autoinstall:
     - bash -c 'echo "=== end diagnostics ===" > /dev/console'
     - poweroff
   late-commands:
+    # 0. Re-enable the target's online sources: 26.04's installer keeps
+    #    them parked as .curtin.orig at this stage, and both the caddy
+    #    install below and the llmd debs' dependency resolution need
+    #    universe. The copy is idempotent if subiquity restored them.
+    - curtin in-target -- bash -c 'cp /etc/apt/sources.list.d/ubuntu.sources.curtin.orig /etc/apt/sources.list.d/ubuntu.sources 2>/dev/null || true; apt-get update'
+    - curtin in-target -- apt-get install -y caddy
     # 1. Copy the SibillaOS payload from the ISO into the target
     - cp -r /cdrom/sibilla /target/opt/sibilla
     # 2. Install the llmd packages (the model catalog ships inside llmd-hw)
