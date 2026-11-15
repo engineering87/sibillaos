@@ -54,3 +54,16 @@ When the gate fires:
 
 Exceptions are re-reviewed at every release: release notes must not
 ship with an expired review-by date in `.trivyignore`.
+
+## Source availability
+
+SibillaOS images redistribute unmodified Ubuntu packages: their exact
+corresponding sources are published by Ubuntu itself
+(archive.ubuntu.com, packages.ubuntu.com, per-package source links).
+The llmd-* packages and every build script are in this repository,
+which IS their source. Repackaged upstream binaries (llmfit,
+whisper.cpp, oauth2-proxy) are redistributed as released by their
+upstreams, whose repositories carry the sources, pinned by the exact
+versions recorded in packages/build-debs.sh. If any shipped
+component's source cannot be located through these channels, open an
+issue and we will provide it directly.

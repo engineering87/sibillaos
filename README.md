@@ -193,3 +193,7 @@ SibillaOS is an integration: the value it adds lives around excellent upstream p
 ## License
 
 Apache-2.0, see [LICENSE](LICENSE). Bundled components keep their own licenses, listed above. NVIDIA drivers are not redistributed by this repository; the ISO installs them from the Ubuntu `restricted` component. Models are downloaded by the user from Hugging Face or, for the large tier, the ollama.com registry, under their respective licenses.
+
+SibillaOS is an independent operating system based on Ubuntu. It is not affiliated with, endorsed by, or sponsored by Canonical Ltd. Ubuntu is a registered trademark of Canonical Ltd.; Linux is the registered trademark of Linus Torvalds in the U.S. and other countries; all other trademarks are the property of their respective owners.
+
+SibillaOS is built almost entirely from free and open-source software. The source code for the unmodified Ubuntu packages redistributed in the images is available from the official Ubuntu archives (archive.ubuntu.com, packages.ubuntu.com); the source for SibillaOS's own packages and build tooling is this repository. If you cannot locate the source for any component we ship, open an issue and we will provide it.
