@@ -49,7 +49,10 @@ jobs:
           SIBILLA_DEB_ARCH=amd64 bash ./packages/build-debs.sh
           SIBILLA_DEB_ARCH=arm64 bash ./packages/build-debs.sh
       - name: Build and sign the repository
-        run: bash ./apt/build-repo.sh
+        # the 26.04 runner image no longer preinstalls apt-utils
+        run: |
+          command -v apt-ftparchive >/dev/null || { sudo apt-get update; sudo apt-get install -y apt-utils; }
+          bash ./apt/build-repo.sh
       - name: Verify the repository with apt itself
         run: |
           sudo gpg --batch --yes --dearmor -o /usr/share/keyrings/sibillaos-ci.gpg \

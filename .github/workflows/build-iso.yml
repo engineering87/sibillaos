@@ -1635,6 +1635,8 @@ jobs:
           export LLMD_VERSION="${RELEASED}+ci1"
           bash ./packages/build-debs.sh
           mkdir -p localrepo && cp packages/dist/*.deb localrepo/
+          # the 26.04 runner image no longer preinstalls apt-utils
+          command -v apt-ftparchive >/dev/null || sudo apt-get install -y apt-utils
           ( cd localrepo && apt-ftparchive packages . > Packages && apt-ftparchive release . > Release )
           echo "deb [trusted=yes] file://$(pwd)/localrepo ./" \
             | sudo tee /etc/apt/sources.list.d/sibillaos-branch.list
