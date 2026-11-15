@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # SibillaOS cloud image builder
-# Bakes the official Ubuntu 24.04 cloud image into a SibillaOS qcow2:
+# Bakes the official Ubuntu 26.04 cloud image into a SibillaOS qcow2:
 # boots the image once under QEMU with a NoCloud seed that installs the
 # llmd packages and the pinned engine, then reseals cloud-init so the
 # deployer's own user-data applies at the real first boot. Engine and
@@ -13,7 +13,7 @@ set -euo pipefail
 
 VERSION="${SIBILLA_VERSION:-0.1.0}"
 ARCH="${SIBILLA_ARCH:-$(dpkg --print-architecture)}"
-UBUNTU_SERIES="noble"
+UBUNTU_SERIES="resolute"
 MIRROR="${SIBILLA_CLOUDIMG_MIRROR:-https://cloud-images.ubuntu.com/${UBUNTU_SERIES}/current}"
 IMG_NAME="${UBUNTU_SERIES}-server-cloudimg-${ARCH}.img"
 DISK_SIZE="${SIBILLA_CLOUD_DISK:-10G}"

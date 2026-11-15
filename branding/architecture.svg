@@ -83,8 +83,8 @@
 
   <!-- base layer -->
   <rect x="80" y="578" width="600" height="60" rx="10" fill="#0e2a1c" stroke="#f5c542" stroke-width="1.5"/>
-  <text x="380" y="603" font-size="15" font-weight="bold" fill="#f5c542" text-anchor="middle">Ubuntu 24.04 LTS</text>
-  <text x="380" y="625" font-size="12.5" fill="#9fc7b2" text-anchor="middle">ISO &#183; cloud image (amd64 / arm64) &#183; apt install llmd &#183; GA kernel, HWE by choice</text>
+  <text x="380" y="603" font-size="15" font-weight="bold" fill="#f5c542" text-anchor="middle">Ubuntu 26.04 LTS</text>
+  <text x="380" y="625" font-size="12.5" fill="#9fc7b2" text-anchor="middle">ISO &#183; cloud image (amd64 / arm64) &#183; apt install llmd &#183; GA kernel 7.0, HWE by choice</text>
 
   <!-- fleet footnote -->
   <text x="380" y="668" font-size="12.5" fill="#7fbf9a" text-anchor="middle">and past one machine: a declared profile, pushed and audited over your own ssh &#8212; <tspan fill="#a8e063">sibilla fleet</tspan></text>

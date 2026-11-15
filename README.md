@@ -7,7 +7,7 @@
 **Install Linux, get a working LLM API. Nothing else to set up.**
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-2e9e63.svg)](LICENSE)
-[![Base](https://img.shields.io/badge/base-Ubuntu%2024.04%20LTS-e95420.svg)](https://ubuntu.com)
+[![Base](https://img.shields.io/badge/base-Ubuntu%2026.04%20LTS-e95420.svg)](https://ubuntu.com)
 [![Build](https://github.com/engineering87/sibillaos/actions/workflows/build-iso.yml/badge.svg?branch=main)](https://github.com/engineering87/sibillaos/actions/workflows/build-iso.yml)
 [![Release](https://img.shields.io/github/v/release/engineering87/sibillaos?color=3ddc84&label=release)](https://github.com/engineering87/sibillaos/releases)
 [![Status](https://img.shields.io/badge/status-proof%20of%20concept-3ddc84.svg)](docs/architecture.md)
@@ -36,7 +36,7 @@ $ curl http://myserver:8080/v1/chat/completions \
 
 ## Quick start
 
-Already on Ubuntu 24.04? You do not have to reinstall anything. Add the repository and turn the box into an LLM appliance:
+Already on Ubuntu 26.04? You do not have to reinstall anything. Add the repository and turn the box into an LLM appliance:
 
 ```console
 $ curl -fsSL https://engineering87.github.io/sibillaos/apt/sibillaos-archive-key.asc \

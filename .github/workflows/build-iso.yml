@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   lint:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v4
       - name: Shellcheck
@@ -264,7 +264,7 @@ jobs:
 
   build:
     needs: lint
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     permissions:
       contents: write
     steps:
@@ -277,7 +277,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: work/*.iso
-          key: ubuntu-2404-live-server-amd64
+          key: ubuntu-2604-live-server-amd64
       - name: Build llmd-* debs
         # on tags the deb version follows the release, so installed
         # systems see upgrades in the APT repo
@@ -328,7 +328,7 @@ jobs:
 
   boot-test:
     needs: build
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     steps:
       - name: Download ISO artifact
         uses: actions/download-artifact@v4
@@ -455,7 +455,7 @@ jobs:
 
   install-test:
     needs: build
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     # 65min install guard + boot, firstboot wait and the probe battery
     timeout-minutes: 105
     steps:
@@ -863,7 +863,7 @@ jobs:
 
   apt-install-test:
     needs: lint
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v4
       # HF rate-limits anonymous requests from shared runner IPs; the
@@ -1590,7 +1590,7 @@ jobs:
   # give the user, and requires the serving machine to survive.
   upgrade-test:
     needs: lint
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
@@ -1668,7 +1668,7 @@ jobs:
 
   supply-chain:
     needs: install-test
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     permissions:
       contents: write
     steps:
@@ -1736,9 +1736,9 @@ jobs:
       matrix:
         include:
           - arch: amd64
-            runner: ubuntu-24.04
+            runner: ubuntu-26.04
           - arch: arm64
-            runner: ubuntu-24.04-arm
+            runner: ubuntu-26.04-arm
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: write
@@ -1813,11 +1813,11 @@ jobs:
       matrix:
         include:
           - arch: amd64
-            runner: ubuntu-24.04
+            runner: ubuntu-26.04
             # KVM available: inference is asserted
             strict: "yes"
           - arch: arm64
-            runner: ubuntu-24.04-arm
+            runner: ubuntu-26.04-arm
             # no KVM: TCG-emulated inference is informational only
             strict: "no"
     runs-on: ${{ matrix.runner }}
@@ -1960,7 +1960,7 @@ jobs:
   # machine must come up serving the payload model.
   airgap-test:
     needs: build-cloud
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4

@@ -8,7 +8,7 @@ update.
 
 ## Prerequisites
 
-- A machine or VM running SibillaOS (any image), or Ubuntu 24.04
+- A machine or VM running SibillaOS (any image), or Ubuntu 26.04
   after `apt install llmd` + `sudo sibilla setup`.
 - A served model (`sibilla status` shows it) and working inference:
 

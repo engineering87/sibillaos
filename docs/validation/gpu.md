@@ -10,7 +10,7 @@ secrets in it.
 ## Prerequisites
 
 Any SibillaOS install: ISO, cloud image, or `apt install llmd` plus
-`sudo sibilla setup` on an existing Ubuntu 24.04 (reversible with
+`sudo sibilla setup` on an existing Ubuntu 26.04 (reversible with
 `sudo sibilla remove`).
 
 ## NVIDIA checklist

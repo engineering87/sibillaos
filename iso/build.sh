@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # SibillaOS ISO builder
-# Repacks the official Ubuntu 24.04 live-server ISO with the SibillaOS
+# Repacks the official Ubuntu 26.04 live-server ISO with the SibillaOS
 # autoinstall, llmd packages, model catalog and branding. The official
 # installer stack (subiquity, cloud-init, casper) is reused as is.
 # Requires: xorriso curl (no root needed)
@@ -8,7 +8,7 @@ set -euo pipefail
 
 VERSION="${SIBILLA_VERSION:-0.1.0}"
 ARCH="amd64"
-UBUNTU_SERIES="24.04"
+UBUNTU_SERIES="26.04"
 MIRROR="${SIBILLA_UBUNTU_MIRROR:-https://releases.ubuntu.com/${UBUNTU_SERIES}}"
 WORK="$(pwd)/work"
 OUT="$(pwd)/out"
@@ -60,10 +60,25 @@ prepare_payload() {
 
   # boot menu: replaces the stock grub.cfg on the ISO. The serial setup is
   # guarded so machines without a serial port fall through to VGA only.
+  # branded splash behind the menu: guarded top to bottom, so a
+  # firmware or path that cannot do graphics falls through to the
+  # text theme below unchanged (the lesson of the dropped GRUB echo:
+  # ship only what degrades cleanly)
+  cp "$SCRIPT_DIR/../branding/grub-splash.png" "$WORK/sibilla-splash.png"
   cat > "$WORK/grub.cfg" <<'GRUBCFG'
 set timeout=5
 
-# SibillaOS theme: emerald on black
+if loadfont /boot/grub/fonts/unicode.pf2; then
+  insmod all_video
+  insmod gfxterm
+  set gfxmode=auto
+  terminal_output gfxterm
+  insmod png
+  background_image /boot/grub/sibilla-splash.png
+fi
+
+# SibillaOS theme: emerald on black (over the splash, black is
+# rendered transparent, so the image shows through)
 set color_normal=light-green/black
 set color_highlight=black/light-green
 set menu_color_normal=light-green/black
@@ -98,7 +113,8 @@ repack() {
     -volid "SIBILLAOS" \
     -map "$WORK/nocloud" /nocloud \
     -map "$WORK/sibilla" /sibilla \
-    -map "$WORK/grub.cfg" /boot/grub/grub.cfg
+    -map "$WORK/grub.cfg" /boot/grub/grub.cfg \
+    -map "$WORK/sibilla-splash.png" /boot/grub/sibilla-splash.png
   log "ISO ready: $out_iso"
 }
 

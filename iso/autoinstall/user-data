@@ -4,6 +4,11 @@
 # PoC: non-interactive install; engine and model chosen by llmd-hw + llmfit.
 autoinstall:
   version: 1
+  # 26.04's installer auto-selects HWE/OEM kernels on matching
+  # hardware; the appliance promises a deterministic GA kernel, so the
+  # choice is pinned here (GA 7.0 already covers Strix Halo and kin)
+  kernel:
+    package: linux-generic
   locale: en_US.UTF-8
   keyboard:
     layout: us
