@@ -1823,7 +1823,7 @@ jobs:
             # no KVM: TCG-emulated inference is informational only
             strict: "no"
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: ${{ matrix.arch == 'arm64' && 150 || 45 }}
+    timeout-minutes: ${{ matrix.arch == 'arm64' && 180 || 45 }}
     steps:
       - name: Download cloud image
         uses: actions/download-artifact@v4

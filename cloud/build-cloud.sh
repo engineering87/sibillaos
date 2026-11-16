@@ -40,7 +40,9 @@ case "$ARCH" in
       QEMU_ARGS+=(-enable-kvm -cpu host)
     else
       QEMU_ARGS+=(-cpu max)
-      BAKE_TIMEOUT=5400
+      # TCG on the resolute image overran the old 5400s budget
+      # (observed exit 124 in CI); kernel 7.0 boots slower emulated
+      BAKE_TIMEOUT=7200
     fi
     QEMU_ARGS+=(-bios /usr/share/AAVMF/AAVMF_CODE.fd)
     ;;
