@@ -39,9 +39,13 @@ case "$ARCH" in
     if [[ -w /dev/kvm ]]; then
       QEMU_ARGS+=(-enable-kvm -cpu host)
     else
-      QEMU_ARGS+=(-cpu max)
-      # TCG on the resolute image overran the old 5400s budget
-      # (observed exit 124 in CI); kernel 7.0 boots slower emulated
+      # pauth-impdef=on is the TCG fix for arm64 pointer
+      # authentication: emulating the real QARMA cipher makes every
+      # function return a crypto operation and the guest crawls
+      # (observed: two hours of bake with only the UEFI banner in the
+      # serial log); the impdef algorithm is the fast one and this is
+      # a CI bake, not a security boundary
+      QEMU_ARGS+=(-cpu max,pauth-impdef=on)
       BAKE_TIMEOUT=7200
     fi
     QEMU_ARGS+=(-bios /usr/share/AAVMF/AAVMF_CODE.fd)
