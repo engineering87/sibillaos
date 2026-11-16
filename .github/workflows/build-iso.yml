@@ -1640,6 +1640,10 @@ jobs:
           ( cd localrepo && apt-ftparchive packages . > Packages && apt-ftparchive release . > Release )
           echo "deb [trusted=yes] file://$(pwd)/localrepo ./" \
             | sudo tee /etc/apt/sources.list.d/sibillaos-branch.list
+          # runner-only quirk: on 26.04 firefox is a transitional deb
+          # whose preinst installs the snap, and the runner cannot
+          # reach the snap store; no SibillaOS system carries it
+          sudo apt-mark hold firefox 2>/dev/null || true
           # the exact commands the README gives the user; `apt upgrade`
           # (not apt-get) installs the new dependencies a grown
           # metapackage brings in, e.g. llmd-mcp
