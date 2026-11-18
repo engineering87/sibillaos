@@ -17,7 +17,7 @@ The shipped engine does layer offload: whole transformer layers move
 to RAM when VRAM runs out. It does NOT stream mixture-of-experts
 weights from disk - that capability is an open feature request
 upstream, and models bigger than your RAM remain out of reach (the
-[roadmap](../ROADMAP.md) tracks the projects working on that). So the
+[roadmap](https://github.com/engineering87/sibillaos/blob/main/ROADMAP.md) tracks the projects working on that). So the
 honest claim is "larger than VRAM", never "larger than RAM".
 
 Below the RAM floor there is no degraded mode, only a frozen machine:

@@ -39,15 +39,21 @@ cp "$DEBS"/*.deb "$OUT/apt/"
 # the public key is published next to the repository for manual setups
 gpg --batch --yes --export --armor "$KEY_ID" > "$OUT/apt/sibillaos-archive-key.asc"
 
-cat > "$OUT/index.html" <<'HTML'
+# a human landing on the bare directory gets an explanation instead
+# of the 404 GitHub Pages serves for index-less directories; apt
+# itself never requests it (the docs site owns the site root)
+cat > "$OUT/apt/index.html" <<'HTML'
 <!DOCTYPE html>
 <html lang="en">
 <head><meta charset="utf-8"><title>SibillaOS APT repository</title></head>
 <body>
 <h1>SibillaOS APT repository</h1>
-<p>The repository lives under <a href="apt/">/apt/</a>. Installed
-SibillaOS systems are preconfigured; manual setup instructions are in
-the <a href="https://github.com/engineering87/sibillaos">project
+<p>This is a package repository meant for apt, not a browsable page.
+Installed SibillaOS systems are preconfigured; manual setup
+instructions are in the
+<a href="https://engineering87.github.io/sibillaos/">documentation</a>
+and the
+<a href="https://github.com/engineering87/sibillaos">project
 repository</a>.</p>
 </body>
 </html>

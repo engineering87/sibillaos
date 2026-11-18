@@ -64,11 +64,21 @@ jobs:
           # a simulated install must resolve our packages from the repo
           apt-get install -s llmd-hw llmd-gateway llmd-firstboot \
             | grep -E "^Inst llmd-" || { echo "packages not installable from the repo"; exit 1; }
+      - name: Build the documentation site
+        # the docs site and the APT repo share the one Pages site this
+        # repository gets: the site goes to the root, the repo keeps
+        # its /apt/ path untouched (installed systems depend on it)
+        run: |
+          pip install --quiet mkdocs-material==9.7.7
+          python3 -m mkdocs build --strict -d pages-site
+          cp -a apt-site/apt pages-site/apt
+          test -f pages-site/apt/sibillaos-archive-key.asc
+          test -f pages-site/index.html
       - name: Upload Pages artifact (tags only)
         if: startsWith(github.ref, 'refs/tags/v')
         uses: actions/upload-pages-artifact@v3
         with:
-          path: apt-site
+          path: pages-site
 
   deploy:
     if: startsWith(github.ref, 'refs/tags/v')
