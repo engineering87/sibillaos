@@ -1,6 +1,6 @@
 {
   "schema": 2,
-  "updated": "2026-11-02",
+  "updated": "2026-11-18",
   "note": "SibillaOS curated list. Permissively licensed (Apache-2.0/MIT) models only. Source is Hugging Face, except the LARGE TIER where source=registry entries come from the ollama.com registry (its manifests carry sha256 layer digests, so verification is unchanged; policy recorded in architecture changelog v0.13). Optional per-quant digests are the sha256 of the GGUF file on Hugging Face (LFS oid) or of the registry model layer, which is also the ollama blob name after a pull; tools/update-digests.sh refreshes both kinds. Entries with role=embedding serve /v1/embeddings and are never selected as the chat default. Entries with tier=large carry min_ram_gb and sibilla model use refuses them on machines below it.",
   "models": [
     {
@@ -458,6 +458,23 @@
       "verified": true,
       "digests": {
         "122b": "sha256:93c83617a40560a61cda911ee327efdb5b5fbd39caa8b777a4ec565c0af1af3d"
+      }
+    },
+    {
+      "id": "qwen3.5:9b",
+      "family": "Qwen3.5 9B (vision)",
+      "license": "Apache-2.0",
+      "engines": [
+        "ollama"
+      ],
+      "tier": "consumer-gpu",
+      "source": "registry",
+      "capabilities": [
+        "vision"
+      ],
+      "verified": true,
+      "digests": {
+        "9b": "sha256:02d45dc1cf451ba2475ac33b301c2dd8f985abe4c182ce04a1f2f5bf0260278d"
       }
     }
   ]

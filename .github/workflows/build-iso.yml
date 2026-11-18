@@ -38,12 +38,19 @@ jobs:
           # nothing. Substance is part of validity.
           jq -e '.models | length > 0' catalog/models.json >/dev/null \
             || { echo "the catalog has no models"; exit 1; }
-          # the second source is a large-tier-only concession (ADR in
-          # architecture changelog v0.13): registry entries must be
-          # tier=large, and every large entry must carry its RAM floor
-          jq -e '[.models[] | select(.source? == "registry") | select(.tier != "large")] | length == 0' \
+          # the second source is a concession, capability-gated since
+          # the v0.17 amendment (ADR in architecture changelog v0.13
+          # and v0.17): a registry entry must be tier=large or state
+          # the capability the hf path cannot deliver, and is never a
+          # default; every large entry must carry its RAM floor
+          jq -e '[.models[] | select(.source? == "registry")
+                  | select(.tier != "large")
+                  | select((.capabilities? // []) | length == 0)] | length == 0' \
             catalog/models.json >/dev/null \
-            || { echo "a registry-sourced entry is not tier=large"; exit 1; }
+            || { echo "a registry-sourced entry is neither tier=large nor capability-gated"; exit 1; }
+          jq -e '[.models[] | select(.source? == "registry") | select(.default? == true)] | length == 0' \
+            catalog/models.json >/dev/null \
+            || { echo "a registry-sourced entry is marked default"; exit 1; }
           jq -e '[.models[] | select(.tier? == "large") | select((.min_ram_gb? // 0) <= 0)] | length == 0' \
             catalog/models.json >/dev/null \
             || { echo "a large entry has no min_ram_gb floor"; exit 1; }

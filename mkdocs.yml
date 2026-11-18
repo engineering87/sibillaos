@@ -47,6 +47,7 @@ nav:
       - Embeddings and RAG: embeddings.md
       - Structured outputs: structured-outputs.md
       - Speech: speech.md
+      - Vision: vision.md
       - OIDC single sign-on: oidc.md
       - Fleet: fleet.md
       - MCP: mcp.md
