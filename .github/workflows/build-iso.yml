@@ -1851,7 +1851,10 @@ jobs:
             || { echo "downloaded image is corrupt (artifact transit)"; exit 1; }
           if [ "${{ matrix.arch }}" = "arm64" ]; then
             QEMU=qemu-system-aarch64
-            KVM="-machine virt -cpu max -bios /usr/share/AAVMF/AAVMF_CODE.fd"
+            # neoverse-n1, not max: under TCG, max emulates pauth,
+            # SVE and SME and the 26.04 guest crawls (same fix as the
+            # cloud bake, which went green with it)
+            KVM="-machine virt -cpu neoverse-n1 -bios /usr/share/AAVMF/AAVMF_CODE.fd"
             if [ -e /dev/kvm ]; then
               sudo chmod 666 /dev/kvm
               KVM="-machine virt -enable-kvm -cpu host -bios /usr/share/AAVMF/AAVMF_CODE.fd"
