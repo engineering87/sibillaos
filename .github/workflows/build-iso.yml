@@ -25,6 +25,7 @@ jobs:
             packages/llmd-gateway/usr/lib/llmd/* packages/llmd-gateway/usr/bin/* \
             packages/llmd-webui/usr/bin/* packages/llmd-mcp/usr/bin/* \
             packages/llmd-speech/usr/bin/* packages/llmd-speech/usr/lib/llmd/* \
+            packages/llmd-rerank/usr/bin/* packages/llmd-rerank/usr/lib/llmd/* \
             packages/llmd-oidc/usr/bin/* packages/llmd-oidc/usr/lib/llmd/* \
             packages/llmd-hw/etc/update-motd.d/* \
             tools/*.sh
@@ -90,10 +91,12 @@ jobs:
           export LLMD_ACCESS_LOG="$RUNNER_TEMP/access.log"
           export LLMD_MCP_FILE="$RUNNER_TEMP/mcp"
           export LLMD_SPEECH_FILE="$RUNNER_TEMP/speech"
+          export LLMD_RERANK_FILE="$RUNNER_TEMP/rerank"
           export LLMD_KEYS_ALT="lintkey1|lintkey2"
           echo ollama > "$LLMD_ENGINE_FILE"
           echo off > "$LLMD_MCP_FILE"
           echo off > "$LLMD_SPEECH_FILE"
+          echo off > "$LLMD_RERANK_FILE"
           for conf in 'MODE=http' \
                       'MODE=http\nMETRICS=on' \
                       'MODE=internal\nTLS_HOSTNAME=sibillaos.test' \
@@ -121,6 +124,14 @@ jobs:
           awk '/route \{/{r=1} /respond @unauthorized/{if(r)a=NR} /reverse_proxy \/v1\/audio/{s=NR}
                END{exit !(a && s && s > a)}' "$LLMD_CADDYFILE" \
             || { echo "speech route is not behind the 401"; exit 1; }
+          # same contract for the rerank route
+          echo on > "$LLMD_RERANK_FILE"
+          bash packages/llmd-gateway/usr/lib/llmd/llmd-gateway-render
+          caddy validate --adapter caddyfile --config "$LLMD_CADDYFILE"
+          grep -q "reverse_proxy /v1/rerank 127.0.0.1:8091" "$LLMD_CADDYFILE"
+          awk '/route \{/{r=1} /respond @unauthorized/{if(r)a=NR} /reverse_proxy \/v1\/rerank/{k=NR}
+               END{exit !(a && k && k > a)}' "$LLMD_CADDYFILE" \
+            || { echo "rerank route is not behind the 401"; exit 1; }
           # WebUI front block: absent when disabled, direct when OIDC
           # is off, through oauth2-proxy when on
           export LLMD_WEBUI_FLAG="$RUNNER_TEMP/webui.enabled"
@@ -264,7 +275,7 @@ jobs:
             printf '%s\n' "$plain" | head -5
             exit 1
           fi
-          for c in setup status model key tls metrics webui mcp speech oidc kernel fleet apply connect bench doctor remove; do
+          for c in setup status model key tls metrics webui mcp speech rerank oidc kernel fleet apply connect bench doctor remove; do
             grep -q "sibilla $c" <<< "$plain" || { echo "man page missing command: $c"; exit 1; }
           done
           echo "man page renders with every command documented"
@@ -1114,6 +1125,65 @@ jobs:
             -X POST http://127.0.0.1:8080/v1/audio/transcriptions \
             -H "Authorization: Bearer $KEY" -F file=@/tmp/hello.wav || true)
           [ "$code" != "200" ] || { echo "speech still answering after disable"; RC=1; }
+          exit "$RC"
+      - name: Rerank endpoint through the gateway
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          RC=0
+          # the model rides the artifact cache like the GGUFs; a
+          # pre-placed verified file makes enable skip the download
+          mkdir -p gguf-cache
+          if [ -f gguf-cache/qwen3-reranker-q8.gguf ]; then
+            sudo mkdir -p /var/lib/llmd/models/rerank
+            sudo cp gguf-cache/qwen3-reranker-q8.gguf /var/lib/llmd/models/rerank/qwen3-reranker-0.6b-q8_0.gguf
+          fi
+          sudo HF_TOKEN="${HF_TOKEN:-}" sibilla rerank enable | tee rerank.out
+          grep -q "rerank model.*verified" rerank.out \
+            || { echo "enable did not verify the model digest"; RC=1; }
+          sudo cp /var/lib/llmd/models/rerank/qwen3-reranker-0.6b-q8_0.gguf gguf-cache/qwen3-reranker-q8.gguf
+          sudo chown "$USER" gguf-cache/qwen3-reranker-q8.gguf
+          KEY=$(sudo cat /etc/llmd/apikey)
+          # unauthenticated requests must die at the gateway
+          code=$(curl -s -o /dev/null -w '%{http_code}' -m 10 \
+            -X POST http://127.0.0.1:8080/v1/rerank \
+            -H "Content-Type: application/json" -d '{}' || true)
+          [ "$code" = "401" ] || { echo "unauthenticated rerank request got $code"; RC=1; }
+          BODY='{"model":"rerank","query":"What is the capital of France?",
+                 "documents":["Paris is the capital and largest city of France.",
+                              "Bananas are yellow and rich in potassium."]}'
+          # first request may hit the model still loading: short retry
+          OUT=""
+          for _ in 1 2 3 4 5; do
+            OUT=$(curl -s -m 120 -X POST http://127.0.0.1:8080/v1/rerank \
+              -H "Authorization: Bearer $KEY" -H "Content-Type: application/json" \
+              -d "$BODY" || true)
+            echo "$OUT" | jq -e '.results' >/dev/null 2>&1 && break
+            sleep 3
+          done
+          echo "rerank: $OUT"
+          # hard assert, our machinery: both documents scored
+          echo "$OUT" | jq -e '.results | length == 2' >/dev/null \
+            || { echo "rerank did not score both documents"
+                 sudo journalctl -u llmd-rerank.service --no-pager | tail -30
+                 RC=1; }
+          # hard assert, but it is vetting, not model grading: broken
+          # community conversions of this reranker return null or
+          # all-zero scores (missing rerank template in the GGUF), and
+          # on a trivial pair the relevant document must win; if this
+          # goes red the pinned GGUF is bad and must not ship
+          echo "$OUT" | jq -e '
+            ([.results[] | select(.index == 0) | .relevance_score] | first) >
+            ([.results[] | select(.index == 1) | .relevance_score] | first)' >/dev/null \
+            || { echo "the relevant document did not outscore the irrelevant one"; RC=1; }
+          # disable must close the endpoint: the request falls through
+          # to the engine, which does not serve /v1/rerank
+          sudo sibilla rerank disable
+          code=$(curl -s -o /dev/null -w '%{http_code}' -m 10 \
+            -X POST http://127.0.0.1:8080/v1/rerank \
+            -H "Authorization: Bearer $KEY" -H "Content-Type: application/json" \
+            -d "$BODY" || true)
+          [ "$code" != "200" ] || { echo "rerank still answering after disable"; RC=1; }
           exit "$RC"
       - name: OIDC login flow through the gateway (dex as the IdP)
         run: |

@@ -111,6 +111,7 @@ The installer detects your hardware and makes the decisions a human would otherw
 | **Air-gapped** | Machines with no outbound network install from a companion payload volume: models travel by USB stick, verified against the signed catalog digests on both ends. CI proves it on every push in a network-restricted VM. See [docs/airgap.md](docs/airgap.md). |
 | **Local RAG** | `/v1/embeddings` through the same gateway and keys: pull a catalog embedding model (`sibilla model pull`) and point any OpenAI-compatible RAG framework at this machine. See [docs/embeddings.md](docs/embeddings.md). |
 | **Speech-to-text** | `sibilla speech enable` serves `/v1/audio/transcriptions` (OpenAI shape, srt/vtt included) behind the same keys: whisper.cpp repackaged from its pinned release, model digest-verified from the signed catalog, audio never leaves the machine. See [docs/speech.md](docs/speech.md). |
+| **Reranking** | `sibilla rerank enable` serves `/v1/rerank` behind the same keys: the missing middle of RAG (retrieve wide with embeddings, rerank, hand the model the best few), Qwen3-Reranker-0.6B digest-verified from the signed catalog on a pinned loopback llama.cpp server. See [docs/rerank.md](docs/rerank.md). |
 | **Large models** | A dedicated catalog tier for models bigger than your GPU (layers spill to RAM), strictly opt-in: first boot never picks one. `sibilla model list` shows what your machine can hold, `use` refuses anything past the RAM floor before downloading a single byte and states the speed cost when it fits, `status` shows the real GPU/CPU placement and `bench` tells the truth about the speed. See [docs/large-models.md](docs/large-models.md). |
 
 The base install is a headless server; a desktop variant is on the roadmap.
@@ -186,6 +187,7 @@ SibillaOS is an integration: the value it adds lives around excellent upstream p
 | [vLLM](https://github.com/vllm-project/vllm) | The datacenter-GPU inference engine | Apache-2.0 |
 | [llmfit](https://github.com/AlexsJones/llmfit) by Alex Jones | Hardware-aware model recommendation: which models actually fit this machine, at which quantization ([llmfit.org](https://www.llmfit.org/)) | MIT |
 | [whisper.cpp](https://github.com/ggml-org/whisper.cpp) by Georgi Gerganov and the ggml authors | Local speech-to-text behind the gateway | MIT |
+| [llama.cpp](https://github.com/ggml-org/llama.cpp) by Georgi Gerganov and the ggml authors | Local reranking behind the gateway | MIT |
 | [oauth2-proxy](https://github.com/oauth2-proxy/oauth2-proxy) | OIDC login for the WebUI | MIT |
 | [Caddy](https://github.com/caddyserver/caddy) | The authenticated gateway | Apache-2.0 |
 | [Open WebUI](https://github.com/open-webui/open-webui) | The opt-in chat interface | BSD-3-Clause based |

@@ -45,6 +45,7 @@ nav:
       - Configuration: configuration.md
       - Large models: large-models.md
       - Embeddings and RAG: embeddings.md
+      - Reranking: rerank.md
       - Structured outputs: structured-outputs.md
       - Speech: speech.md
       - Vision: vision.md

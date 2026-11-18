@@ -194,6 +194,57 @@ EOF
 }
 build_llmd_speech
 
+# llama.cpp's server is repackaged from the pinned upstream build for
+# the reranking sidecar, same discipline as whisper.cpp: numbered
+# build releases, hashes recorded here at pin time (GitHub publishes
+# per-asset sha256 digests), fail closed on any mismatch. b11669 is
+# the build the upstream v0.7.0 release points at. Only llama-server
+# and its shared libraries are shipped: the tarball's other tools are
+# dead weight on an appliance.
+LLAMACPP_TAG="b11669"
+LLAMACPP_SHA256_AMD64="cf07c1c112d709bd67e522017471de57ed0ec8bea031d732c5422351c07f65ac"
+LLAMACPP_SHA256_ARM64="9ac6fda2058d35677608a06f751a50122ddfa4ce0ddb7f084466b8e79b6d4a99"
+build_llmd_rerank() {
+  local staging asset base want unpack srv
+  base="https://github.com/ggml-org/llama.cpp/releases/download/$LLAMACPP_TAG"
+  case "$DEB_ARCH" in
+    amd64) asset="llama-$LLAMACPP_TAG-bin-ubuntu-x64.tar.gz";   want="$LLAMACPP_SHA256_AMD64" ;;
+    arm64) asset="llama-$LLAMACPP_TAG-bin-ubuntu-arm64.tar.gz"; want="$LLAMACPP_SHA256_ARM64" ;;
+  esac
+  [[ -n "$want" ]] || { echo "llama.cpp asset hash not recorded for $DEB_ARCH, refusing to build" >&2; exit 1; }
+  if [[ ! -f "$DIST/$asset" ]]; then
+    curl -fL --retry 3 -o "$DIST/$asset" "$base/$asset"
+  fi
+  echo "$want  $DIST/$asset" | sha256sum -c - \
+    || { echo "llama.cpp asset does not match the recorded sha256, refusing to build" >&2; exit 1; }
+  staging=$(mktemp -d)
+  unpack=$(mktemp -d)
+  cp -a "$DIR/llmd-rerank/." "$staging/"
+  mkdir -p "$staging/DEBIAN" "$staging/usr/lib/llmd/llamacpp"
+  tar -xzf "$DIST/$asset" -C "$unpack"
+  srv=$(find "$unpack" -name llama-server -type f | head -1)
+  [[ -n "$srv" ]] \
+    || { echo "llama-server not present in the upstream tarball, refusing to build" >&2; exit 1; }
+  cp "$srv" "$staging/usr/lib/llmd/llamacpp/"
+  find "$unpack" -type f -name '*.so*' -exec cp {} "$staging/usr/lib/llmd/llamacpp/" \;
+  rm -rf "$unpack"
+  find "$staging/usr/lib/llmd" "$staging/usr/bin" -type f -exec chmod 755 {} + 2>/dev/null || true
+  cat > "$staging/DEBIAN/control" <<EOF
+Package: llmd-rerank
+Version: $VERSION
+Section: admin
+Priority: optional
+Architecture: $DEB_ARCH
+Depends: llmd-gateway, llmd-hw, curl, jq
+Maintainer: SibillaOS contributors
+Description: Local reranking behind the gateway (llama.cpp $LLAMACPP_TAG, opt-in)
+EOF
+  dpkg-deb --build --root-owner-group "$staging" "$DIST/llmd-rerank_${VERSION}_${DEB_ARCH}.deb"
+  rm -rf "$staging"
+  echo "OK llmd-rerank ($DEB_ARCH, llama.cpp $LLAMACPP_TAG)"
+}
+build_llmd_rerank
+
 # llmfit is repackaged from the pinned upstream release so the ISO does
 # not depend on external installers at install time; the tarball is
 # verified against the sha256 file published with the release
@@ -239,7 +290,7 @@ Version: $VERSION
 Section: admin
 Priority: optional
 Architecture: all
-Depends: llmd-hw, llmd-engine-ollama, llmd-engine-vllm, llmd-gateway, llmd-firstboot, llmd-webui, llmd-mcp, llmd-speech, llmd-oidc, llmd-llmfit
+Depends: llmd-hw, llmd-engine-ollama, llmd-engine-vllm, llmd-gateway, llmd-firstboot, llmd-webui, llmd-mcp, llmd-speech, llmd-rerank, llmd-oidc, llmd-llmfit
 Maintainer: SibillaOS contributors
 Description: SibillaOS LLM stack (metapackage)
  Pulls the SibillaOS components onto an existing Ubuntu system. After

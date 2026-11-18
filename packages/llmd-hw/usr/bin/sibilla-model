@@ -172,6 +172,7 @@ cmd_use() {
        "$CATALOG" >/dev/null; then
     echo "$model is not served by the $ENGINE engine." >&2
     [[ "$role" == "speech" ]] && echo "it is the speech model: sudo sibilla speech enable manages it" >&2
+    [[ "$role" == "reranker" ]] && echo "it is the rerank model: sudo sibilla rerank enable manages it" >&2
     exit 1
   fi
   check_ram_floor "$model"

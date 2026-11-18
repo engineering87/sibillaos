@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# llmd-rerank-server: launcher for the repackaged llama.cpp server in
+# reranking mode. The upstream tarball layout is not contractual, so
+# the binary and its shared libraries are located at start rather
+# than hardcoded.
+set -euo pipefail
+
+ROOT=/usr/lib/llmd/llamacpp
+MODEL=/var/lib/llmd/models/rerank/qwen3-reranker-0.6b-q8_0.gguf
+
+BIN=$(find "$ROOT" -name llama-server -type f 2>/dev/null | head -1)
+[[ -n "$BIN" && -x "$BIN" ]] || { echo "llama-server not found under $ROOT" >&2; exit 1; }
+[[ -f "$MODEL" ]] || { echo "rerank model missing: $MODEL (run: sudo sibilla rerank enable)" >&2; exit 1; }
+
+# shared libraries ship next to the binary in the upstream tarball
+libdirs=$(find "$ROOT" -type f -name '*.so*' -exec dirname {} \; 2>/dev/null | sort -u | paste -sd: -)
+[[ -n "$libdirs" ]] && export LD_LIBRARY_PATH="$libdirs${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+
+# --reranking --pooling rank is the documented mode for reranker
+# models; the explicit port matters since upstream moved the default
+exec "$BIN" \
+  --host 127.0.0.1 --port 8091 \
+  --reranking --pooling rank --embedding \
+  --model "$MODEL"

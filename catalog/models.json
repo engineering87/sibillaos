@@ -476,6 +476,20 @@
       "digests": {
         "9b": "sha256:02d45dc1cf451ba2475ac33b301c2dd8f985abe4c182ce04a1f2f5bf0260278d"
       }
+    },
+    {
+      "id": "hf.co/cicaba/Qwen3-Reranker-0.6B-GGUF-llamacpp-fixed",
+      "family": "Qwen3 Reranker 0.6B (rerank)",
+      "license": "Apache-2.0",
+      "engines": [
+        "llamacpp"
+      ],
+      "tier": "cpu",
+      "role": "reranker",
+      "verified": true,
+      "digests": {
+        "Q8_0": "sha256:99bcc225f0a38b73059b31627d28131cbea9c11b7ca894e56b95621aac878d65"
+      }
     }
   ]
 }

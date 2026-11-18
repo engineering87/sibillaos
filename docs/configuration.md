@@ -30,6 +30,8 @@ TLS=off                      # or internal:HOSTNAME, or acme:HOSTNAME:EMAIL
 METRICS=on
 MCP=on
 WEBUI=off
+SPEECH=off
+RERANK=off
 ```
 
 API keys are deliberately not part of a profile: they are per-machine

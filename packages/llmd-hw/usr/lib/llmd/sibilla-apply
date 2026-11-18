@@ -8,6 +8,7 @@
 #   MCP=on|off
 #   WEBUI=on|off
 #   SPEECH=on|off
+#   RERANK=on|off
 #
 # Every key is optional: absent means "leave it as it is", so partial
 # profiles compose. API keys are deliberately not part of a profile:
@@ -62,6 +63,7 @@ read_state() {
   CUR_METRICS=$(conf_get METRICS); CUR_METRICS=${CUR_METRICS:-off}
   CUR_MCP=$(cat /etc/llmd/mcp 2>/dev/null || echo off)
   CUR_SPEECH=$(cat /etc/llmd/speech 2>/dev/null || echo off)
+  CUR_RERANK=$(cat /etc/llmd/rerank 2>/dev/null || echo off)
   CUR_WEBUI=off
   # a bare `[[ ... ]] && x` as the last statement of a function makes
   # the function fail under set -e when the condition is false
@@ -82,6 +84,7 @@ cmd_export() {
   echo "MCP=$CUR_MCP"
   echo "WEBUI=$CUR_WEBUI"
   echo "SPEECH=$CUR_SPEECH"
+  echo "RERANK=$CUR_RERANK"
 }
 
 # every toggle goes through the command that owns it; a profile that
@@ -96,7 +99,7 @@ cmd_apply() {
   [[ $EUID -eq 0 ]] || { echo "run as root (sudo)" >&2; exit 1; }
   [[ -r "$file" ]] || { echo "no readable profile at $file" >&2; usage; }
 
-  local MODEL="" TLS="" METRICS="" MCP="" WEBUI="" SPEECH=""
+  local MODEL="" TLS="" METRICS="" MCP="" WEBUI="" SPEECH="" RERANK=""
   # shellcheck disable=SC1090
   . "$file"
 
@@ -106,7 +109,7 @@ cmd_apply() {
     exit 1
   fi
   local key val
-  for key in METRICS MCP WEBUI SPEECH; do
+  for key in METRICS MCP WEBUI SPEECH RERANK; do
     val="${!key}"
     if [[ -n "$val" && "$val" != on && "$val" != off ]]; then
       echo "invalid $key value '$val' (on or off)" >&2
@@ -194,6 +197,17 @@ cmd_apply() {
       changes=$((changes + 1))
     fi
   fi
+  if [[ -n "$RERANK" ]]; then
+    if [[ "$RERANK" == "$CUR_RERANK" ]]; then
+      echo "rerank:  ok ($RERANK)"
+      kept=$((kept + 1))
+    else
+      echo "rerank:  $CUR_RERANK -> $RERANK"
+      need_cmd sibilla-rerank
+      if [[ "$RERANK" == on ]]; then sibilla-rerank enable; else sibilla-rerank disable; fi
+      changes=$((changes + 1))
+    fi
+  fi
 
   echo "profile applied: $changes change(s), $kept already in place"
 }
@@ -212,11 +226,11 @@ cmd_check() {
   read_state
 
   if [[ -s /etc/llmd/profile ]]; then
-    local MODEL="" TLS="" METRICS="" MCP="" WEBUI="" SPEECH=""
+    local MODEL="" TLS="" METRICS="" MCP="" WEBUI="" SPEECH="" RERANK=""
     # shellcheck disable=SC1091
     . /etc/llmd/profile
     local key want cur
-    for key in MODEL TLS METRICS MCP WEBUI SPEECH; do
+    for key in MODEL TLS METRICS MCP WEBUI SPEECH RERANK; do
       want="${!key}"
       [[ -n "$want" ]] || continue
       case "$key" in
@@ -226,6 +240,7 @@ cmd_check() {
         MCP)     cur="$CUR_MCP" ;;
         WEBUI)   cur="$CUR_WEBUI" ;;
         SPEECH)  cur="$CUR_SPEECH" ;;
+        RERANK)  cur="$CUR_RERANK" ;;
       esac
       if [[ "$want" == "$cur" ]]; then
         echo "profile:  $key ok ($cur)"

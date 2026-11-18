@@ -12,7 +12,7 @@ owners.
 
 The images bundle the following components, each under its own
 license: Ollama (MIT), vLLM (Apache-2.0), llmfit (MIT), whisper.cpp
-(MIT), oauth2-proxy (MIT), Caddy (Apache-2.0, installed from the
+(MIT), llama.cpp (MIT), oauth2-proxy (MIT), Caddy (Apache-2.0, installed from the
 Ubuntu archive). Open WebUI is pulled at the user's request and is not
 part of the images. NVIDIA drivers are installed from the Ubuntu
 restricted component and are not redistributed by this project.
