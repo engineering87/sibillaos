@@ -226,7 +226,13 @@ build_llmd_rerank() {
   [[ -n "$srv" ]] \
     || { echo "llama-server not present in the upstream tarball, refusing to build" >&2; exit 1; }
   cp "$srv" "$staging/usr/lib/llmd/llamacpp/"
-  find "$unpack" -type f -name '*.so*' -exec cp {} "$staging/usr/lib/llmd/llamacpp/" \;
+  # the shared libraries come as versioned files plus the .so.N
+  # symlinks the loader actually asks for: -type f alone drops the
+  # symlinks and the server dies with "cannot open shared object
+  # file"; cp -a keeps them as links, flattening keeps targets
+  # adjacent so they stay valid
+  find "$unpack" \( -type f -o -type l \) -name '*.so*' \
+    -exec cp -a {} "$staging/usr/lib/llmd/llamacpp/" \;
   rm -rf "$unpack"
   find "$staging/usr/lib/llmd" "$staging/usr/bin" -type f -exec chmod 755 {} + 2>/dev/null || true
   cat > "$staging/DEBIAN/control" <<EOF
