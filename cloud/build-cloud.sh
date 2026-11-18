@@ -45,7 +45,7 @@ case "$ARCH" in
       # (observed: two hours of bake with only the UEFI banner in the
       # serial log); the impdef algorithm is the fast one and this is
       # a CI bake, not a security boundary
-      QEMU_ARGS+=(-cpu max,pauth-impdef=on)
+      QEMU_ARGS+=(-cpu "max,pauth-impdef=on")
       BAKE_TIMEOUT=7200
     fi
     QEMU_ARGS+=(-bios /usr/share/AAVMF/AAVMF_CODE.fd)
