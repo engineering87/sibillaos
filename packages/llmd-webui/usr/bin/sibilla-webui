@@ -41,6 +41,9 @@ case "${1:-}" in
   disable)
     need_root
     systemctl stop webui.service 2>/dev/null || true
+    # a failed unit (e.g. an image pull that died mid-way) must not
+    # survive a disable: clean teardown leaves clean state
+    systemctl reset-failed webui.service 2>/dev/null || true
     rm -f "$FLAG"
     systemctl daemon-reload
     /usr/lib/llmd/llmd-gateway-render

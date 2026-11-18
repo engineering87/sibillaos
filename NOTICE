@@ -1,0 +1,30 @@
+SibillaOS
+Copyright 2026 the SibillaOS contributors
+
+Licensed under the Apache License, Version 2.0 (see LICENSE).
+
+SibillaOS is an independent operating system based on Ubuntu. It is
+not affiliated with, endorsed by, or sponsored by Canonical Ltd.
+Ubuntu is a registered trademark of Canonical Ltd. Linux is the
+registered trademark of Linus Torvalds in the U.S. and other
+countries. All other trademarks are the property of their respective
+owners.
+
+The images bundle the following components, each under its own
+license: Ollama (MIT), vLLM (Apache-2.0), llmfit (MIT), whisper.cpp
+(MIT), llama.cpp (MIT), oauth2-proxy (MIT), Caddy (Apache-2.0, installed from the
+Ubuntu archive). Open WebUI is pulled at the user's request and is not
+part of the images. NVIDIA drivers are installed from the Ubuntu
+restricted component and are not redistributed by this project.
+Language models are downloaded by the user under their respective
+licenses and are not redistributed.
+
+Source availability: the unmodified Ubuntu packages redistributed in
+the images have their exact corresponding sources published in the
+official Ubuntu archives (archive.ubuntu.com, packages.ubuntu.com).
+The source for SibillaOS's own packages and build tooling is this
+repository. Repackaged upstream binaries are redistributed as released
+by their upstreams, pinned to the exact versions recorded in
+packages/build-debs.sh, whose repositories carry the sources. If the
+source for any shipped component cannot be located through these
+channels, open an issue and it will be provided directly.

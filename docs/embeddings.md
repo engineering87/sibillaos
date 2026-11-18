@@ -37,7 +37,7 @@ local store.
 
 ## Quickstart: RAG in one file, no framework
 
-[examples/rag-quickstart.py](../examples/rag-quickstart.py) is a
+[examples/rag-quickstart.py](https://github.com/engineering87/sibillaos/blob/main/examples/rag-quickstart.py) is a
 complete pipeline in ~100 lines of Python standard library: index
 three documents through `/v1/embeddings`, retrieve by cosine
 similarity, answer through `/v1/chat/completions` with the retrieved

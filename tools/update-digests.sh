@@ -57,9 +57,15 @@ while IFS= read -r id; do
   # LAST separator, which is a dash for bartowski-style names
   # (model-Q4_K_M.gguf) and a dot for nomic-style ones
   # (model-v1.5.Q8_0.gguf): accept both, or the recorded key does not
-  # match what sibilla model use/pull looks up
+  # match what sibilla model use/pull looks up.
+  # Two exclusions keep vision-era repos from poisoning the keys:
+  # mmproj-*.gguf companions would collide with the real bf16/f16
+  # entry, and sharded quants (-0000N-of-0000M.gguf, unusable via the
+  # hf.co pull path anyway) would record a meaningless "0000M" key.
   digests=$(echo "$tree" | jq '[ .[]
       | select(.path | test("\\.gguf$"))
+      | select(.path | test("(^|/)mmproj-") | not)
+      | select(.path | test("-[0-9]{5}-of-[0-9]{5}\\.gguf$") | not)
       | select(.lfs.oid != null)
       | {key: (.path | sub("\\.gguf$"; "") | sub("^.*[-.]"; "")),
          value: ("sha256:" + .lfs.oid)} ]

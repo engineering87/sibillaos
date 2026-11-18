@@ -1,0 +1,76 @@
+site_name: SibillaOS
+site_description: >-
+  The Ubuntu-based distribution that boots into an authenticated,
+  OpenAI-compatible LLM API. Nothing leaves the machine.
+site_url: https://engineering87.github.io/sibillaos/
+repo_url: https://github.com/engineering87/sibillaos
+repo_name: engineering87/sibillaos
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  logo: assets/logo.png
+  favicon: assets/logo.png
+  palette:
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: teal
+      accent: teal
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: teal
+      accent: teal
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+  features:
+    - navigation.sections
+    - navigation.top
+    - search.suggest
+    - content.code.copy
+
+markdown_extensions:
+  - admonition
+  - pymdownx.highlight
+  - pymdownx.superfences
+  - toc:
+      permalink: true
+
+nav:
+  - Home: index.md
+  - Guides:
+      - Configuration: configuration.md
+      - Large models: large-models.md
+      - Embeddings and RAG: embeddings.md
+      - Reranking: rerank.md
+      - Structured outputs: structured-outputs.md
+      - Speech: speech.md
+      - Vision: vision.md
+      - OIDC single sign-on: oidc.md
+      - Fleet: fleet.md
+      - MCP: mcp.md
+      - Air-gapped installs: airgap.md
+  - Operations:
+      - Architecture: architecture.md
+      - Observability: observability/README.md
+      - Supply chain: supply-chain.md
+      - Releasing: releasing.md
+  - Validation:
+      - GPU: validation/gpu.md
+      - WebUI: validation/webui.md
+  - Demo: demo/README.md
+  - Releases:
+      - v0.10.0: releases/v0.10.0.md
+      - v0.9.1: releases/v0.9.1.md
+      - v0.9.0: releases/v0.9.0.md
+      - v0.8.0: releases/v0.8.0.md
+      - v0.7.0: releases/v0.7.0.md
+      - v0.6.0: releases/v0.6.0.md
+      - v0.5.0: releases/v0.5.0.md
+      - v0.4.0: releases/v0.4.0.md
+      - v0.3.0: releases/v0.3.0.md
+      - v0.2.0: releases/v0.2.0.md
+      - v0.1.0: releases/v0.1.0.md

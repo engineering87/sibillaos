@@ -17,6 +17,7 @@ ENGINE_FILE="${LLMD_ENGINE_FILE:-/etc/llmd/engine}"
 ACCESS_LOG="${LLMD_ACCESS_LOG:-/var/log/caddy/sibilla-access.log}"
 MCP_FILE="${LLMD_MCP_FILE:-/etc/llmd/mcp}"
 SPEECH_FILE="${LLMD_SPEECH_FILE:-/etc/llmd/speech}"
+RERANK_FILE="${LLMD_RERANK_FILE:-/etc/llmd/rerank}"
 WEBUI_FLAG="${LLMD_WEBUI_FLAG:-/etc/llmd/webui.enabled}"
 OIDC_FILE="${LLMD_OIDC_FILE:-/etc/llmd/oidc}"
 MODE=http
@@ -27,6 +28,7 @@ METRICS=off
 [[ -r "$CONF" ]] && . "$CONF"
 mcp=$(cat "$MCP_FILE" 2>/dev/null || echo off)
 speech=$(cat "$SPEECH_FILE" 2>/dev/null || echo off)
+rerank=$(cat "$RERANK_FILE" 2>/dev/null || echo off)
 webui=off
 [[ -e "$WEBUI_FLAG" ]] && webui=on
 oidc=$(cat "$OIDC_FILE" 2>/dev/null || echo off)
@@ -114,6 +116,11 @@ BLOCK
     # server it never sees the keys, the 401 above covers it
     echo "		reverse_proxy /v1/audio/* 127.0.0.1:8090"
   fi
+  if [[ "$rerank" == "on" ]]; then
+    # llama-server (llmd-rerank.service) on loopback; like the MCP
+    # server it never sees the keys, the 401 above covers it
+    echo "		reverse_proxy /v1/rerank 127.0.0.1:8091"
+  fi
   cat <<BLOCK
 		reverse_proxy $upstream {
 			header_up Host {upstream_hostport}
@@ -127,12 +134,27 @@ BLOCK
 # posture. With OIDC on, oauth2-proxy (loopback 4180, proxy mode:
 # native login redirects, no forward_auth 401 gymnastics) sits in the
 # middle; with OIDC off, the WebUI keeps its own login, unchanged.
+# The listener inherits the gateway's TLS: internal mode serves the
+# local-CA certificate for the same hostname, acme mode reuses the
+# certificate Caddy already obtained for it (certificates belong to
+# hostnames, not ports), plain http mode stays plain.
 webui_block() {
   local up="127.0.0.1:3001"
   [[ "$oidc" == "on" ]] && up="127.0.0.1:4180"
+  echo
+  case "$MODE" in
+    internal)
+      echo "https://$TLS_HOSTNAME:3000 {"
+      echo "	tls internal"
+      ;;
+    acme)
+      echo "https://$TLS_HOSTNAME:3000 {"
+      ;;
+    *)
+      echo ":3000 {"
+      ;;
+  esac
   cat <<BLOCK
-
-:3000 {
 	header {
 		Server "SibillaOS"
 		defer
@@ -174,4 +196,4 @@ case "$MODE" in
     } > "$CADDYFILE"
     ;;
 esac
-echo "gateway config rendered: mode=$MODE upstream=$upstream metrics=$METRICS mcp=$mcp speech=$speech webui=$webui oidc=$oidc"
+echo "gateway config rendered: mode=$MODE upstream=$upstream metrics=$METRICS mcp=$mcp speech=$speech rerank=$rerank webui=$webui oidc=$oidc"

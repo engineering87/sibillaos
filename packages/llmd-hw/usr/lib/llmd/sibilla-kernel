@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+# sibilla-kernel: the kernel stack, stated and switchable.
+# The appliance default is the GA kernel (7.0 on 26.04): supported for
+# the whole LTS life, never surprises, and broad enough that Strix
+# Halo and its generation work out of the box. The HWE stack remains
+# the opt-in for hardware newer than the GA driver set - and it ROLLS:
+# Canonical moves it to newer kernel series every few months, which is
+# exactly the kind of movement an appliance should opt into, not wake
+# up to. The installer is pinned to GA too (autoinstall kernel:), so
+# nothing auto-selects HWE behind the appliance's back.
+set -euo pipefail
+
+# shellcheck source=/dev/null
+. /usr/lib/llmd/sibilla-style
+
+HWE_META="linux-generic-hwe-26.04"
+
+usage() {
+  cat <<USAGE
+usage: sibilla-kernel COMMAND
+
+  status    running kernel, installed stack, and what HWE would bring
+  hwe       install the HWE kernel stack (newer kernel, rolling)
+
+The GA kernel stays the default: it is supported for the whole LTS
+life, and on 26.04 (kernel 7.0) it already covers Strix Halo and its
+generation. HWE is for hardware newer than the GA driver set: it rolls
+to newer kernel series every few months, so expect kernel jumps with
+regular updates. A reboot is required after enabling. Details in
+docs/validation/gpu.md.
+USAGE
+  exit 1
+}
+
+need_root() { [[ $EUID -eq 0 ]] || { echo "run as root (sudo)" >&2; exit 1; }; }
+
+cmd_status() {
+  s_hdr kernel
+  s_kv "running:" "$(uname -r)"
+  if dpkg -l "$HWE_META" 2>/dev/null | grep -q '^ii'; then
+    s_kv "stack:" "HWE ($HWE_META installed, rolling)" "$(s_ok)"
+  else
+    s_kv "stack:" "GA (supported for the whole LTS life)"
+    echo
+    echo "HWE would bring a newer kernel series, for hardware newer"
+    echo "than the GA driver set. On this base the GA kernel already"
+    echo "covers Strix Halo and its generation."
+    echo "Enable deliberately with: sudo sibilla kernel hwe"
+  fi
+}
+
+cmd_hwe() {
+  need_root
+  if dpkg -l "$HWE_META" 2>/dev/null | grep -q '^ii'; then
+    echo "HWE stack already installed (running: $(uname -r))"
+    echo "a newer kernel may be pending a reboot"
+    exit 0
+  fi
+  echo "Installing the HWE kernel stack ($HWE_META)."
+  echo "This stack ROLLS: Canonical moves it to newer kernel series"
+  echo "every few months, so kernel jumps arrive with regular updates."
+  echo "The GA kernel stays installed and bootable from GRUB."
+  apt-get update
+  apt-get install -y "$HWE_META"
+  echo
+  s_kv "installed:" "$HWE_META" "$(s_ok)"
+  echo "reboot to run the new kernel: sudo reboot"
+}
+
+case "${1:-}" in
+  status) cmd_status ;;
+  hwe)    cmd_hwe ;;
+  *)      usage ;;
+esac

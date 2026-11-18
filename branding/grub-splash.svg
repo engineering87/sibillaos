@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" width="1920" height="1080">
+  <!-- SibillaOS GRUB splash: the quiet corner adapted for a boot menu.
+       The center stays dark and empty because the menu text lives
+       there; the eye keeps its corner, the wordmark whispers at the
+       bottom left. -->
+  <defs>
+    <radialGradient id="vign" cx="0.84" cy="0.24" r="1.0">
+      <stop offset="0" stop-color="#0a1f14"/>
+      <stop offset="0.45" stop-color="#060f0a"/>
+      <stop offset="1" stop-color="#030704"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="1920" height="1080" fill="url(#vign)"/>
+
+  <g transform="translate(1614,236)">
+    <circle r="150" fill="none" stroke="#2e9e63" stroke-opacity="0.22" stroke-width="2" stroke-dasharray="4 16"/>
+    <path d="M -115 0 Q 0 -84 115 0 Q 0 84 -115 0 Z" fill="#04120a" stroke="#3ddc84" stroke-opacity="0.75" stroke-width="3.4"/>
+    <circle r="42" fill="#0a1f14" stroke="#3ddc84" stroke-opacity="0.8" stroke-width="2.6"/>
+    <ellipse rx="9.5" ry="35" fill="#020805"/>
+    <path d="M 0 -182 l 9 14 -9 14 -9 -14 Z" fill="#2e9e63" opacity="0.4"/>
+    <path d="M 0 154 l 9 14 -9 14 -9 -14 Z" fill="#2e9e63" opacity="0.4"/>
+  </g>
+
+  <g font-family="DejaVu Sans, sans-serif">
+    <text x="96" y="996" font-size="40" font-weight="bold" fill="#3ddc84" fill-opacity="0.85" letter-spacing="2">SibillaOS</text>
+    <text x="98" y="1028" font-size="19" fill="#7fbf9a" fill-opacity="0.7" letter-spacing="4">THE ORACLE ON YOUR HARDWARE</text>
+  </g>
+</svg>

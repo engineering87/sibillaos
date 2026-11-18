@@ -51,7 +51,10 @@ This protects the WebUI, not the API: /v1/* on port 8080 answers to
 bearer keys, with or without OIDC. The secret and the cookie key are
 per-machine and never enter declarative profiles (`sibilla apply`
 manages neither; the toggles it owns are listed in
-docs/configuration.md). Port 3000 speaks plain HTTP: on a network you
-do not trust end to end, put the gateway in TLS mode and keep the
-WebUI on localhost or a trusted segment - HTTPS for the WebUI listener
-is tracked for a later cycle.
+docs/configuration.md).
+
+The WebUI listener inherits the gateway's TLS: with `sibilla tls
+enable HOSTNAME` (or `--acme`) port 3000 serves HTTPS for the same
+hostname, the OIDC redirect URL defaults to https accordingly, and the
+session cookie turns Secure. In plain HTTP mode the listener stays
+plain: on a network you do not trust end to end, enable TLS first.

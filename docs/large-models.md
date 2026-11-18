@@ -17,7 +17,7 @@ The shipped engine does layer offload: whole transformer layers move
 to RAM when VRAM runs out. It does NOT stream mixture-of-experts
 weights from disk - that capability is an open feature request
 upstream, and models bigger than your RAM remain out of reach (the
-[roadmap](../ROADMAP.md) tracks the projects working on that). So the
+[roadmap](https://github.com/engineering87/sibillaos/blob/main/ROADMAP.md) tracks the projects working on that). So the
 honest claim is "larger than VRAM", never "larger than RAM".
 
 Below the RAM floor there is no degraded mode, only a frozen machine:
@@ -55,6 +55,26 @@ share means more layers run on the CPU, and generation speed falls
 with it. If you expected GPU and see 100% CPU, check the GPU section
 of `sibilla status` first - on AMD machines a missing ROCm runtime is
 the usual cause (see [validation/gpu.md](validation/gpu.md)).
+
+## The context window is part of the cost
+
+The KV cache - the memory that holds the conversation context - grows
+with the context window, and left ungoverned the engine sizes it from
+the memory it can see. On unified-memory machines that goes wrong
+silently: a small model can end up with tens of gigabytes of KV cache
+reserved for context nobody asked for, hollowing out the very RAM the
+large tier's floors assume is available. SibillaOS therefore pins the
+context window to 8192 tokens by default. Raise it deliberately, with
+the trade stated:
+
+```console
+$ sudo sibilla model context 32768
+context: 32768 tokens (KV cache grows with it; bigger context, more RAM)
+$ sudo sibilla model context default
+```
+
+For large models especially: more context means a higher real memory
+footprint than the catalog floor, which assumes the default.
 
 ## Measuring the cost instead of guessing it
 

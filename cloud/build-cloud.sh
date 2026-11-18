@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # SibillaOS cloud image builder
-# Bakes the official Ubuntu 24.04 cloud image into a SibillaOS qcow2:
+# Bakes the official Ubuntu 26.04 cloud image into a SibillaOS qcow2:
 # boots the image once under QEMU with a NoCloud seed that installs the
 # llmd packages and the pinned engine, then reseals cloud-init so the
 # deployer's own user-data applies at the real first boot. Engine and
@@ -13,7 +13,7 @@ set -euo pipefail
 
 VERSION="${SIBILLA_VERSION:-0.1.0}"
 ARCH="${SIBILLA_ARCH:-$(dpkg --print-architecture)}"
-UBUNTU_SERIES="noble"
+UBUNTU_SERIES="resolute"
 MIRROR="${SIBILLA_CLOUDIMG_MIRROR:-https://cloud-images.ubuntu.com/${UBUNTU_SERIES}/current}"
 IMG_NAME="${UBUNTU_SERIES}-server-cloudimg-${ARCH}.img"
 DISK_SIZE="${SIBILLA_CLOUD_DISK:-10G}"
@@ -39,8 +39,15 @@ case "$ARCH" in
     if [[ -w /dev/kvm ]]; then
       QEMU_ARGS+=(-enable-kvm -cpu host)
     else
-      QEMU_ARGS+=(-cpu max)
-      BAKE_TIMEOUT=5400
+      # under TCG, -cpu max turns on every emulated feature (pauth,
+      # SVE, SME) and the 26.04 firmware and kernel exercise them,
+      # grinding the guest to a halt: two hours of bake with only the
+      # UEFI banner in the serial log, with and without the pauth
+      # mitigation. A real, modest CPU model is the robust choice for
+      # emulated CI; neoverse-n1 is ARMv8.2 with none of the slow
+      # features and the stock Ubuntu arm64 kernel runs on it fine
+      QEMU_ARGS+=(-cpu neoverse-n1)
+      BAKE_TIMEOUT=7200
     fi
     QEMU_ARGS+=(-bios /usr/share/AAVMF/AAVMF_CODE.fd)
     ;;
@@ -98,7 +105,12 @@ bake() {
   # wins over the marker
   if [[ "$qrc" -ne 0 ]]; then
     echo "bake qemu exited with $qrc (timeout kill?); the image cannot be trusted" >&2
-    tail -40 "$WORK/bake.log" >&2 || true
+    # a hang needs context, not a 40-line tail: say what ran and show
+    # everything the guest ever wrote to serial
+    "$QEMU_BIN" --version | head -1 >&2 || true
+    echo "qemu args: ${QEMU_ARGS[*]}" >&2
+    echo "serial log ($(wc -c < "$WORK/bake.log" 2>/dev/null || echo 0) bytes):" >&2
+    cat "$WORK/bake.log" >&2 || true
     exit 1
   fi
   if grep -q "SIBILLA_BAKE_FAILED" "$WORK/bake.log"; then
