@@ -39,13 +39,14 @@ case "$ARCH" in
     if [[ -w /dev/kvm ]]; then
       QEMU_ARGS+=(-enable-kvm -cpu host)
     else
-      # pauth-impdef=on is the TCG fix for arm64 pointer
-      # authentication: emulating the real QARMA cipher makes every
-      # function return a crypto operation and the guest crawls
-      # (observed: two hours of bake with only the UEFI banner in the
-      # serial log); the impdef algorithm is the fast one and this is
-      # a CI bake, not a security boundary
-      QEMU_ARGS+=(-cpu "max,pauth-impdef=on")
+      # under TCG, -cpu max turns on every emulated feature (pauth,
+      # SVE, SME) and the 26.04 firmware and kernel exercise them,
+      # grinding the guest to a halt: two hours of bake with only the
+      # UEFI banner in the serial log, with and without the pauth
+      # mitigation. A real, modest CPU model is the robust choice for
+      # emulated CI; neoverse-n1 is ARMv8.2 with none of the slow
+      # features and the stock Ubuntu arm64 kernel runs on it fine
+      QEMU_ARGS+=(-cpu neoverse-n1)
       BAKE_TIMEOUT=7200
     fi
     QEMU_ARGS+=(-bios /usr/share/AAVMF/AAVMF_CODE.fd)
@@ -104,7 +105,12 @@ bake() {
   # wins over the marker
   if [[ "$qrc" -ne 0 ]]; then
     echo "bake qemu exited with $qrc (timeout kill?); the image cannot be trusted" >&2
-    tail -40 "$WORK/bake.log" >&2 || true
+    # a hang needs context, not a 40-line tail: say what ran and show
+    # everything the guest ever wrote to serial
+    "$QEMU_BIN" --version | head -1 >&2 || true
+    echo "qemu args: ${QEMU_ARGS[*]}" >&2
+    echo "serial log ($(wc -c < "$WORK/bake.log" 2>/dev/null || echo 0) bytes):" >&2
+    cat "$WORK/bake.log" >&2 || true
     exit 1
   fi
   if grep -q "SIBILLA_BAKE_FAILED" "$WORK/bake.log"; then
