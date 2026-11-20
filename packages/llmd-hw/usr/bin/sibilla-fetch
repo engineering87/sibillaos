@@ -5,7 +5,7 @@
 # ASCII-only glyphs.
 set -euo pipefail
 
-# shellcheck source=/usr/lib/llmd/sibilla-style
+# shellcheck source=/dev/null
 . /usr/lib/llmd/sibilla-style
 
 ver=$(dpkg-query -W -f='${Version}' llmd-hw 2>/dev/null || echo source)
