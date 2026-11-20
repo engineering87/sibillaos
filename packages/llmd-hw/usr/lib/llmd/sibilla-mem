@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+# sibilla-mem: where the memory went. System RAM, GPU VRAM, the
+# models actually resident in the engine with their footprint and
+# CPU/GPU split, the llmd services' own memory, and the model store
+# on disk. Read-only; values that need privileges show as "-".
+set -euo pipefail
+
+# shellcheck source=/dev/null
+. /usr/lib/llmd/sibilla-style
+
+ENGINE=$(cat /etc/llmd/engine 2>/dev/null || echo ollama)
+
+s_hdr mem
+
+# --- system RAM, from the same numbers free(1) prints
+read -r _ total used _ _ _ avail < <(free -b | awk '/^Mem:/')
+hum() { awk -v b="$1" 'BEGIN{ if (b>=1073741824) printf "%.1f GiB", b/1073741824; else printf "%.0f MiB", b/1048576 }'; }
+s_kv "ram:" "$(hum "$used") used / $(hum "$total") total ($(hum "$avail") available)"
+
+# --- GPU VRAM, NVIDIA then AMD, silence when neither tool exists
+if command -v nvidia-smi >/dev/null 2>&1; then
+  while IFS=, read -r name mtot mused; do
+    s_kv "vram:" "$(echo "$mused" | tr -d ' MiB') MiB used / $(echo "$mtot" | tr -d ' MiB') MiB - ${name# }"
+  done < <(nvidia-smi --query-gpu=name,memory.total,memory.used --format=csv,noheader 2>/dev/null || true)
+elif command -v rocm-smi >/dev/null 2>&1; then
+  vram=$(rocm-smi --showmeminfo vram --csv 2>/dev/null | awk -F, 'NR==2 {printf "%.0f MiB used / %.0f MiB", $3/1048576, $2/1048576}' || true)
+  [[ -n "$vram" ]] && s_kv "vram:" "$vram"
+fi
+
+# --- resident models, from the engine itself
+s_rule
+case "$ENGINE" in
+  vllm)
+    # vLLM keeps its single served model resident for the process
+    # lifetime and exposes no per-model residency API: the honest
+    # line is the unit's own memory, printed with the services below
+    s_kv "resident:" "vllm serves $(cat /etc/llmd/model 2>/dev/null || echo '-') (resident for the process lifetime)"
+    ;;
+  *)
+    ps_json=$(curl -s -m 5 http://127.0.0.1:11434/api/ps 2>/dev/null || true)
+    count=$(echo "$ps_json" | jq -r '.models | length' 2>/dev/null || echo "")
+    if [[ -z "$count" ]]; then
+      s_kv "resident:" "-" "$(s_warn)"
+      echo "  (engine not answering on loopback; is ollama.service running?)"
+    elif [[ "$count" == "0" ]]; then
+      s_kv "resident:" "no model loaded (the first request loads the served model)"
+    else
+      while IFS=$'\t' read -r name size vram until; do
+        pct="cpu only"
+        if [[ "$vram" -gt 0 && "$size" -gt 0 ]]; then
+          pct="$(( vram * 100 / size ))% on gpu"
+        fi
+        s_kv "resident:" "$name"
+        echo "  $(hum "$size") total, $(hum "$vram") in vram ($pct), kept until ${until%%.*}"
+      done < <(echo "$ps_json" | jq -r '.models[] | [.name, .size, .size_vram, .expires_at] | @tsv')
+    fi
+    ;;
+esac
+
+# --- what the llmd services themselves hold (resident set via systemd)
+s_rule
+for unit in ollama.service vllm.service llmd-speech.service llmd-rerank.service llmd-mcp.service caddy.service; do
+  cur=$(systemctl show -p MemoryCurrent --value "$unit" 2>/dev/null || true)
+  [[ -z "$cur" || "$cur" == "[not set]" || "$cur" == "infinity" ]] && continue
+  state=$(systemctl is-active "$unit" 2>/dev/null || true)
+  [[ "$state" == "active" ]] || continue
+  s_kv "service:" "${unit%.service}: $(hum "$cur")"
+done
+
+# --- the model store on disk
+store=/usr/share/ollama/.ollama/models
+if [[ -d "$store" ]]; then
+  s_kv "store:" "$(du -sh "$store" 2>/dev/null | cut -f1 || echo '-') in $store"
+fi
