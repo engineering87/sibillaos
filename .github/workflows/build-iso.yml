@@ -275,7 +275,7 @@ jobs:
             printf '%s\n' "$plain" | head -5
             exit 1
           fi
-          for c in setup status model key tls metrics webui mcp speech rerank oidc kernel fleet apply connect bench doctor fetch mem remove; do
+          for c in setup status model key tls metrics webui mcp speech transcribe rerank oidc kernel fleet apply connect bench doctor fetch mem remove; do
             grep -q "sibilla $c" <<< "$plain" || { echo "man page missing command: $c"; exit 1; }
           done
           echo "man page renders with every command documented"
@@ -721,6 +721,12 @@ jobs:
                 cat mem.out || true
                 grep -q "ram:" mem.out || { echo "mem does not report system ram"; RC=1; }
                 grep -q "resident:" mem.out || { echo "mem does not report a resident model"; RC=1; }
+                # the model card must read real metadata from the engine
+                echo "--- sibilla model info ---"
+                $SSH "sibilla model info" > minfo.out || { echo "model info exited nonzero"; RC=1; }
+                cat minfo.out || true
+                grep -q "params:" minfo.out || { echo "model info has no parameter line"; RC=1; }
+                grep -q "quant:" minfo.out || { echo "model info has no quantization line"; RC=1; }
                 # unified CLI: the health view must aggregate the stack
                 # state, show the served model and exit zero
                 echo "--- sibilla status ---"
@@ -1125,6 +1131,10 @@ jobs:
           else
             echo "transcription text did not match the spoken words on this box (model quality, not machinery)"
           fi
+          # the CLI path rides the same stack: a file in, text out
+          T=$(sudo sibilla transcribe /tmp/hello.wav || true)
+          echo "transcribe: $T"
+          [ -n "$T" ] || { echo "sibilla transcribe returned nothing"; RC=1; }
           # disable must close the endpoint: the request falls through
           # to the engine, which does not serve /v1/audio
           sudo sibilla speech disable

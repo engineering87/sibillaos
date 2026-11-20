@@ -77,6 +77,12 @@ machines silently reserves far more RAM than the conversation needs;
 SibillaOS pins 8192 tokens by default.
 .B context default
 removes the override.
+.B info
+prints the model's card: parameters, quantization level, training
+context length and embedding width read from the engine's own
+metadata, beside the catalog entry (family, license, tier) and the
+runtime state (served or not, governed window, residency). Speed is
+measured by sibilla bench, not estimated here.
 .SS sibilla key SUBCOMMAND
 Gateway API keys:
 .B list
@@ -125,6 +131,11 @@ Where the memory went: system RAM, per-GPU VRAM, the models actually
 resident in the engine with their footprint and CPU/GPU split (from
 the engine's own process list), the memory each llmd service holds,
 and the model store on disk. Read-only and safe without root.
+.SS sibilla transcribe FILE [--srt|--vtt]
+Batch transcription from the command line on the speech stack the
+machine already runs: the transcription goes to stdout (pipe it,
+redirect it), subtitles with --srt or --vtt. Requires sibilla speech
+enable; without ffmpeg the server accepts 16 kHz WAV only.
 .SS sibilla rerank enable|disable|status
 Local reranking at /v1/rerank, behind the same keys: a query, a list
 of documents, relevance scores back. The missing middle of RAG:

@@ -1,0 +1,104 @@
+name: llama.cpp engine spike
+
+# The ds4 gate closed (upstream publishes no releases by choice), so
+# plan B is the plan: llama.cpp as the large-tier engine. This spike
+# answers the contract half of the decision on CI hardware - does
+# llama-server's OpenAI surface satisfy what the gateway requires,
+# and does it serve a real MoE - and states the other half honestly:
+# the --moe-cache-mib gain is a GPU-over-host-memory feature that a
+# CPU-only runner cannot measure, so throughput here is informational
+# and the cache measurement belongs to real hardware.
+#
+# Dispatch-only: a 2 GB model download has no place on every push.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  spike:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch the pinned llama.cpp server (single source of truth)
+        run: |
+          TAG=$(grep -oP 'LLAMACPP_TAG="\K[^"]+' packages/build-debs.sh)
+          WANT=$(grep -oP 'LLAMACPP_SHA256_AMD64="\K[^"]+' packages/build-debs.sh)
+          echo "pin: $TAG ($WANT)"
+          asset="llama-$TAG-bin-ubuntu-x64.tar.gz"
+          curl -fL --retry 3 -o "$asset" \
+            "https://github.com/ggml-org/llama.cpp/releases/download/$TAG/$asset"
+          echo "$WANT  $asset" | sha256sum -c -
+          mkdir -p llamacpp && tar -xzf "$asset" -C llamacpp
+          SRV=$(find llamacpp -name llama-server -type f | head -1)
+          [ -n "$SRV" ] || { echo "no llama-server in the tarball"; exit 1; }
+          echo "SRV=$SRV" >> "$GITHUB_ENV"
+          LIBS=$(find llamacpp -type f -name '*.so*' -exec dirname {} \; | sort -u | paste -sd: -)
+          echo "LD_LIBRARY_PATH=$LIBS" >> "$GITHUB_ENV"
+          # question 2a, cheap half: the cache flag must exist in this build
+          LD_LIBRARY_PATH="$LIBS" "$SRV" --help 2>&1 | grep -q "moe-cache" \
+            && echo "MOE_FLAG=present" >> "$GITHUB_ENV" \
+            || echo "MOE_FLAG=absent" >> "$GITHUB_ENV"
+      - name: Fetch the MoE under test (sha256 recorded at spike time)
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          # granite-3.1-3b-a800m: the smallest real MoE with a clean
+          # license (Apache-2.0, bartowski quant); 2.0 GB Q4_K_M
+          WANT="48e0edcd578fd4462f26127f04c651d0e650741110185297741089aea01a82b3"
+          AUTH=()
+          [ -n "${HF_TOKEN:-}" ] && AUTH=(-H "Authorization: Bearer $HF_TOKEN")
+          curl -fL --retry 3 "${AUTH[@]}" -o moe.gguf \
+            "https://huggingface.co/bartowski/granite-3.1-3b-a800m-instruct-GGUF/resolve/main/granite-3.1-3b-a800m-instruct-Q4_K_M.gguf"
+          echo "$WANT  moe.gguf" | sha256sum -c -
+      - name: The gateway contract, point by point
+        run: |
+          RC=0
+          "$SRV" --host 127.0.0.1 --port 9090 -m moe.gguf --jinja >server.log 2>&1 &
+          SPID=$!
+          for _ in $(seq 1 60); do
+            curl -s -m 2 http://127.0.0.1:9090/health | grep -q '"ok"' && break
+            sleep 2
+          done
+          curl -s -m 2 http://127.0.0.1:9090/health | grep -q '"ok"' \
+            || { echo "server never became healthy"; tail -40 server.log; exit 1; }
+
+          # /v1/models: the gateway's health view and connect kit read it
+          curl -s http://127.0.0.1:9090/v1/models | tee models.json
+          jq -e '.data | length >= 1' models.json >/dev/null || { echo "models shape wrong"; RC=1; }
+
+          # /v1/chat/completions, the shape every client reads
+          BODY='{"model":"moe","messages":[{"role":"user","content":"Reply with one short sentence: hello!"}],"max_tokens":120}'
+          START=$(date +%s%N)
+          curl -s -m 600 http://127.0.0.1:9090/v1/chat/completions \
+            -H "Content-Type: application/json" -d "$BODY" | tee chat.json
+          END=$(date +%s%N)
+          jq -e '.choices[0].message.content | length > 0' chat.json >/dev/null \
+            || { echo "chat completion shape wrong"; RC=1; }
+          jq -e '.usage.completion_tokens > 0' chat.json >/dev/null \
+            || { echo "no usage block (bench depends on it)"; RC=1; }
+          TOK=$(jq -r '.usage.completion_tokens' chat.json)
+          ELAPSED_MS=$(( (END - START) / 1000000 ))
+          TPS=$(awk -v t="$TOK" -v ms="$ELAPSED_MS" 'BEGIN{printf "%.1f", t*1000/ms}')
+
+          # streaming, which the demo and every chat client use
+          curl -s -N -m 600 http://127.0.0.1:9090/v1/chat/completions \
+            -H "Content-Type: application/json" \
+            -d '{"model":"moe","messages":[{"role":"user","content":"Count to three."}],"max_tokens":60,"stream":true}' \
+            > stream.out
+          grep -q '^data: ' stream.out || { echo "no SSE stream"; RC=1; }
+          grep -q 'data: \[DONE\]' stream.out || { echo "stream did not close with [DONE]"; RC=1; }
+
+          kill "$SPID" 2>/dev/null || true
+          {
+            echo "## llama.cpp engine spike"
+            echo "- contract (/v1/models, chat, usage, SSE): $([ "$RC" = 0 ] && echo PASS || echo FAIL)"
+            echo "- MoE served: granite-3.1-3b-a800m Q4_K_M (3B total, 800M active)"
+            echo "- --moe-cache flag in pinned build: $MOE_FLAG"
+            echo "- CPU-only throughput, informational: ~$TPS tok/s ($TOK tokens)"
+            echo "- the cache gain needs GPU-over-host-memory: measure on real hardware"
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$RC"
