@@ -1,7 +1,6 @@
 site_name: SibillaOS
 site_description: >-
-  The Ubuntu-based distribution that boots into an authenticated,
-  OpenAI-compatible LLM API. Nothing leaves the machine.
+  Install Linux, get a working LLM API. Nothing leaves the machine.
 site_url: https://engineering87.github.io/sibillaos/
 repo_url: https://github.com/engineering87/sibillaos
 repo_name: engineering87/sibillaos
@@ -9,20 +8,21 @@ edit_uri: edit/main/docs/
 
 theme:
   name: material
+  custom_dir: overrides
   logo: assets/logo.png
-  favicon: assets/logo.png
+  favicon: assets/favicon.png
   palette:
     - media: "(prefers-color-scheme: dark)"
       scheme: slate
-      primary: teal
-      accent: teal
+      primary: custom
+      accent: custom
       toggle:
         icon: material/weather-sunny
         name: Switch to light mode
     - media: "(prefers-color-scheme: light)"
       scheme: default
-      primary: teal
-      accent: teal
+      primary: custom
+      accent: custom
       toggle:
         icon: material/weather-night
         name: Switch to dark mode
@@ -31,6 +31,9 @@ theme:
     - navigation.top
     - search.suggest
     - content.code.copy
+
+extra_css:
+  - stylesheets/extra.css
 
 markdown_extensions:
   - admonition

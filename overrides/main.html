@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+
+{% block extrahead %}
+  {# social preview: one card for every page share #}
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="SibillaOS">
+  <meta property="og:title" content="{{ page.title if page and page.title else 'SibillaOS' }}">
+  <meta property="og:description" content="{{ config.site_description }}">
+  <meta property="og:url" content="{{ page.canonical_url if page else config.site_url }}">
+  <meta property="og:image" content="{{ config.site_url }}assets/social-card.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="627">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:image" content="{{ config.site_url }}assets/social-card.png">
+{% endblock %}

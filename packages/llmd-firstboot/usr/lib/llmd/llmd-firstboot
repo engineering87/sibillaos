@@ -205,6 +205,19 @@ if [[ -e /etc/llmd/appliance ]]; then
     fi
   fi
 
+  # 5b. Pre-login console identity: /etc/issue is what the machine
+  # says before anyone logs in. Appliance only (a guest machine keeps
+  # its own), written once so an admin edit is respected.
+  if [[ ! -e /etc/llmd/issue.done ]]; then
+    cat > /etc/issue <<'ISSUE'
+
+  SibillaOS - the oracle on your hardware
+  \n on \l - OpenAI-compatible API on :8080 (auth required)
+
+ISSUE
+    touch /etc/llmd/issue.done
+  fi
+
   # 6. Firewall: default-closed, only SSH and the gateway port open.
   # Open WebUI's port 3000 stays closed until the admin opens it
   # deliberately (sibilla webui enable prints the command).

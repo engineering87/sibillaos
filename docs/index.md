@@ -1,8 +1,11 @@
 # SibillaOS
 
+**Install Linux, get a working LLM API. Nothing leaves the machine.**
+
 The Ubuntu-based distribution that boots into an authenticated,
-OpenAI-compatible LLM API. Install it on a spare machine, point your
-tools at it, and nothing leaves the building.
+OpenAI-compatible API for local models. Install it on a spare
+machine, point your tools at it, and everything stays in the
+building.
 
 ![Architecture](assets/architecture.svg)
 

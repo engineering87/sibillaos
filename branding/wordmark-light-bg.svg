@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 280" width="1200" height="280">
+  <!-- SibillaOS horizontal wordmark: the oracle eye beside the name (variant for light backgrounds).
+       Transparent background so it sits on light and dark alike;
+       the eye keeps its own dark field like the app icon does. -->
+  <rect x="20" y="20" width="240" height="240" rx="48" fill="#0e2a1c"/>
+  <g transform="translate(20,20) scale(0.46875)">
+    <g fill="#2e9e63">
+      <path d="M256 84 L272 108 L256 132 L240 108 Z"/>
+      <path d="M256 380 L272 404 L256 428 L240 404 Z"/>
+      <path d="M96 160 L114 176 L96 192 L78 176 Z"/>
+      <path d="M416 160 L434 176 L416 192 L398 176 Z"/>
+      <path d="M96 320 L114 336 L96 352 L78 336 Z"/>
+      <path d="M416 320 L434 336 L416 352 L398 336 Z"/>
+    </g>
+    <path d="M76 256 Q 256 128 436 256 Q 256 384 76 256 Z"
+          fill="#081b11" stroke="#3ddc84" stroke-width="20"/>
+    <circle cx="256" cy="256" r="66" fill="#a8e063"/>
+    <path d="M256 200 Q 272 256 256 312 Q 240 256 256 200 Z" fill="#081b11"/>
+  </g>
+  <text x="310" y="162" font-family="DejaVu Sans, Verdana, sans-serif" font-size="118"
+        font-weight="bold" fill="#0e2a1c" letter-spacing="4">Sibilla<tspan fill="#3ddc84">OS</tspan></text>
+  <text x="316" y="226" font-family="DejaVu Sans, Verdana, sans-serif" font-size="32"
+        fill="#1e7a4c" letter-spacing="6">THE ORACLE ON YOUR HARDWARE</text>
+</svg>

@@ -4,13 +4,15 @@
 
 <br/>
 
-**Install Linux, get a working LLM API. Nothing else to set up.**
+**Install Linux, get a working LLM API. Nothing leaves the machine.**
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-2e9e63.svg)](LICENSE)
 [![Base](https://img.shields.io/badge/base-Ubuntu%2026.04%20LTS-e95420.svg)](https://ubuntu.com)
 [![Build](https://github.com/engineering87/sibillaos/actions/workflows/build-iso.yml/badge.svg?branch=main)](https://github.com/engineering87/sibillaos/actions/workflows/build-iso.yml)
 [![Release](https://img.shields.io/github/v/release/engineering87/sibillaos?color=3ddc84&label=release)](https://github.com/engineering87/sibillaos/releases)
-[![Status](https://img.shields.io/badge/status-proof%20of%20concept-3ddc84.svg)](docs/architecture.md)
+[![Docs](https://img.shields.io/badge/docs-sibillaos-3ddc84.svg)](https://engineering87.github.io/sibillaos/)
+
+[Documentation](https://engineering87.github.io/sibillaos/) - [Releases](https://github.com/engineering87/sibillaos/releases) - [Roadmap](ROADMAP.md) - [Why not just Ollama?](#why-not-just-ollama)
 
 </div>
 
@@ -159,12 +161,12 @@ cloud/        qcow2 cloud image bake (official Ubuntu cloud image + payload)
 packages/     Debian packages: hardware detection, engines, gateway, first boot
 catalog/      curated model list (signed JSON)
 branding/     logo, banner and wallpaper
-docs/         architecture document
+docs/         documentation (published at engineering87.github.io/sibillaos)
 ```
 
 ## Status
 
-Working proof of concept: on every push, CI builds the ISO, boots it under BIOS and UEFI, runs the install end to end and gets a real chat completion through the gateway on first boot. Engine versions are pinned in the installer. Release ISOs walk you through the standard installer screens and you choose your own credentials; only the fully unattended CI images use a fixed test user. The design and decision log live in [docs/architecture.md](docs/architecture.md); where the project is going is in [ROADMAP.md](ROADMAP.md).
+Proven on every push, not promised: CI builds the ISO, boots it under BIOS and UEFI with Secure Boot, runs the install end to end, gets a real chat completion through the gateway on first boot, and upgrades the previous published release in place. Ten releases shipped this way. Engine versions are pinned in the installer. Release ISOs walk you through the standard installer screens and you choose your own credentials; only the fully unattended CI images use a fixed test user. The design and decision log live in [docs/architecture.md](docs/architecture.md); where the project is going is in [ROADMAP.md](ROADMAP.md).
 
 ## Call for GPU testers
 

@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- favicon: the eye alone, simplified for small sizes (no rune
+       diamonds, thicker stroke, larger iris) -->
+  <rect width="512" height="512" rx="112" fill="#0e2a1c"/>
+  <path d="M46 256 Q 256 98 466 256 Q 256 414 46 256 Z"
+        fill="#081b11" stroke="#3ddc84" stroke-width="30"/>
+  <circle cx="256" cy="256" r="92" fill="#a8e063"/>
+  <path d="M256 176 Q 280 256 256 336 Q 232 256 256 176 Z" fill="#081b11"/>
+</svg>

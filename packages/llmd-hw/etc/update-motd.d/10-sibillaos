@@ -23,6 +23,6 @@ printf '%s\n' \
 "${EM}        ':::::'${RST}" \
 "" \
 "${DIM}  model:${RST} ${VAL}${MODEL}${RST}" \
-"${DIM}  start here:${RST} ${VAL}sibilla status${RST}${DIM} | ${RST}${VAL}sibilla doctor${RST}${DIM} | ${RST}${VAL}sibilla bench${RST}" \
+"${DIM}  start here:${RST} ${VAL}sibilla fetch${RST}${DIM} | ${RST}${VAL}sibilla status${RST}${DIM} | ${RST}${VAL}sibilla doctor${RST}${DIM} | ${RST}${VAL}sibilla bench${RST}" \
 "${DIM}  and then:${RST}   ${VAL}sibilla speech${RST}${DIM} voice | ${RST}${VAL}sibilla rerank${RST}${DIM} rag | ${RST}${VAL}sibilla oidc${RST}${DIM} org login | ${RST}${VAL}sibilla fleet${RST}${DIM} many machines${RST}" \
 ""

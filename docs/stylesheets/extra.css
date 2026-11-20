@@ -1,0 +1,32 @@
+/* SibillaOS quiet-corner palette for Material.
+   Brand: forest #0e2a1c, emerald #3ddc84, deep emerald #2e9e63,
+   light green #a8e063, gold accent #f5c542 (sparingly). */
+
+:root {
+  --md-primary-fg-color: #0e2a1c;
+  --md-primary-fg-color--light: #2e9e63;
+  --md-primary-fg-color--dark: #081b11;
+  --md-accent-fg-color: #2e9e63;
+}
+
+/* light scheme: forest header, deep emerald links (readable on white) */
+[data-md-color-scheme="default"] {
+  --md-typeset-a-color: #1e7a4c;
+  --md-accent-fg-color: #2e9e63;
+}
+
+/* dark scheme: near-black emerald field, emerald links */
+[data-md-color-scheme="slate"] {
+  --md-default-bg-color: #0c1611;
+  --md-default-fg-color--light: #cfe8d8;
+  --md-typeset-a-color: #3ddc84;
+  --md-accent-fg-color: #3ddc84;
+  --md-code-bg-color: #112019;
+  --md-footer-bg-color: #081b11;
+  --md-footer-bg-color--dark: #060f0a;
+}
+
+/* the gold stays an accent: inline code keywords and the search hit */
+[data-md-color-scheme="slate"] .md-search-result mark {
+  color: #f5c542;
+}

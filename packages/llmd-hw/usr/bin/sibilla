@@ -16,6 +16,7 @@ usage: sibilla COMMAND [ARGS]
   metrics ...    Prometheus endpoint on the gateway, on or off
   webui ...      enable or disable the Open WebUI chat interface
   mcp ...        expose the local model to MCP clients, on or off
+  fetch          the machine at a glance (neofetch-style)
   speech ...     local speech-to-text at /v1/audio/transcriptions
   rerank ...     local reranking at /v1/rerank
   oidc ...       OIDC login for the WebUI (bring your own provider)
@@ -47,6 +48,7 @@ case "$cmd" in
   metrics) exec sibilla-metrics "$@" ;;
   webui)   exec sibilla-webui "$@" ;;
   mcp)     exec sibilla-mcp "$@" ;;
+  fetch)   exec sibilla-fetch "$@" ;;
   speech)  exec sibilla-speech "$@" ;;
   rerank)  exec sibilla-rerank "$@" ;;
   oidc)    exec sibilla-oidc "$@" ;;
