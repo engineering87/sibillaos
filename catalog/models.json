@@ -1,6 +1,6 @@
 {
   "schema": 2,
-  "updated": "2026-11-18",
+  "updated": "2026-11-20",
   "note": "SibillaOS curated list. Permissively licensed (Apache-2.0/MIT) models only. Source is Hugging Face, except the LARGE TIER where source=registry entries come from the ollama.com registry (its manifests carry sha256 layer digests, so verification is unchanged; policy recorded in architecture changelog v0.13). Optional per-quant digests are the sha256 of the GGUF file on Hugging Face (LFS oid) or of the registry model layer, which is also the ollama blob name after a pull; tools/update-digests.sh refreshes both kinds. Entries with role=embedding serve /v1/embeddings and are never selected as the chat default. Entries with tier=large carry min_ram_gb and sibilla model use refuses them on machines below it.",
   "models": [
     {
@@ -490,6 +490,54 @@
       "digests": {
         "Q8_0": "sha256:99bcc225f0a38b73059b31627d28131cbea9c11b7ca894e56b95621aac878d65"
       }
+    },
+    {
+      "id": "hf.co/SistInf/Velvet-2B-GGUF",
+      "family": "Velvet 2B (Italian, Almawave)",
+      "license": "Apache-2.0",
+      "engines": [
+        "ollama"
+      ],
+      "tier": "cpu",
+      "verified": true,
+      "digests": {
+        "BF16": "sha256:f7241d980a65c5276e52aab1daca4ff83e6d20f6507316d332463e35bd29c65f",
+        "F16": "sha256:2d99ccf9d4613d5168dcb433bfd57ea35178b61b0b8cfefdbd19ba94e6217361",
+        "Q4_K_M": "sha256:1fb58da4e2f9eee9d6fbee0bf9d4ae6948586a84d242b8ed83024d1f5e0e16fd",
+        "Q4_K_S": "sha256:cfcdd28840c51d17517867dcdd580c9b533627106eda9b6421385974daaa2238",
+        "Q5_K_M": "sha256:1ba02da71a30c237a7028825b0247d5f13f8994c1fea2630546f9712b012d6ec",
+        "Q6_K": "sha256:01954d2713ddd53b44e4798d81aaa370c4d3697a894d19709c0e30010976bda5",
+        "Q8_0": "sha256:7a581a8dc2f0eec2c53386d77b409fb4c083575ec835e7b438047419dd4f6b78"
+      }
+    },
+    {
+      "id": "hf.co/SistInf/Velvet-14B-GGUF",
+      "family": "Velvet 14B (Italian, Almawave)",
+      "license": "Apache-2.0",
+      "engines": [
+        "ollama"
+      ],
+      "tier": "consumer-gpu",
+      "verified": true,
+      "digests": {
+        "BF16": "sha256:18e9165decfda001c896e3e3089413e0c42f29916caa0505f7bc0099403eb3ea",
+        "F16": "sha256:b3dd828c47db8cc7f71ddbfd654ef089deac9e7f904f0ca986f4a7ba52419280",
+        "Q4_K_M": "sha256:2990d3f03e19c75fb75082bea75cbf414b9d55a0350d4c037aefffb000c67011",
+        "Q4_K_S": "sha256:06b51244930fd49819de3e8cbfd180499354aac1cc6fced6f78110cc703b0047",
+        "Q5_K_M": "sha256:898d631796112048e0d46d22775da133260ceae49287c7de91fa1f7672df6e89",
+        "Q6_K": "sha256:ade1c5005b46257b1ebf3d596b38a09364761c18aab52a1f0426ee94e3361485",
+        "Q8_0": "sha256:6b1e2fedbb4671ca54ab489acf58b375292162e3be03f8968926ff1dfc32035d"
+      }
+    },
+    {
+      "id": "Almawave/Velvet-14B",
+      "family": "Velvet 14B (Italian, Almawave)",
+      "license": "Apache-2.0",
+      "engines": [
+        "vllm"
+      ],
+      "tier": "datacenter",
+      "verified": true
     }
   ]
 }
