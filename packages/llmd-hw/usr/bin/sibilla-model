@@ -337,7 +337,8 @@ cmd_info() {
 
   # the engine's own card: /api/show reads the GGUF metadata
   local show
-  show=$(curl -s -m 10 http://127.0.0.1:11434/api/show     -d "{"model": "$model"}" 2>/dev/null || true)
+  show=$(curl -s -m 10 http://127.0.0.1:11434/api/show \
+    -d "$(jq -n --arg m "$model" '{model: $m}')" 2>/dev/null || true)
   if ! echo "$show" | jq -e '.details' >/dev/null 2>&1; then
     s_kv "engine:" "no card (model not in the local store: pull or use it first)" "$(s_warn)"
     return 0
