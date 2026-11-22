@@ -782,6 +782,15 @@ jobs:
                 $SSH "echo sibilla | sudo -S iptables -S ufw-before-input" > ratelimit.out || RC=1
                 grep -q "hashlimit.*sibilla-rl-8080" ratelimit.out \
                   || { echo "rate limit rule not loaded in the kernel"; RC=1; }
+                # the v6 twin, with the /64 source mask: a limit that
+                # only guards v4 is a door with half a lock
+                $SSH "echo sibilla | sudo -S grep -q sibilla-rl /etc/ufw/before6.rules" \
+                  || { echo "v6 rate limit rule not in before6.rules"; RC=1; }
+                $SSH "echo sibilla | sudo -S ip6tables -S ufw6-before-input" > ratelimit6.out || RC=1
+                grep -q "hashlimit.*sibilla-rl6" ratelimit6.out \
+                  || { echo "v6 rate limit rule not loaded in the kernel"; RC=1; }
+                grep -q "hashlimit-srcmask 64" ratelimit6.out \
+                  || { echo "v6 rate limit missing the /64 source mask"; RC=1; }
                 $SSH "grep -q 'Unattended-Upgrade .1.' /etc/apt/apt.conf.d/51sibilla-upgrades" \
                   || { echo "unattended upgrades config missing"; RC=1; }
                 # no cloud routing on the engine, ever

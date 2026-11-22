@@ -241,6 +241,17 @@ ISSUE
 -A ufw-before-input -p tcp --dport 8080 -m conntrack --ctstate NEW -m hashlimit --hashlimit-name sibilla-rl-8080 --hashlimit-mode srcip --hashlimit-above 2/second --hashlimit-burst 60 -j DROP
 }' "$BR"
     fi
+    # the same wall on IPv6: ufw opens 8080 on both families, and a
+    # limit that only guards v4 is a door with half a lock. The
+    # source mask is /64 because rotating addresses inside one's own
+    # /64 is free on IPv6; per-/128 accounting would be a sieve.
+    BR6=/etc/ufw/before6.rules
+    if [[ -f "$BR6" ]] && ! grep -q "sibilla-rl" "$BR6"; then
+      sed -i '0,/^COMMIT/{/^COMMIT/i\
+# sibilla-rl: per-source abuse baseline for the gateway (v6, /64)\
+-A ufw6-before-input -p tcp --dport 8080 -m conntrack --ctstate NEW -m hashlimit --hashlimit-name sibilla-rl6 --hashlimit-mode srcip --hashlimit-srcmask 64 --hashlimit-above 2/second --hashlimit-burst 60 -j DROP
+}' "$BR6"
+    fi
     ufw --force enable
     echo "firewall enabled: only SSH and the gateway port are open,"
     echo "new connections to the gateway rate limited per source IP"
