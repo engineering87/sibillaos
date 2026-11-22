@@ -1652,6 +1652,12 @@ jobs:
           RC=0
           # doctor: complete and secret-free
           sudo sibilla doctor > doctor.out || RC=1
+          # --redteam without garak must refuse with the install hint
+          rrc=0
+          sudo sibilla doctor --redteam > redteam.out 2>&1 || rrc=$?
+          [ "$rrc" = "1" ] || { echo "doctor --redteam without garak should exit 1 (got $rrc)"; RC=1; }
+          grep -q "pipx install garak==" redteam.out \
+            || { echo "doctor --redteam did not print the pinned install hint"; RC=1; }
           grep -q "engine:" doctor.out || { echo "doctor missing engine section"; RC=1; }
           grep -q "end of report" doctor.out || { echo "doctor report truncated"; RC=1; }
           KEY=$(sudo cat /etc/llmd/apikey)

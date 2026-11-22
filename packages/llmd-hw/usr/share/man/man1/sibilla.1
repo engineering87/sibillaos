@@ -223,6 +223,12 @@ on stdout.
 Paste-ready diagnostic report for bug reports. Contains no secrets:
 keys are never printed and the whole report is scrubbed of every
 configured key before it reaches the terminal.
+.B --redteam [PROBES]
+probes the machine's own gateway with adversarial prompts using
+NVIDIA's garak (deliberately not shipped: install the vetted pin with
+pipx, the command prints it). Every prompt stays on the machine;
+reports land in /var/log/llmd. A hit is a conversation worth reading,
+not an automatic verdict.
 .SS sibilla remove [\-\-yes]
 Clean, reversible teardown. Removes only what SibillaOS put on the
 machine: a pre-existing ollama is left alone and a Caddy configuration

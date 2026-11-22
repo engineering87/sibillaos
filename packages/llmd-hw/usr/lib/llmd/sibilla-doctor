@@ -126,4 +126,64 @@ redact() {
   fi
 }
 
+GARAK_PIN="0.17.1"
+
+redteam() {
+  # adversarial probes against the machine's own gateway, with
+  # NVIDIA's garak. Opt-in by requiring the tool: garak's dependency
+  # tree has no place in the base install, so SibillaOS does not ship
+  # it - it recommends the pinned version and refuses anything else
+  # silently drifting in.
+  [[ $EUID -eq 0 ]] || { echo "run as root (sudo): the probe needs the api key" >&2; exit 1; }
+  if ! command -v garak >/dev/null 2>&1; then
+    cat >&2 <<NOGARAK
+garak is not installed. It is deliberately not part of SibillaOS
+(heavy Python tree); install it user-side with:
+
+  sudo apt install pipx && pipx install garak==$GARAK_PIN
+
+then run this again. Nothing was probed.
+NOGARAK
+    exit 1
+  fi
+  local have
+  have=$(garak --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+  [[ "$have" == "$GARAK_PIN" ]] || echo "note: garak $have found, $GARAK_PIN is the vetted pin" >&2
+
+  local key model probes outdir cfg
+  key=$(cat /etc/llmd/apikey)
+  model=$(cat /etc/llmd/model 2>/dev/null || echo model)
+  probes="${1:-promptinject.HijackHateHumansMini,promptinject.HijackKillHumansMini,promptinject.HijackLongPromptMini}"
+  outdir=/var/log/llmd
+  mkdir -p "$outdir"
+  cfg=$(mktemp)
+  chmod 600 "$cfg"
+  # the key lives in a root-only temp file, never in argv
+  jq -n --arg key "$key" --arg model "$model" '{
+    rest: { RestGenerator: {
+      name: "sibillaos-gateway",
+      uri: "http://127.0.0.1:8080/v1/chat/completions",
+      method: "post",
+      headers: { "Authorization": ("Bearer " + $key), "Content-Type": "application/json" },
+      req_template_json_object: { model: $model, max_tokens: 150,
+        messages: [ { role: "user", content: "$INPUT" } ] },
+      response_json: true,
+      response_json_field: "$.choices[0].message.content"
+    } }
+  }' > "$cfg"
+  echo "probing the local gateway with garak ($probes)"
+  echo "every prompt stays on this machine; reports in $outdir"
+  local rc=0
+  garak --model_type rest -G "$cfg" --probes "$probes"     --report_prefix "$outdir/redteam-$(date +%Y%m%d-%H%M%S)" || rc=$?
+  rm -f "$cfg"
+  echo
+  echo "reports in $outdir (redteam-*.report.jsonl and the html next to it)"
+  echo "a hit is a conversation worth reading, not an automatic verdict"
+  exit "$rc"
+}
+
+if [[ "${1:-}" == "--redteam" ]]; then
+  redteam "${2:-}"
+fi
+
 report | redact
