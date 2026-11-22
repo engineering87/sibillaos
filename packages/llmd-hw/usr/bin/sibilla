@@ -18,6 +18,8 @@ usage: sibilla COMMAND [ARGS]
   mcp ...        expose the local model to MCP clients, on or off
   fetch          the machine at a glance (neofetch-style)
   mem            where the memory went: RAM, VRAM, resident models
+  backup [FILE]  the machine configuration in one archive (keys included)
+  restore FILE   put a backup back and re-enable what it says was on
   speech ...     local speech-to-text at /v1/audio/transcriptions
   transcribe F   transcribe an audio file from the CLI (--srt, --vtt)
   rerank ...     local reranking at /v1/rerank
@@ -62,6 +64,8 @@ case "$cmd" in
   connect) exec sibilla-connect "$@" ;;
   bench)   exec /usr/lib/llmd/sibilla-bench "$@" ;;
   doctor)  exec /usr/lib/llmd/sibilla-doctor "$@" ;;
+  backup)  exec /usr/lib/llmd/sibilla-backup backup "$@" ;;
+  restore) exec /usr/lib/llmd/sibilla-backup restore "$@" ;;
   remove)  exec /usr/lib/llmd/sibilla-remove "$@" ;;
   *)       usage ;;
 esac

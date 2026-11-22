@@ -142,6 +142,16 @@ Batch transcription from the command line on the speech stack the
 machine already runs: the transcription goes to stdout (pipe it,
 redirect it), subtitles with --srt or --vtt. Requires sibilla speech
 enable; without ffmpeg the server accepts 16 kHz WAV only.
+.SS sibilla backup [FILE] / sibilla restore FILE
+The machine configuration in one archive and the way back: keys, the
+served model choice, gateway config, service toggles, the declared
+profile and the context override. Models are not included (the
+restore re-fetches them digest-verified), and the machine-identity
+markers never travel: the appliance marker stays, and the engine is
+a hardware decision the target machine makes itself. The archive is
+written mode 600 because it contains the API keys; store it
+accordingly. Restore re-renders the gateway and brings back the
+services the archive says were on through their own enable paths.
 .SS sibilla rerank enable|disable|status
 Local reranking at /v1/rerank, behind the same keys: a query, a list
 of documents, relevance scores back. The missing middle of RAG:
