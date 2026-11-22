@@ -1,0 +1,23 @@
+[Unit]
+Description=SibillaOS guard model server (llama.cpp, Qwen3Guard)
+Documentation=https://github.com/engineering87/sibillaos
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/lib/llmd/llmd-guard-model
+Restart=on-failure
+RestartSec=2
+DynamicUser=yes
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+
+[Install]
+WantedBy=multi-user.target

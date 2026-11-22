@@ -158,6 +158,14 @@ of documents, relevance scores back. The missing middle of RAG:
 retrieve wide with embeddings, rerank the candidates, hand the chat
 model the best few. The model arrives digest-verified from the
 signed catalog and runs on a loopback llama.cpp server.
+.SS sibilla guard enable|disable|status
+A guard model in front of chat completions: the last user message is
+classified on a loopback verdict server (Qwen3Guard, digest-verified
+from the signed catalog, the official safety template embedded in the
+GGUF) and requests judged Unsafe are refused with an explicit error;
+everything else reaches the engine untouched, streaming included. The
+guard fails closed: a verdict server that does not answer means the
+request does not pass. Nothing leaves the machine.
 .SS sibilla fleet apply [PROFILE] | check | status
 The declared profile across many machines, over the operator's own
 SSH (config, agent and keys; this tool manages no credentials).

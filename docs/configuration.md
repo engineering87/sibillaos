@@ -32,6 +32,7 @@ MCP=on
 WEBUI=off
 SPEECH=off
 RERANK=off
+GUARD=off
 ```
 
 API keys are deliberately not part of a profile: they are per-machine

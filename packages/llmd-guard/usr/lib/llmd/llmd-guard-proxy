@@ -1,0 +1,200 @@
+#!/usr/bin/env python3
+"""llmd-guard-proxy: the guard stage for /v1/chat/completions.
+
+Sits on loopback between the gateway and the engine when the guard is
+enabled. For every chat request it asks the guard model (a Qwen3Guard
+GGUF on its own loopback llama-server, whose embedded chat template IS
+the official classification prompt) for a verdict on the last user
+message, then forwards the untouched request to the engine or refuses
+with an honest JSON error. Fail closed: a guard that does not answer
+means the request does not pass.
+
+Python standard library only, like llmd-mcp: the appliance pins every
+component it ships, and a dependency-free proxy never needs pinning.
+"""
+import json
+import os
+import socketserver
+import sys
+from http.server import BaseHTTPRequestHandler
+from http.client import HTTPConnection
+
+GUARD_HOST = "127.0.0.1"
+GUARD_PORT = int(os.environ.get("LLMD_GUARD_MODEL_PORT", "8094"))
+LISTEN_PORT = int(os.environ.get("LLMD_GUARD_PORT", "8093"))
+ENGINE_FILE = os.environ.get("LLMD_ENGINE_FILE", "/etc/llmd/engine")
+BLOCK_CONTROVERSIAL = os.environ.get("LLMD_GUARD_STRICT", "") == "1"
+
+
+def engine_upstream():
+    try:
+        with open(ENGINE_FILE, encoding="utf-8") as f:
+            engine = f.read().strip()
+    except OSError:
+        engine = "ollama"
+    return ("127.0.0.1", 8000) if engine == "vllm" else ("127.0.0.1", 11434)
+
+
+def last_user_text(body):
+    """The text of the last user message; content may be a string or
+    the OpenAI parts array (vision requests), where only text parts
+    are classifiable here."""
+    for msg in reversed(body.get("messages", [])):
+        if msg.get("role") == "user":
+            content = msg.get("content", "")
+            if isinstance(content, str):
+                return content
+            if isinstance(content, list):
+                return "\n".join(
+                    p.get("text", "") for p in content
+                    if isinstance(p, dict) and p.get("type") == "text"
+                )
+    return ""
+
+
+def verdict(text):
+    """Ask the guard model. Returns (safety, categories) or raises."""
+    conn = HTTPConnection(GUARD_HOST, GUARD_PORT, timeout=60)
+    payload = json.dumps({
+        "model": "guard",
+        "messages": [{"role": "user", "content": text}],
+        "max_tokens": 48,
+        "temperature": 0,
+    })
+    conn.request("POST", "/v1/chat/completions", body=payload,
+                 headers={"Content-Type": "application/json"})
+    resp = conn.getresponse()
+    data = json.loads(resp.read())
+    conn.close()
+    answer = data["choices"][0]["message"]["content"]
+    safety, categories = "Unsafe", "unparsable verdict"
+    for line in answer.splitlines():
+        line = line.strip()
+        if line.startswith("Safety:"):
+            safety = line.split(":", 1)[1].strip()
+        elif line.startswith("Categories:"):
+            categories = line.split(":", 1)[1].strip()
+    return safety, categories
+
+
+class Handler(BaseHTTPRequestHandler):
+    protocol_version = "HTTP/1.1"
+    server_version = "SibillaOS-guard"
+
+    def log_message(self, fmt, *args):  # journald gets stderr
+        sys.stderr.write("%s - %s\n" % (self.address_string(), fmt % args))
+
+    def _json_error(self, code, message, error_code):
+        body = json.dumps({"error": {
+            "message": message, "type": "sibilla_guard", "code": error_code,
+        }}).encode()
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def do_POST(self):
+        if self.path != "/v1/chat/completions":
+            self._json_error(404, "the guard proxies chat completions only",
+                             "not_found")
+            return
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+            raw = self.rfile.read(length)
+            body = json.loads(raw)
+        except (ValueError, OSError):
+            self._json_error(400, "request body is not valid JSON",
+                             "bad_request")
+            return
+
+        text = last_user_text(body)
+        if text:
+            try:
+                safety, categories = verdict(text)
+            except Exception as exc:  # fail closed, say so honestly
+                self._json_error(
+                    502,
+                    "the guard model did not answer (%s); the guard "
+                    "fails closed - disable it with: sudo sibilla "
+                    "guard disable" % exc.__class__.__name__,
+                    "guard_unavailable")
+                return
+            blocked = safety == "Unsafe" or (
+                safety == "Controversial" and BLOCK_CONTROVERSIAL)
+            if blocked:
+                sys.stderr.write(
+                    "blocked: safety=%s categories=%s\n" % (safety, categories))
+                self._json_error(
+                    400,
+                    "blocked by the guard model (safety: %s; categories: %s)"
+                    % (safety, categories),
+                    "content_blocked")
+                return
+            if safety == "Controversial":
+                sys.stderr.write(
+                    "flagged controversial, forwarded: categories=%s\n"
+                    % categories)
+
+        # forward untouched, relay the response as-is (streams included)
+        host, port = engine_upstream()
+        try:
+            conn = HTTPConnection(host, port, timeout=900)
+            conn.request("POST", self.path, body=raw, headers={
+                "Content-Type": "application/json",
+                "Host": "%s:%d" % (host, port),
+            })
+            resp = conn.getresponse()
+        except OSError:
+            self._json_error(502, "the engine did not answer",
+                             "engine_unavailable")
+            return
+        self.send_response(resp.status)
+        length = resp.getheader("Content-Length")
+        ctype = resp.getheader("Content-Type", "application/json")
+        self.send_header("Content-Type", ctype)
+        if length is not None:
+            self.send_header("Content-Length", length)
+            self.end_headers()
+            while True:
+                chunk = resp.read(65536)
+                if not chunk:
+                    break
+                self.wfile.write(chunk)
+        else:
+            self.send_header("Transfer-Encoding", "chunked")
+            self.end_headers()
+            while True:
+                chunk = resp.read(8192)
+                if not chunk:
+                    break
+                self.wfile.write(b"%x\r\n" % len(chunk))
+                self.wfile.write(chunk)
+                self.wfile.write(b"\r\n")
+                self.wfile.flush()
+            self.wfile.write(b"0\r\n\r\n")
+        conn.close()
+
+
+class Server(socketserver.ThreadingMixIn, socketserver.TCPServer):
+    daemon_threads = True
+    allow_reuse_address = True
+
+
+def main():
+    server = Server(("127.0.0.1", LISTEN_PORT), Handler)
+    # readiness for Type=notify, same pattern as llmd-mcp
+    sock = os.environ.get("NOTIFY_SOCKET")
+    if sock:
+        import socket as _s
+        addr = "\0" + sock[1:] if sock.startswith("@") else sock
+        with _s.socket(_s.AF_UNIX, _s.SOCK_DGRAM) as ns:
+            ns.connect(addr)
+            ns.send(b"READY=1")
+    sys.stderr.write("guard proxy on 127.0.0.1:%d (model on :%d)\n"
+                     % (LISTEN_PORT, GUARD_PORT))
+    server.serve_forever()
+
+
+if __name__ == "__main__":
+    main()

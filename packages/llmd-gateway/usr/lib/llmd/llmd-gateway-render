@@ -18,6 +18,7 @@ ACCESS_LOG="${LLMD_ACCESS_LOG:-/var/log/caddy/sibilla-access.log}"
 MCP_FILE="${LLMD_MCP_FILE:-/etc/llmd/mcp}"
 SPEECH_FILE="${LLMD_SPEECH_FILE:-/etc/llmd/speech}"
 RERANK_FILE="${LLMD_RERANK_FILE:-/etc/llmd/rerank}"
+GUARD_FILE="${LLMD_GUARD_FILE:-/etc/llmd/guard}"
 WEBUI_FLAG="${LLMD_WEBUI_FLAG:-/etc/llmd/webui.enabled}"
 OIDC_FILE="${LLMD_OIDC_FILE:-/etc/llmd/oidc}"
 MODE=http
@@ -29,6 +30,7 @@ METRICS=off
 mcp=$(cat "$MCP_FILE" 2>/dev/null || echo off)
 speech=$(cat "$SPEECH_FILE" 2>/dev/null || echo off)
 rerank=$(cat "$RERANK_FILE" 2>/dev/null || echo off)
+guard=$(cat "$GUARD_FILE" 2>/dev/null || echo off)
 webui=off
 [[ -e "$WEBUI_FLAG" ]] && webui=on
 oidc=$(cat "$OIDC_FILE" 2>/dev/null || echo off)
@@ -121,6 +123,13 @@ BLOCK
     # server it never sees the keys, the 401 above covers it
     echo "		reverse_proxy /v1/rerank 127.0.0.1:8091"
   fi
+  if [[ "$guard" == "on" ]]; then
+    # the guard proxy (llmd-guard-proxy.service) takes the chat route
+    # BEFORE the engine: the verdict model screens the last user
+    # message and the request reaches the engine untouched or not at
+    # all; every other path keeps the straight engine proxy below
+    echo "		reverse_proxy /v1/chat/completions 127.0.0.1:8093"
+  fi
   cat <<BLOCK
 		reverse_proxy $upstream {
 			header_up Host {upstream_hostport}
@@ -196,4 +205,4 @@ case "$MODE" in
     } > "$CADDYFILE"
     ;;
 esac
-echo "gateway config rendered: mode=$MODE upstream=$upstream metrics=$METRICS mcp=$mcp speech=$speech rerank=$rerank webui=$webui oidc=$oidc"
+echo "gateway config rendered: mode=$MODE upstream=$upstream metrics=$METRICS mcp=$mcp speech=$speech rerank=$rerank guard=$guard webui=$webui oidc=$oidc"

@@ -109,6 +109,7 @@ build_pkg llmd-gateway       "Unified OpenAI-compatible gateway (Caddy)"        
 build_pkg llmd-firstboot     "First boot model download and service setup"            "llmd-hw, jq, curl"
 build_pkg llmd-webui         "Open WebUI chat interface (opt-in container)"           "podman (>= 4.4), llmd-gateway"
 build_pkg llmd-mcp           "Model Context Protocol server (opt-in, sibilla mcp)"    "python3, llmd-gateway"
+build_pkg llmd-guard         "Guard model stage for chat completions (opt-in)"         "python3, llmd-rerank, llmd-gateway, llmd-hw, curl, jq"
 
 # oauth2-proxy is repackaged from the pinned upstream release; unlike
 # whisper.cpp, upstream publishes a per-asset checksum file, so the
@@ -296,7 +297,7 @@ Version: $VERSION
 Section: admin
 Priority: optional
 Architecture: all
-Depends: llmd-hw, llmd-engine-ollama, llmd-engine-vllm, llmd-gateway, llmd-firstboot, llmd-webui, llmd-mcp, llmd-speech, llmd-rerank, llmd-oidc, llmd-llmfit
+Depends: llmd-hw, llmd-engine-ollama, llmd-engine-vllm, llmd-gateway, llmd-firstboot, llmd-webui, llmd-mcp, llmd-speech, llmd-rerank, llmd-guard, llmd-oidc, llmd-llmfit
 Maintainer: SibillaOS contributors
 Description: SibillaOS LLM stack (metapackage)
  Pulls the SibillaOS components onto an existing Ubuntu system. After
