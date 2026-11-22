@@ -836,6 +836,11 @@ jobs:
                   -H "Authorization: Bearer $NEWKEY" http://127.0.0.1:8080/v1/models || true)
                 [ "$kc" = "200" ] || { echo "added key rejected: $kc"; RC=1; }
                 $SSH "echo sibilla | sudo -S sibilla key revoke ci-extra" || RC=1
+                # the usage view must read the traffic this very job generated
+                $SSH "echo sibilla | sudo -S sibilla key usage 1" > keyusage.out || RC=1
+                cat keyusage.out || true
+                grep -q "requests:" keyusage.out || { echo "key usage has no request count"; RC=1; }
+                grep -q "unauthorized" keyusage.out || { echo "key usage has no status line"; RC=1; }
                 sleep 3
                 kc=$(curl -s -o /dev/null -w '%{http_code}' \
                   -H "Authorization: Bearer $NEWKEY" http://127.0.0.1:8080/v1/models || true)

@@ -14,6 +14,9 @@ usage: sibilla-key COMMAND
   revoke NAME    remove an extra key (rotate the default instead)
   rotate [NAME]  replace a key; default key when NAME is omitted;
                  prints the new key once, on the last line
+  usage [DAYS]   traffic seen by the gateway from the structured
+                 access log (default: last 7 days): requests, status
+                 classes, top endpoints, activity by day
 
 Every change takes effect immediately: clients using a revoked or
 rotated key get 401 on their next request.
@@ -91,7 +94,69 @@ cmd_rotate() {
   echo "$key"
 }
 
+ACCESS_LOG="${LLMD_ACCESS_LOG:-/var/log/caddy/sibilla-access.log}"
+
+cmd_usage_stats() {
+  need_root
+  # shellcheck source=/dev/null
+  . /usr/lib/llmd/sibilla-style
+  local days="${1:-7}"
+  [[ "$days" =~ ^[0-9]+$ && "$days" -ge 1 ]] || { echo "DAYS must be a positive number" >&2; exit 1; }
+  [[ -r "$ACCESS_LOG" ]] || { echo "no access log at $ACCESS_LOG yet (the gateway writes it on first request)" >&2; exit 1; }
+  s_hdr "key usage"
+  local since
+  since=$(date -d "-$days days" +%s)
+  # one jq pass computes everything; the log is JSON lines with ts
+  # (epoch), status, request.uri. Keys never appear in the log: caddy
+  # redacts Authorization, which is exactly how we want it.
+  local stats
+  stats=$(jq -s --argjson since "$since" '
+    [ .[] | select(.ts >= $since) ] as $r |
+    {
+      total: ($r | length),
+      ok:    ([ $r[] | select(.status >= 200 and .status < 300) ] | length),
+      auth:  ([ $r[] | select(.status == 401) ] | length),
+      err4:  ([ $r[] | select(.status >= 400 and .status < 500 and .status != 401) ] | length),
+      err5:  ([ $r[] | select(.status >= 500) ] | length),
+      first: ($r | map(.ts) | min),
+      last:  ($r | map(.ts) | max),
+      top:   ($r | group_by(.request.uri) | map({u: .[0].request.uri, n: length})
+              | sort_by(-.n) | .[0:5]),
+      days:  ($r | group_by(.ts | strftime("%Y-%m-%d")) 
+              | map({d: (.[0].ts | strftime("%Y-%m-%d")), n: length}) | sort_by(.d))
+    }' "$ACCESS_LOG" 2>/dev/null) || { echo "could not parse the access log" >&2; exit 1; }
+  local total
+  total=$(echo "$stats" | jq -r '.total')
+  s_kv "window:" "last $days day(s)"
+  s_kv "requests:" "$total"
+  if [[ "$total" -gt 0 ]]; then
+    s_kv "status:" "$(echo "$stats" | jq -r '"\(.ok) ok, \(.auth) unauthorized, \(.err4) client err, \(.err5) server err"')"
+    s_kv "first:" "$(date -d "@$(echo "$stats" | jq -r '.first | floor')" '+%Y-%m-%d %H:%M' 2>/dev/null || echo '-')"
+    s_kv "last:" "$(date -d "@$(echo "$stats" | jq -r '.last | floor')" '+%Y-%m-%d %H:%M' 2>/dev/null || echo '-')"
+    s_rule
+    echo "top endpoints:"
+    echo "$stats" | jq -r '.top[] | "  \(.n)	\(.u)"'
+    s_rule
+    echo "by day:"
+    echo "$stats" | jq -r '.days[] | "  \(.d)  \(.n)"'
+  fi
+  s_rule
+  echo "configured keys (names only; sibilla key list for prefixes):"
+  echo "  default ($DEFAULT_KEY)"
+  if [[ -d "$KEYS_DIR" ]]; then
+    for f in "$KEYS_DIR"/*; do
+      [[ -f "$f" ]] || continue
+      echo "  $(basename "$f") (added $(date -r "$f" '+%Y-%m-%d'))"
+    done
+  fi
+  echo
+  echo "per-key attribution needs a log field the archive caddy (2.6)"
+  echo "cannot write; recorded with the rate-limit pressure in the"
+  echo "architecture log. The log never contains the keys themselves."
+}
+
 case "${1:-}" in
+  usage-stats|usage) shift; cmd_usage_stats "${1:-}" ;;
   list)   cmd_list ;;
   add)    [[ $# -ge 2 ]] || usage; cmd_add "$2" ;;
   revoke) [[ $# -ge 2 ]] || usage; cmd_revoke "$2" ;;

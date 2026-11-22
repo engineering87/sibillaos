@@ -93,6 +93,12 @@ Gateway API keys:
 .RI [ NAME ].
 New keys print once, on the last line. Changes take effect
 immediately: a revoked or rotated key gets 401 on its next request.
+.B usage [DAYS]
+reads the structured access log (last 7 days by default): request
+count, status classes with 401s called out, top endpoints, activity
+by day, and the configured key names. The log never contains the
+keys themselves (caddy redacts Authorization); per-key attribution
+waits on a log field the archive caddy cannot write yet.
 .SS sibilla tls SUBCOMMAND
 Gateway transport:
 .BI enable " HOSTNAME"
