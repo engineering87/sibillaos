@@ -47,7 +47,9 @@ cmd_backup() {
     mkdir -p "$staging/dropins"
     cp -a "$CTX_DROPIN" "$staging/dropins/zz-context.conf"
   fi
-  ( cd "$staging" && umask 077 && tar -czf /tmp/sibilla-backup.$$ llmd $( [[ -d dropins ]] && echo dropins ) )
+  local members=(llmd)
+  [[ -d "$staging/dropins" ]] && members+=(dropins)
+  ( cd "$staging" && umask 077 && tar -czf "/tmp/sibilla-backup.$$" "${members[@]}" )
   install -m 600 "/tmp/sibilla-backup.$$" "$out"
   rm -f "/tmp/sibilla-backup.$$"
   rm -rf "$staging"
