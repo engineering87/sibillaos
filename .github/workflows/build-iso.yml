@@ -1063,11 +1063,20 @@ jobs:
           echo "$ENV" | grep -q "OLLAMA_KV_CACHE_TYPE=q8_0" || { echo "kv cache q8 did not land"; RC=1; }
           echo "$ENV" | grep -q "OLLAMA_FLASH_ATTENTION=1" || { echo "flash attention did not land with the cache"; RC=1; }
           KEY=$(sudo cat /etc/llmd/apikey); MODEL=$(sudo cat /etc/llmd/model)
-          OUT=$(curl -s -m 300 http://127.0.0.1:8080/v1/chat/completions \
-            -H "Authorization: Bearer $KEY" -H "Content-Type: application/json" \
-            -d "{\"model\": \"$MODEL\", \"messages\": [{\"role\": \"user\", \"content\": \"Say ok.\"}], \"max_tokens\": 40}" || true)
+          # the engine just restarted: retry while it binds and loads
+          OUT=""
+          for _ in 1 2 3 4 5 6; do
+            OUT=$(curl -s -m 300 http://127.0.0.1:8080/v1/chat/completions \
+              -H "Authorization: Bearer $KEY" -H "Content-Type: application/json" \
+              -d "{\"model\": \"$MODEL\", \"messages\": [{\"role\": \"user\", \"content\": \"Say ok.\"}], \"max_tokens\": 40}" || true)
+            echo "$OUT" | jq -e '.choices[0].message' >/dev/null 2>&1 && break
+            sleep 5
+          done
+          echo "under q8 cache: $OUT"
           echo "$OUT" | jq -e '.choices[0].message | ((.content // "") + (.reasoning // "")) | length > 0' >/dev/null \
-            || { echo "inference broke under the quantized kv cache"; RC=1; }
+            || { echo "inference broke under the quantized kv cache"
+                 sudo journalctl -u ollama.service --no-pager | tail -25
+                 RC=1; }
           sudo sibilla model cache default
           if sudo systemctl show ollama.service -p Environment | grep -q "OLLAMA_KV_CACHE_TYPE"; then
             echo "cache default did not remove the override"; RC=1
