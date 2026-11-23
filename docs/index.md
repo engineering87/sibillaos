@@ -7,7 +7,10 @@ OpenAI-compatible API for local models. Install it on a spare
 machine, point your tools at it, and everything stays in the
 building.
 
-![Architecture](assets/architecture.svg)
+![SibillaOS in one picture](assets/overview.svg)
+
+The detailed topology, service by service, is in
+[Architecture](architecture.md) and on the README.
 
 ## What you get
 

@@ -93,6 +93,8 @@ Where to go next:
 
 ## How it works
 
+<p align="center"><img src="branding/overview.svg" alt="SibillaOS in one picture: your tools reach one authenticated door; behind it, your machine serves a local LLM that fits its hardware, with chat, voice, vision, RAG, guard and org login one command away, on Ubuntu 26.04 LTS. Nothing leaves the machine." width="820"/></p>
+
 The installer detects your hardware and makes the decisions a human would otherwise have to research.
 
 | | |
@@ -108,7 +110,7 @@ The installer detects your hardware and makes the decisions a human would otherw
 | **Chat interface** | `sibilla webui enable` starts Open WebUI on port 3000 as an opt-in container, wired to the local engine; `sibilla oidc enable` puts it behind your organization's OIDC provider (Entra, Keycloak, Google), secret on stdin, API keys untouched. See [docs/oidc.md](docs/oidc.md). |
 | **Editor hookup** | `sibilla connect` prints ready-to-paste configuration for VS Code (Continue, Cline), aider and any OpenAI-compatible client. |
 | **Agent hookup** | `sibilla mcp enable` exposes the local model to MCP clients (Claude Code and other agent frameworks) as `chat` and `list_models` tools, behind the same API keys. See [docs/mcp.md](docs/mcp.md). |
-| **Config as code** | Declare the desired state (model, TLS, metrics, MCP, WebUI, speech) in one profile file; `sibilla apply` converges the machine onto it, idempotently. `apply export` turns a configured machine into a profile; cloud-init drops the file and first boot picks it up. See [docs/configuration.md](docs/configuration.md). |
+| **Config as code** | Declare the desired state (model, TLS, metrics, MCP, WebUI, speech, rerank, guard) in one profile file; `sibilla apply` converges the machine onto it, idempotently. `apply export` turns a configured machine into a profile; cloud-init drops the file and first boot picks it up. See [docs/configuration.md](docs/configuration.md). |
 | **Fleet** | `sibilla fleet apply\|check\|status` pushes the profile and aggregates drift and health across every machine in a plain hosts file, over your own SSH - no agent, no credential store, and profiles carry no secrets by design. See [docs/fleet.md](docs/fleet.md). |
 | **Air-gapped** | Machines with no outbound network install from a companion payload volume: models travel by USB stick, verified against the signed catalog digests on both ends. CI proves it on every push in a network-restricted VM. See [docs/airgap.md](docs/airgap.md). |
 | **Local RAG** | `/v1/embeddings` through the same gateway and keys: pull a catalog embedding model (`sibilla model pull`) and point any OpenAI-compatible RAG framework at this machine. See [docs/embeddings.md](docs/embeddings.md). |
@@ -136,7 +138,7 @@ None of this is a criticism of Ollama, which does its job excellently - it is th
 
 ## Architecture at a glance
 
-<p align="center"><img src="branding/architecture.svg" alt="SibillaOS architecture: clients reach one authenticated gateway on port 8080; Ollama and vLLM stay on loopback; llmd-hw and llmfit pick the engine and model; Ubuntu 24.04 underneath" width="760"/></p>
+<p align="center"><img src="branding/architecture.svg" alt="SibillaOS architecture in detail: clients reach one authenticated gateway on port 8080; the engines, whisper, rerank, the guard, MCP, oauth2-proxy and the WebUI stay on loopback; llmd-hw and llmfit pick the engine and model; Ubuntu 26.04 LTS underneath" width="760"/></p>
 
 The engines never listen off-host: the gateway is the only door in. The full decision log is in [docs/architecture.md](docs/architecture.md).
 
