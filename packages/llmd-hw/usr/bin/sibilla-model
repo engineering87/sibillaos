@@ -23,6 +23,13 @@ usage: sibilla-model COMMAND
                  state (defaults to the served model)
   rm MODEL_ID    remove a downloaded model (refuses the served one)
   prune          remove every downloaded model except the served one
+  warm on|off    keep the served model resident instead of unloading
+                 it after idle: the first request after a quiet hour
+                 stops paying the reload. Costs the RAM while idle
+  cache q8|default
+                 quantize the KV cache to q8_0 (flash attention
+                 enabled with it): half the context memory for a
+                 negligible quality cost. 'default' reverts to f16
   context [N]    show or set the context window (ollama engine).
                  Left ungoverned, the engine sizes its KV cache from
                  visible memory, which on unified-memory machines
@@ -42,6 +49,75 @@ context_current() {
   local v
   v=$(sed -n 's/^Environment=OLLAMA_CONTEXT_LENGTH=//p' "$CONTEXT_OVERRIDE" 2>/dev/null | head -1)
   echo "${v:-$CONTEXT_DEFAULT}"
+}
+
+WARM_DROPIN=/etc/systemd/system/ollama.service.d/zz-warm.conf
+CACHE_DROPIN=/etc/systemd/system/ollama.service.d/zz-cache.conf
+
+cmd_warm() {
+  local want="${1:-}"
+  if [[ -z "$want" ]]; then
+    if [[ -f "$WARM_DROPIN" ]]; then echo "warm: on (the served model stays resident)"; else echo "warm: off (the engine unloads after ~5m idle)"; fi
+    return 0
+  fi
+  need_root
+  [[ "$ENGINE" == "ollama" ]] || { echo "warm is governed on the ollama engine; vllm is always resident" >&2; exit 1; }
+  case "$want" in
+    on)
+      mkdir -p "$(dirname "$WARM_DROPIN")"
+      {
+        echo "# SibillaOS: the oracle does not sleep (sibilla model warm)"
+        echo "[Service]"
+        echo "Environment=OLLAMA_KEEP_ALIVE=-1"
+      } > "$WARM_DROPIN"
+      systemctl daemon-reload
+      systemctl restart ollama.service
+      echo "warm on: the served model stays resident after idle"
+      echo "(the trade: its RAM stays taken while the machine is quiet)"
+      ;;
+    off)
+      rm -f "$WARM_DROPIN"
+      systemctl daemon-reload
+      systemctl restart ollama.service
+      echo "warm off: the engine unloads idle models again (~5m)"
+      ;;
+    *) echo "usage: sibilla model warm on|off" >&2; exit 1 ;;
+  esac
+}
+
+cmd_cache() {
+  local want="${1:-}"
+  if [[ -z "$want" ]]; then
+    if [[ -f "$CACHE_DROPIN" ]]; then echo "cache: q8_0 (flash attention on, half the context memory)"; else echo "cache: f16 (default)"; fi
+    return 0
+  fi
+  need_root
+  [[ "$ENGINE" == "ollama" ]] || { echo "the kv cache is governed on the ollama engine" >&2; exit 1; }
+  case "$want" in
+    q8|q8_0)
+      mkdir -p "$(dirname "$CACHE_DROPIN")"
+      {
+        echo "# SibillaOS: quantized KV cache (sibilla model cache)"
+        echo "# flash attention is required for the quantized cache and"
+        echo "# is enabled with it; if generation misbehaves on your"
+        echo "# hardware, revert with: sibilla model cache default"
+        echo "[Service]"
+        echo "Environment=OLLAMA_FLASH_ATTENTION=1"
+        echo "Environment=OLLAMA_KV_CACHE_TYPE=q8_0"
+      } > "$CACHE_DROPIN"
+      systemctl daemon-reload
+      systemctl restart ollama.service
+      echo "cache: q8_0 with flash attention - half the context memory,"
+      echo "negligible quality cost; revert with: sibilla model cache default"
+      ;;
+    default|f16)
+      rm -f "$CACHE_DROPIN"
+      systemctl daemon-reload
+      systemctl restart ollama.service
+      echo "cache back to f16 (flash attention back to the engine default)"
+      ;;
+    *) echo "usage: sibilla model cache q8|default" >&2; exit 1 ;;
+  esac
 }
 
 cmd_context() {
@@ -428,5 +504,7 @@ case "${1:-}" in
   prune)  cmd_prune ;;
   info)   shift; cmd_info "${1:-}" ;;
   context) shift; cmd_context "${1:-}" ;;
+  warm)    shift; cmd_warm "${1:-}" ;;
+  cache)   shift; cmd_cache "${1:-}" ;;
   *)      usage ;;
 esac
