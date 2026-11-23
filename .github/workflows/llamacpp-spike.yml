@@ -22,7 +22,7 @@ jobs:
     runs-on: ubuntu-26.04
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Fetch the pinned llama.cpp server (single source of truth)
         run: |
           TAG=$(grep -oP 'LLAMACPP_TAG="\K[^"]+' packages/build-debs.sh)

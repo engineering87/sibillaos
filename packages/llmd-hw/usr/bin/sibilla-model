@@ -18,8 +18,18 @@ usage: sibilla-model COMMAND
   import FILE    bring a model in from a GGUF file instead of the
                  network (USB stick, shared drive); the file must
                  match a digest in the signed catalog. --use serves it
+  info [MODEL]   the model's card: parameters, quantization, context
+                 length, embedding width, plus catalog and runtime
+                 state (defaults to the served model)
   rm MODEL_ID    remove a downloaded model (refuses the served one)
   prune          remove every downloaded model except the served one
+  warm on|off    keep the served model resident instead of unloading
+                 it after idle: the first request after a quiet hour
+                 stops paying the reload. Costs the RAM while idle
+  cache q8|default
+                 quantize the KV cache to q8_0 (flash attention
+                 enabled with it): half the context memory for a
+                 negligible quality cost. 'default' reverts to f16
   context [N]    show or set the context window (ollama engine).
                  Left ungoverned, the engine sizes its KV cache from
                  visible memory, which on unified-memory machines
@@ -41,6 +51,81 @@ context_current() {
   echo "${v:-$CONTEXT_DEFAULT}"
 }
 
+# a deliberate admin command must not be stopped by the unit's own
+# start-limit accounting: two governor commands back to back are a
+# legitimate sequence, not a crash loop (the caddy lesson, adapted to
+# a unit that reads its environment only at start)
+restart_engine() {
+  systemctl daemon-reload
+  systemctl reset-failed ollama.service 2>/dev/null || true
+  systemctl restart ollama.service
+}
+
+WARM_DROPIN=/etc/systemd/system/ollama.service.d/zz-warm.conf
+CACHE_DROPIN=/etc/systemd/system/ollama.service.d/zz-cache.conf
+
+cmd_warm() {
+  local want="${1:-}"
+  if [[ -z "$want" ]]; then
+    if [[ -f "$WARM_DROPIN" ]]; then echo "warm: on (the served model stays resident)"; else echo "warm: off (the engine unloads after ~5m idle)"; fi
+    return 0
+  fi
+  need_root
+  [[ "$ENGINE" == "ollama" ]] || { echo "warm is governed on the ollama engine; vllm is always resident" >&2; exit 1; }
+  case "$want" in
+    on)
+      mkdir -p "$(dirname "$WARM_DROPIN")"
+      {
+        echo "# SibillaOS: the oracle does not sleep (sibilla model warm)"
+        echo "[Service]"
+        echo "Environment=OLLAMA_KEEP_ALIVE=-1"
+      } > "$WARM_DROPIN"
+      restart_engine
+      echo "warm on: the served model stays resident after idle"
+      echo "(the trade: its RAM stays taken while the machine is quiet)"
+      ;;
+    off)
+      rm -f "$WARM_DROPIN"
+      restart_engine
+      echo "warm off: the engine unloads idle models again (~5m)"
+      ;;
+    *) echo "usage: sibilla model warm on|off" >&2; exit 1 ;;
+  esac
+}
+
+cmd_cache() {
+  local want="${1:-}"
+  if [[ -z "$want" ]]; then
+    if [[ -f "$CACHE_DROPIN" ]]; then echo "cache: q8_0 (flash attention on, half the context memory)"; else echo "cache: f16 (default)"; fi
+    return 0
+  fi
+  need_root
+  [[ "$ENGINE" == "ollama" ]] || { echo "the kv cache is governed on the ollama engine" >&2; exit 1; }
+  case "$want" in
+    q8|q8_0)
+      mkdir -p "$(dirname "$CACHE_DROPIN")"
+      {
+        echo "# SibillaOS: quantized KV cache (sibilla model cache)"
+        echo "# flash attention is required for the quantized cache and"
+        echo "# is enabled with it; if generation misbehaves on your"
+        echo "# hardware, revert with: sibilla model cache default"
+        echo "[Service]"
+        echo "Environment=OLLAMA_FLASH_ATTENTION=1"
+        echo "Environment=OLLAMA_KV_CACHE_TYPE=q8_0"
+      } > "$CACHE_DROPIN"
+      restart_engine
+      echo "cache: q8_0 with flash attention - half the context memory,"
+      echo "negligible quality cost; revert with: sibilla model cache default"
+      ;;
+    default|f16)
+      rm -f "$CACHE_DROPIN"
+      restart_engine
+      echo "cache back to f16 (flash attention back to the engine default)"
+      ;;
+    *) echo "usage: sibilla model cache q8|default" >&2; exit 1 ;;
+  esac
+}
+
 cmd_context() {
   local want="${1:-}"
   if [[ -z "$want" ]]; then
@@ -51,8 +136,7 @@ cmd_context() {
   [[ "$ENGINE" == "ollama" ]] || { echo "context is governed on the ollama engine; vllm sizes per request" >&2; exit 1; }
   if [[ "$want" == "default" ]]; then
     rm -f "$CONTEXT_OVERRIDE"
-    systemctl daemon-reload
-    systemctl restart ollama.service
+    restart_engine
     echo "context back to the default ($CONTEXT_DEFAULT tokens)"
     return 0
   fi
@@ -66,8 +150,7 @@ cmd_context() {
     echo "[Service]"
     echo "Environment=OLLAMA_CONTEXT_LENGTH=$want"
   } > "$CONTEXT_OVERRIDE"
-  systemctl daemon-reload
-  systemctl restart ollama.service
+  restart_engine
   echo "context: $want tokens (KV cache grows with it; bigger context, more RAM)"
 }
 
@@ -306,6 +389,65 @@ cmd_import() {
   fi
 }
 
+cmd_info() {
+  # shellcheck source=/dev/null
+  . /usr/lib/llmd/sibilla-style
+  local model="${1:-$CURRENT}"
+  [[ -n "$model" ]] || { echo "no model served and none given" >&2; exit 1; }
+  s_hdr "model info"
+
+  # the signed catalog's view of it
+  local centry
+  centry=$(jq -r --arg id "${model%%:*}" --arg full "$model"     '[.models[] | select(.id == $id or .id == $full)][0] // empty' "$CATALOG")
+  if [[ -n "$centry" ]]; then
+    s_kv "family:"  "$(echo "$centry" | jq -r '.family')"
+    s_kv "license:" "$(echo "$centry" | jq -r '.license')"
+    s_kv "tier:"    "$(echo "$centry" | jq -r '.tier')$(echo "$centry" | jq -r 'if .source? == "registry" then " (registry source)" else "" end')"
+  else
+    s_kv "catalog:" "not a catalog entry" "$(s_warn)"
+  fi
+
+  if [[ "$ENGINE" == "vllm" ]]; then
+    s_rule
+    echo "engine vllm serves the model as published on Hugging Face;"
+    echo "parameters and context are on the model's HF page. The"
+    echo "engine-level card below is an ollama feature."
+    return 0
+  fi
+
+  # the engine's own card: /api/show reads the GGUF metadata
+  local show
+  show=$(curl -s -m 10 http://127.0.0.1:11434/api/show \
+    -d "$(jq -n --arg m "$model" '{model: $m}')" 2>/dev/null || true)
+  if ! echo "$show" | jq -e '.details' >/dev/null 2>&1; then
+    s_kv "engine:" "no card (model not in the local store: pull or use it first)" "$(s_warn)"
+    return 0
+  fi
+  s_rule
+  s_kv "arch:"      "$(echo "$show" | jq -r '.model_info["general.architecture"] // .details.family // "-"')"
+  s_kv "params:"    "$(echo "$show" | jq -r '.details.parameter_size // "-"')"
+  s_kv "quant:"     "$(echo "$show" | jq -r '.details.quantization_level // "-"')"
+  s_kv "context:"   "$(echo "$show" | jq -r '[.model_info | to_entries[] | select(.key | endswith(".context_length")) | .value][0] // "-"') tokens (training limit)"
+  s_kv "embedding:" "$(echo "$show" | jq -r '[.model_info | to_entries[] | select(.key | endswith(".embedding_length")) | .value][0] // "-"') dims"
+
+  # runtime: what the appliance actually does with it
+  s_rule
+  local ctx="8192 (appliance default)"
+  if [[ -r /etc/systemd/system/ollama.service.d/zz-context.conf ]]; then
+    local c
+    c=$(grep -oP 'OLLAMA_CONTEXT_LENGTH=\K[0-9]+' /etc/systemd/system/ollama.service.d/zz-context.conf || true)
+    [[ -n "$c" ]] && ctx="$c (override: sibilla model context)"
+  fi
+  s_kv "serving:" "$([[ "$model" == "$CURRENT" ]] && echo "yes, this is the served model" || echo "no (served: ${CURRENT:-none})")"
+  s_kv "window:"  "$ctx"
+  local resident
+  resident=$(curl -s -m 5 http://127.0.0.1:11434/api/ps 2>/dev/null     | jq -r --arg m "$model" '.models[]? | select(.name == $m) | "resident, " + (if .size > 0 then ((.size_vram * 100 / .size | floor | tostring) + "% on gpu") else "-" end)' || true)
+  s_kv "memory:"  "${resident:-not resident (loads on first request; sibilla mem shows the split)}"
+  echo
+  echo "measured speed is sibilla bench's job: median tokens/s and"
+  echo "time to first token, through the gateway with auth included"
+}
+
 cmd_rm() {
   need_root
   local model="$1"
@@ -364,6 +506,9 @@ case "${1:-}" in
   import) [[ $# -ge 2 ]] || usage; cmd_import "$2" "${3:-}" ;;
   rm)     [[ $# -ge 2 ]] || usage; cmd_rm "$2" ;;
   prune)  cmd_prune ;;
+  info)   shift; cmd_info "${1:-}" ;;
   context) shift; cmd_context "${1:-}" ;;
+  warm)    shift; cmd_warm "${1:-}" ;;
+  cache)   shift; cmd_cache "${1:-}" ;;
   *)      usage ;;
 esac

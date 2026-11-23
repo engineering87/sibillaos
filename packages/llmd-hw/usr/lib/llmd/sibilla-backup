@@ -1,0 +1,120 @@
+#!/usr/bin/env bash
+# sibilla-backup: the machine's configuration in one archive, and the
+# way back. What makes this machine THIS machine travels: keys, the
+# served model choice, gateway config, service toggles, the declared
+# profile, the context override. What stays, by design: the models
+# (re-downloaded digest-verified, or delivered air-gapped) and the
+# machine-identity markers (appliance, firstboot.done, engine - the
+# engine is a hardware decision the target machine makes itself).
+set -euo pipefail
+
+LLMD_DIR=/etc/llmd
+CTX_DROPIN=/etc/systemd/system/ollama.service.d/zz-context.conf
+EXCLUDE=(appliance firstboot.done nomenu issue.done engine)
+
+usage() {
+  cat >&2 <<USAGE
+usage: sibilla backup [FILE]
+       sibilla restore FILE
+
+backup writes the machine configuration (keys included: the archive
+is created 600 and should be stored accordingly) to FILE, default
+./sibilla-backup-HOST-DATE.tar.gz. restore puts it back, re-renders
+the gateway, and re-enables the services the archive says were on;
+models are not in the archive and are re-fetched verified.
+USAGE
+  exit 1
+}
+
+need_root() { [[ $EUID -eq 0 ]] || { echo "run as root (sudo)" >&2; exit 1; }; }
+
+cmd_backup() {
+  need_root
+  local out="${1:-./sibilla-backup-$(hostname)-$(date +%Y%m%d-%H%M%S).tar.gz}"
+  local staging
+  staging=$(mktemp -d)
+  mkdir -p "$staging/llmd"
+  local f base skip
+  for f in "$LLMD_DIR"/* "$LLMD_DIR"/.[!.]* ; do
+    [[ -e "$f" ]] || continue
+    base=$(basename "$f")
+    skip=no
+    for e in "${EXCLUDE[@]}"; do [[ "$base" == "$e" ]] && skip=yes; done
+    [[ "$skip" == yes ]] && continue
+    cp -a "$f" "$staging/llmd/"
+  done
+  if [[ -f "$CTX_DROPIN" ]]; then
+    mkdir -p "$staging/dropins"
+    cp -a "$CTX_DROPIN" "$staging/dropins/zz-context.conf"
+  fi
+  local members=(llmd)
+  [[ -d "$staging/dropins" ]] && members+=(dropins)
+  ( cd "$staging" && umask 077 && tar -czf "/tmp/sibilla-backup.$$" "${members[@]}" )
+  install -m 600 "/tmp/sibilla-backup.$$" "$out"
+  rm -f "/tmp/sibilla-backup.$$"
+  rm -rf "$staging"
+  echo "backup written: $out (mode 600 - it contains the API keys)"
+  echo "models are not included: the restore re-fetches them verified"
+}
+
+cmd_restore() {
+  need_root
+  local in="${1:-}"
+  [[ -n "$in" && -f "$in" ]] || usage
+  # refuse archive members that try to escape: no absolute paths, no ..
+  if tar -tzf "$in" | grep -qE '^/|(^|/)\.\.(/|$)'; then
+    echo "REFUSING the archive: it contains absolute or escaping paths" >&2
+    exit 1
+  fi
+  local staging
+  staging=$(mktemp -d)
+  tar -xzf "$in" -C "$staging"
+  [[ -d "$staging/llmd" ]] || { echo "not a sibilla backup (no llmd/ inside)" >&2; exit 1; }
+  mkdir -p "$LLMD_DIR"
+  # the excluded names never leave a machine, and never land on one
+  local f base skip
+  for f in "$staging/llmd"/* "$staging/llmd"/.[!.]* ; do
+    [[ -e "$f" ]] || continue
+    base=$(basename "$f")
+    skip=no
+    for e in "${EXCLUDE[@]}"; do [[ "$base" == "$e" ]] && skip=yes; done
+    [[ "$skip" == yes ]] && continue
+    cp -a "$f" "$LLMD_DIR/"
+  done
+  if [[ -f "$staging/dropins/zz-context.conf" ]]; then
+    mkdir -p "$(dirname "$CTX_DROPIN")"
+    cp -a "$staging/dropins/zz-context.conf" "$CTX_DROPIN"
+    systemctl daemon-reload
+    systemctl try-restart ollama.service 2>/dev/null || true
+  fi
+  rm -rf "$staging"
+  /usr/lib/llmd/llmd-keys-render
+  /usr/lib/llmd/llmd-gateway-render
+  systemctl restart caddy.service
+  echo "configuration restored; gateway serving with the restored keys"
+  # services the archive says were on come back through their own
+  # enable paths, which verify or fetch their models fail-closed
+  [[ "$(cat "$LLMD_DIR/mcp" 2>/dev/null)" == "on" ]] \
+    && { sibilla-mcp enable || echo "warning: mcp enable failed"; }
+  [[ "$(cat "$LLMD_DIR/speech" 2>/dev/null)" == "on" ]] \
+    && { sibilla-speech enable || echo "warning: speech enable failed"; }
+  [[ "$(cat "$LLMD_DIR/rerank" 2>/dev/null)" == "on" ]] \
+    && { sibilla-rerank enable || echo "warning: rerank enable failed"; }
+  [[ -e "$LLMD_DIR/webui.enabled" ]] \
+    && { sibilla-webui enable || echo "warning: webui enable failed"; }
+  [[ "$(cat "$LLMD_DIR/oidc" 2>/dev/null)" == "on" ]] \
+    && { systemctl enable --now llmd-oidc.service 2>/dev/null || echo "warning: oidc service did not start"; }
+  local model
+  model=$(cat "$LLMD_DIR/model" 2>/dev/null || true)
+  if [[ -n "$model" ]]; then
+    echo "served model choice restored: $model"
+    echo "fetch it (digest-verified) with: sudo sibilla model use $model"
+  fi
+  return 0
+}
+
+case "${1:-}" in
+  backup)  shift; cmd_backup "${1:-}" ;;
+  restore) shift; cmd_restore "${1:-}" ;;
+  *) usage ;;
+esac

@@ -41,6 +41,8 @@ systemctl stop vllm.service webui.service 2>/dev/null || true
 systemctl disable --now llmd-mcp.service 2>/dev/null || true
 systemctl disable --now llmd-speech.service 2>/dev/null || true
 systemctl disable --now llmd-rerank.service 2>/dev/null || true
+systemctl disable --now llmd-guard-proxy.service 2>/dev/null || true
+systemctl disable --now llmd-guard-model.service 2>/dev/null || true
 systemctl disable --now llmd-oidc.service 2>/dev/null || true
 
 # 2. Caddy: restore the saved configuration, or clear ours and stop
@@ -69,6 +71,9 @@ fi
 # 4. SibillaOS state: keys, settings, models; and the gateway rate
 # limit rule, if the appliance firstboot added one (both of its lines
 # carry the marker)
+if [[ -f /etc/ufw/before6.rules ]] && grep -q "sibilla-rl" /etc/ufw/before6.rules; then
+  sed -i '/sibilla-rl/d' /etc/ufw/before6.rules
+fi
 if [[ -f /etc/ufw/before.rules ]] && grep -q "sibilla-rl" /etc/ufw/before.rules; then
   sed -i '/sibilla-rl/d' /etc/ufw/before.rules
   ufw reload >/dev/null 2>&1 || true
@@ -85,4 +90,4 @@ echo "podman, ...) can be cleared with: sudo apt-get autoremove --purge"
 # bash keeps reading it from the open file descriptor after unlink
 exec apt-get purge -y \
   llmd llmd-hw llmd-engine-ollama llmd-engine-vllm \
-  llmd-gateway llmd-firstboot llmd-webui llmd-mcp llmd-speech llmd-rerank llmd-oidc llmd-llmfit
+  llmd-gateway llmd-firstboot llmd-webui llmd-mcp llmd-speech llmd-rerank llmd-guard llmd-oidc llmd-llmfit

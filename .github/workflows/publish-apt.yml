@@ -15,7 +15,7 @@ jobs:
   build-repo:
     runs-on: ubuntu-26.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Import or generate the signing key
         env:
           GPG_PRIVATE_KEY: ${{ secrets.SIBILLA_GPG_PRIVATE_KEY }}

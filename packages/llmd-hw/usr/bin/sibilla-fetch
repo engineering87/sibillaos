@@ -1,0 +1,80 @@
+#!/usr/bin/env bash
+# sibilla-fetch: the machine at a glance, neofetch-style. Read-only,
+# safe without root (unreadable values show as "-"). Same two rules
+# as every sibilla command: color only on a TTY with NO_COLOR unset,
+# ASCII-only glyphs.
+set -euo pipefail
+
+# shellcheck source=/dev/null
+. /usr/lib/llmd/sibilla-style
+
+ver=$(dpkg-query -W -f='${Version}' llmd-hw 2>/dev/null || echo source)
+base=$(lsb_release -ds 2>/dev/null || grep -oP 'PRETTY_NAME="\K[^"]+' /etc/os-release 2>/dev/null || echo "-")
+kernel=$(uname -r)
+up=$(uptime -p 2>/dev/null | sed 's/^up //' || echo "-")
+engine=$(cat /etc/llmd/engine 2>/dev/null || echo "-")
+model=$(cat /etc/llmd/model 2>/dev/null || echo "-")
+mode=$(grep -oP '^MODE=\K.*' /etc/llmd/gateway.conf 2>/dev/null || echo http)
+ctx="8192 (default)"
+if [[ -r /etc/systemd/system/ollama.service.d/zz-context.conf ]]; then
+  c=$(grep -oP 'OLLAMA_CONTEXT_LENGTH=\K[0-9]+' /etc/systemd/system/ollama.service.d/zz-context.conf || true)
+  [[ -n "$c" ]] && ctx="$c (override)"
+fi
+ram=$(awk '/MemTotal/ {printf "%.0f GB", $2/1048576}' /proc/meminfo 2>/dev/null || echo "-")
+gpu="none detected"
+if command -v nvidia-smi >/dev/null 2>&1; then
+  gpu=$(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | head -1 || echo "NVIDIA")
+elif lspci 2>/dev/null | grep -qi "vga.*amd\|display.*amd"; then
+  gpu=$(lspci 2>/dev/null | grep -i "vga.*amd\|display.*amd" | head -1 | sed 's/.*: //;s/ (rev.*//')
+fi
+store="-"
+[[ -d /usr/share/ollama/.ollama/models ]] \
+  && store=$(du -sh /usr/share/ollama/.ollama/models 2>/dev/null | cut -f1 || echo "-")
+
+onoff() {
+  local v
+  v=$(cat "$1" 2>/dev/null || echo off)
+  if [[ "$v" == "on" ]]; then printf 'on'; else printf 'off'; fi
+}
+webui=off; [[ -e /etc/llmd/webui.enabled ]] && webui=on
+services="mcp $(onoff /etc/llmd/mcp), speech $(onoff /etc/llmd/speech), rerank $(onoff /etc/llmd/rerank)"
+services2="guard $(onoff /etc/llmd/guard), webui $webui, oidc $(onoff /etc/llmd/oidc)"
+
+# the oracle eye, plain ASCII, padded to a fixed width so the ANSI
+# coloring added at print time cannot break the alignment
+art=(
+'                          '
+'        .:::::::::.       '
+'     .:*           *:.    '
+'   .:*     .-=-.     *:.  '
+'  ::      : .-. :      :: '
+' ::       :(   ):       ::'
+' ::       :(   ):       ::'
+'  ::      : *-* :      :: '
+'   *:.     *-=-*     .:*  '
+'     *:.           .:*    '
+'        *:::::::::*       '
+'                          '
+)
+info=(
+"$(printf '%s%s%s %s- SibillaOS %s%s' "$S_EM" "$(hostname)" "$S_RST" "$S_DIM" "$ver" "$S_RST")"
+"$(printf '%s-----------------------------%s' "$S_DIM" "$S_RST")"
+"$(printf '%sbase%s      %s%s%s'    "$S_DIM" "$S_RST" "$S_VAL" "$base" "$S_RST")"
+"$(printf '%skernel%s    %s%s%s'    "$S_DIM" "$S_RST" "$S_VAL" "$kernel" "$S_RST")"
+"$(printf '%suptime%s    %s%s%s'    "$S_DIM" "$S_RST" "$S_VAL" "$up" "$S_RST")"
+"$(printf '%sengine%s    %s%s%s'    "$S_DIM" "$S_RST" "$S_VAL" "$engine" "$S_RST")"
+"$(printf '%smodel%s     %s%s%s'    "$S_DIM" "$S_RST" "$S_VAL" "$model" "$S_RST")"
+"$(printf '%scontext%s   %s%s%s'    "$S_DIM" "$S_RST" "$S_VAL" "$ctx" "$S_RST")"
+"$(printf '%sgateway%s   %s:8080 (%s)%s' "$S_DIM" "$S_RST" "$S_VAL" "$mode" "$S_RST")"
+"$(printf '%sservices%s  %s%s%s'    "$S_DIM" "$S_RST" "$S_VAL" "$services" "$S_RST")"
+"$(printf '%s          %s%s%s'      "$S_DIM" "$S_VAL" "$services2" "$S_RST")"
+"$(printf '%sgpu%s       %s%s%s'    "$S_DIM" "$S_RST" "$S_VAL" "$gpu" "$S_RST")"
+"$(printf '%sram%s       %s%s%s / model store %s%s' "$S_DIM" "$S_RST" "$S_VAL" "$ram" "$S_DIM" "$store" "$S_RST")"
+)
+
+rows=${#art[@]}
+[[ ${#info[@]} -gt $rows ]] && rows=${#info[@]}
+for ((i=0; i<rows; i++)); do
+  a="${art[i]:-                          }"
+  printf '%s%s%s  %s\n' "$S_EM" "$a" "$S_RST" "${info[i]:-}"
+done

@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# sibilla-transcribe: batch transcription from the command line, on
+# the speech stack the machine already runs. The transcription goes
+# to stdout (pipe it, redirect it); everything else goes to stderr.
+set -euo pipefail
+
+STATE=/etc/llmd/speech
+ENDPOINT=http://127.0.0.1:8090/v1/audio/transcriptions
+
+usage() {
+  cat >&2 <<USAGE
+usage: sibilla-transcribe FILE [--srt|--vtt]
+
+Transcribes an audio file with the local speech stack and prints the
+result to stdout. --srt or --vtt emit subtitles instead of plain
+text. Without ffmpeg installed the server accepts 16 kHz WAV only.
+Requires speech to be enabled: sudo sibilla speech enable
+USAGE
+  exit 1
+}
+
+[[ $# -ge 1 ]] || usage
+file="$1"; shift
+format=json
+case "${1:-}" in
+  --srt) format=srt ;;
+  --vtt) format=vtt ;;
+  "") ;;
+  *) usage ;;
+esac
+
+[[ -f "$file" ]] || { echo "no such file: $file" >&2; exit 1; }
+if [[ "$(cat "$STATE" 2>/dev/null || echo off)" != "on" ]]; then
+  echo "speech is not enabled on this machine: sudo sibilla speech enable" >&2
+  exit 1
+fi
+
+out=$(curl -s -m 600 -X POST "$ENDPOINT" \
+  -F "file=@$file" -F "response_format=$format") \
+  || { echo "the speech server did not answer on loopback" >&2; exit 1; }
+
+if [[ "$format" == "json" ]]; then
+  text=$(echo "$out" | jq -r '.text // empty' 2>/dev/null || true)
+  [[ -n "$text" ]] || { echo "no transcription came back; server said:" >&2; echo "$out" >&2; exit 1; }
+  printf '%s\n' "$text"
+else
+  [[ -n "$out" ]] || { echo "no subtitle output came back" >&2; exit 1; }
+  printf '%s\n' "$out"
+fi

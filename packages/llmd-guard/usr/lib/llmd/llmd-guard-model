@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# llmd-guard-model: launcher for the guard model's llama-server. The
+# binary is the one llmd-rerank ships (/usr/lib/llmd/llamacpp): one
+# pinned llama.cpp serves both sidecars.
+set -euo pipefail
+
+ROOT=/usr/lib/llmd/llamacpp
+MODEL=/var/lib/llmd/models/guard/qwen3guard-gen-0.6b-q8_0.gguf
+
+BIN=$(find "$ROOT" -name llama-server -type f 2>/dev/null | head -1)
+[[ -n "$BIN" && -x "$BIN" ]] || { echo "llama-server not found under $ROOT (llmd-rerank ships it)" >&2; exit 1; }
+[[ -f "$MODEL" ]] || { echo "guard model missing: $MODEL (run: sudo sibilla guard enable)" >&2; exit 1; }
+
+libdirs=$(find "$ROOT" -type f -name '*.so*' -exec dirname {} \; 2>/dev/null | sort -u | paste -sd: -)
+[[ -n "$libdirs" ]] && export LD_LIBRARY_PATH="$libdirs${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+
+# --jinja applies the GGUF's embedded chat template, which for
+# Qwen3Guard IS the official classification prompt; the small context
+# bounds the memory the verdict model may take
+exec "$BIN" \
+  --host 127.0.0.1 --port 8094 \
+  --ctx-size 4096 --jinja \
+  --model "$MODEL"

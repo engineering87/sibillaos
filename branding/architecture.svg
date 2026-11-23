@@ -36,38 +36,46 @@
   <text x="98" y="263" font-size="12.5" fill="#7fbf9a">loopback only</text>
 
   <!-- arrows gateway -> services -->
-  <line x1="200" y1="202" x2="200" y2="268" stroke="#3ddc84" stroke-width="2" marker-end="url(#arr)"/>
+  <line x1="205" y1="202" x2="205" y2="268" stroke="#3ddc84" stroke-width="2" marker-end="url(#arr)"/>
   <line x1="380" y1="202" x2="380" y2="268" stroke="#3ddc84" stroke-width="2" marker-end="url(#arr)"/>
-  <line x1="560" y1="202" x2="560" y2="268" stroke="#3ddc84" stroke-width="2" marker-end="url(#arr)"/>
+  <line x1="583" y1="202" x2="583" y2="268" stroke="#3ddc84" stroke-width="2" marker-end="url(#arr)"/>
 
-  <!-- row 1: engines + speech -->
+  <!-- row 1: engines, speech, rerank -->
   <g text-anchor="middle">
-    <rect x="110" y="272" width="180" height="64" rx="10" fill="#0e2a1c" stroke="#2e9e63" stroke-width="1.5"/>
-    <text x="200" y="298" font-size="14.5" font-weight="bold" fill="#a8e063">Ollama  :11434</text>
-    <text x="200" y="319" font-size="11.5" fill="#9fc7b2">chat &#183; embeddings &#183; large tier</text>
+    <rect x="110" y="272" width="131" height="64" rx="10" fill="#0e2a1c" stroke="#2e9e63" stroke-width="1.5"/>
+    <text x="175" y="296" font-size="12.5" font-weight="bold" fill="#a8e063">Ollama  :11434</text>
+    <text x="175" y="317" font-size="10" fill="#9fc7b2">chat &#183; embed &#183; large</text>
 
-    <rect x="290" y="272" width="180" height="64" rx="10" fill="#0e2a1c" stroke="#2e9e63" stroke-width="1.5"/>
-    <text x="380" y="298" font-size="14.5" font-weight="bold" fill="#a8e063">vLLM  :8000</text>
-    <text x="380" y="319" font-size="11.5" fill="#9fc7b2">datacenter GPUs (container)</text>
+    <rect x="245" y="272" width="131" height="64" rx="10" fill="#0e2a1c" stroke="#2e9e63" stroke-width="1.5"/>
+    <text x="310" y="296" font-size="12.5" font-weight="bold" fill="#a8e063">vLLM  :8000</text>
+    <text x="310" y="317" font-size="10" fill="#9fc7b2">datacenter GPUs</text>
 
-    <rect x="470" y="272" width="180" height="64" rx="10" fill="#0e2a1c" stroke="#2e9e63" stroke-width="1.5"/>
-    <text x="560" y="298" font-size="14.5" font-weight="bold" fill="#a8e063">whisper  :8090</text>
-    <text x="560" y="319" font-size="11.5" fill="#9fc7b2">/v1/audio/transcriptions</text>
+    <rect x="380" y="272" width="131" height="64" rx="10" fill="#0e2a1c" stroke="#2e9e63" stroke-width="1.5"/>
+    <text x="445" y="296" font-size="12.5" font-weight="bold" fill="#a8e063">whisper  :8090</text>
+    <text x="445" y="317" font-size="10" fill="#9fc7b2">/v1/audio transcribe</text>
+
+    <rect x="515" y="272" width="131" height="64" rx="10" fill="#0e2a1c" stroke="#2e9e63" stroke-width="1.5"/>
+    <text x="580" y="296" font-size="12.5" font-weight="bold" fill="#a8e063">rerank  :8091</text>
+    <text x="580" y="317" font-size="10" fill="#9fc7b2">llama.cpp &#183; /v1/rerank</text>
   </g>
 
-  <!-- row 2: mcp, oauth2-proxy, webui -->
+  <!-- row 2: guard, mcp, oauth2-proxy, webui -->
   <g text-anchor="middle">
-    <rect x="110" y="356" width="180" height="64" rx="10" fill="#0e2a1c" stroke="#2e9e63" stroke-width="1.5"/>
-    <text x="200" y="382" font-size="14.5" font-weight="bold" fill="#a8e063">llmd-mcp  :8765</text>
-    <text x="200" y="403" font-size="11.5" fill="#9fc7b2">chat + list_models as tools</text>
+    <rect x="110" y="356" width="131" height="64" rx="10" fill="#0e2a1c" stroke="#2e9e63" stroke-width="1.5"/>
+    <text x="175" y="380" font-size="12.5" font-weight="bold" fill="#a8e063">guard  :8093</text>
+    <text x="175" y="401" font-size="10" fill="#9fc7b2">Qwen3Guard verdicts</text>
 
-    <rect x="290" y="356" width="180" height="64" rx="10" fill="#0e2a1c" stroke="#2e9e63" stroke-width="1.5"/>
-    <text x="380" y="382" font-size="14.5" font-weight="bold" fill="#a8e063">oauth2-proxy  :4180</text>
-    <text x="380" y="403" font-size="11.5" fill="#9fc7b2">your IdP, when OIDC is on</text>
+    <rect x="245" y="356" width="131" height="64" rx="10" fill="#0e2a1c" stroke="#2e9e63" stroke-width="1.5"/>
+    <text x="310" y="380" font-size="12.5" font-weight="bold" fill="#a8e063">llmd-mcp  :8765</text>
+    <text x="310" y="401" font-size="10" fill="#9fc7b2">chat as MCP tools</text>
 
-    <rect x="470" y="356" width="180" height="64" rx="10" fill="#0e2a1c" stroke="#2e9e63" stroke-width="1.5"/>
-    <text x="560" y="382" font-size="14.5" font-weight="bold" fill="#a8e063">Open WebUI  :3001</text>
-    <text x="560" y="403" font-size="11.5" fill="#9fc7b2">opt-in container, loopback</text>
+    <rect x="380" y="356" width="131" height="64" rx="10" fill="#0e2a1c" stroke="#2e9e63" stroke-width="1.5"/>
+    <text x="445" y="380" font-size="11" font-weight="bold" fill="#a8e063">oauth2-proxy :4180</text>
+    <text x="445" y="401" font-size="10" fill="#9fc7b2">your IdP, OIDC on</text>
+
+    <rect x="515" y="356" width="131" height="64" rx="10" fill="#0e2a1c" stroke="#2e9e63" stroke-width="1.5"/>
+    <text x="580" y="380" font-size="12.5" font-weight="bold" fill="#a8e063">WebUI  :3001</text>
+    <text x="580" y="401" font-size="10" fill="#9fc7b2">opt-in container</text>
   </g>
 
   <text x="380" y="444" font-size="11.5" fill="#7fbf9a" text-anchor="middle">every service above answers only through the gateway; none of them ever sees a key</text>

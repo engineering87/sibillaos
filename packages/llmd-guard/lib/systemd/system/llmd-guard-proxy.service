@@ -1,0 +1,25 @@
+[Unit]
+Description=SibillaOS guard proxy (chat requests screened before the engine)
+Documentation=https://github.com/engineering87/sibillaos
+After=network.target llmd-guard-model.service
+Wants=llmd-guard-model.service
+
+[Service]
+Type=notify
+ExecStart=/usr/lib/llmd/llmd-guard-proxy
+Restart=on-failure
+RestartSec=2
+NotifyAccess=main
+DynamicUser=yes
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+
+[Install]
+WantedBy=multi-user.target

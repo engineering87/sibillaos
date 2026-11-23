@@ -85,13 +85,19 @@ The cycle in detail:
 - The legal posture, stated: README License section, the root NOTICE, and the release-notes paragraph - independent project based on Ubuntu, not affiliated with Canonical, trademark acknowledged, sources available through the Ubuntu archives, this repository and the pinned upstreams. Done.
 - The release procedure itself (docs/releasing.md), because the post-tag half is the half that gets forgotten. Done.
 
-## v0.11 (next)
+## v0.11 (released)
 
-The cycle opens with the carried questions rather than a theme:
+The cycle that opened with carried questions and closed with an identity: ten releases in, the proof-of-concept label came off in favor of what CI proves on every push. Shipped: the brand with one voice (tagline, wordmark, quiet-corner docs site, social card and og metadata, /etc/issue on appliances); the machine learning to show itself - sibilla fetch, mem, model info and key usage; sibilla transcribe on the existing speech stack; backup/restore with the keys traveling mode 600 and the identity markers never traveling; doctor --redteam over a deliberately unshipped, pinned garak; the guard stage pulled forward from v0.12 - Qwen3Guard verdicts on a loopback server, fail closed, vetted by CI on every push; the Velvet family in the catalog; the performance governors (warm, cache q8); the IPv6 twin of the gateway rate limit with its /64 source mask; and the engine decision - ds4 closed with respect, llama.cpp proven against the gateway contract and planned as the large tier's third engine. Two fact-sheet ADRs (architecture changelog v0.19 and v0.20) and both architecture drawings telling the truth, the new overview included. Release notes in [docs/releases/v0.11.0.md](docs/releases/v0.11.0.md).
 
-- Tell the story, finally: three releases of substance since the last push (the honest large tier; voice, SSO and fleet; the supply cycle on a new base with vision and reranking). The distribution pack leads with the refusal no `curl | sh` gives you, and the adoption question gets its best-armed attempt - now with a documentation site to land on.
-- The ds4 answer, third cycle: upstream commits daily but the issue stays unanswered. The plan-B evaluation is due: ik_llama.cpp or llama.cpp direct for the larger-than-RAM story - and the rerank sidecar quietly proved the llama.cpp repackaging path this cycle, so plan B has a working template now. Mainline llama.cpp has merged a host-memory expert cache (--moe-cache-mib) even while disk streaming stays open: re-survey before deciding.
-- TTS watch: ollama serves /v1/audio/speech upstream with the phonon model, but Linux availability is unconfirmed and the small variants are CC BY-NC, outside catalog policy. Re-check; only the Apache base model qualifies.
+## v0.12 (next)
+
+The integration cycle, with performance as its second theme:
+
+- llama.cpp as the large tier's third engine, the cycle's core (architecture changelog v0.19): repack per the rerank playbook, llama-swap coexistence on the unified-memory tier per the v0.13 design, every serving guard unchanged, and the moe-cache gain finally measured on real GPU hardware. The sidecars already run the binary; the tier earns the engine.
+- The performance pass, second half: OLLAMA_NUM_PARALLEL as a profile key for team machines (the KV cost stated per slot), vLLM prefix caching on the datacenter tier, and whatever the llama.cpp integration's native timings make measurable for free.
+- Tell the story, finally: four releases of substance since the last push, a documentation site to land on, a brand that says what it is. The distribution pack leads with the refusal no `curl | sh` gives you.
+- TTS watch: ollama speech generation is macOS-only at the source (v0.40.11 notes); only the Apache base model qualifies when Linux arrives. The pinned TTS sidecar (Qwen3-TTS, Kitten) stays the alternative if a cleanly pinnable server appears first.
+- Freshness watch list, each item gated on source verification: the Qwen3.6 generation (catalog refresh candidate), ollama's d3 decision models (a new capability category to weigh against catalog policy), Meta's Muse Glimmer (only if the license survives the HF page).
 - vLLM on physical datacenter GPUs: the standing v1.0 debt, rented instance if no tester appears.
 - Manual validation of Open WebUI (docs/validation/webui.md), carried since v0.2: one real machine, thirty minutes, a filled result record.
 
@@ -120,13 +126,13 @@ Planned, in order of appearance:
 
 ## v1.0 (general availability)
 
-The release where the "proof of concept" label comes off. Criteria, not features: the vLLM path validated on physical datacenter GPUs, at least one release cycle with external users and no critical install bugs, documented upgrade path between versions, and the desktop variant with a model selection screen in the installer (Calamares module or first-boot console menu, decision pending).
+General availability. Criteria, not features: the vLLM path validated on physical datacenter GPUs, at least one release cycle with external users and no critical install bugs, documented upgrade path between versions, and the desktop variant with a model selection screen in the installer (Calamares module or first-boot console menu, decision pending).
 
 ## Exploratory (no commitment)
 
 Ideas that look promising but need a use case or a champion:
 
-- ds4 (DwarfStar): promoted in v0.8, then gated on upstream having anything to pin; the upstream issue is posted and the coexistence design recorded. Tracked in v0.9 above, kept here only as the category's origin.
+- ds4 (DwarfStar): promoted in v0.8, gated three cycles on upstream having anything to pin, closed in v0.11 (architecture changelog v0.19) when the survey found the absence of releases is deliberate. It proved the demand for larger-than-RAM; the answer ships via llama.cpp. Kept here as the category's origin.
 - kimi-k3-in-c (2026 survey): Kimi K3, 2.78T parameters from a 1.56 TB checkpoint, in 8.24 GB of RAM - portable C99, Apache-2.0, CI and byte-identical determinism, 5.7k stars. Second viral single-model disk-streaming project after ds4, which proves the category's pull; but CLI-only (no server, no API), 26.5 s/token on 8 GB, base model without a chat template, no confirmable tagged release. Not an engine candidate; watch as the category's proof of demand.
 - KTransformers as an alternative big-model backend: CPU/GPU hybrid MoE inference, 100B+ models on a single consumer GPU, SOSP-published. Powerful but dependency-heavy relative to this project's pinning discipline; watch, do not integrate yet.
 - exo and distributed-llama for multi-machine inference: model sharding across the devices of a household or office LAN. A different product story (many machines, one model) that would pair naturally with the fleet/profile work; needs a champion and a use case.

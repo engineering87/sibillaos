@@ -4,13 +4,15 @@
 
 <br/>
 
-**Install Linux, get a working LLM API. Nothing else to set up.**
+**Install Linux, get a working LLM API. Nothing leaves the machine.**
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-2e9e63.svg)](LICENSE)
 [![Base](https://img.shields.io/badge/base-Ubuntu%2026.04%20LTS-e95420.svg)](https://ubuntu.com)
 [![Build](https://github.com/engineering87/sibillaos/actions/workflows/build-iso.yml/badge.svg?branch=main)](https://github.com/engineering87/sibillaos/actions/workflows/build-iso.yml)
 [![Release](https://img.shields.io/github/v/release/engineering87/sibillaos?color=3ddc84&label=release)](https://github.com/engineering87/sibillaos/releases)
-[![Status](https://img.shields.io/badge/status-proof%20of%20concept-3ddc84.svg)](docs/architecture.md)
+[![Docs](https://img.shields.io/badge/docs-sibillaos-3ddc84.svg)](https://engineering87.github.io/sibillaos/)
+
+[Documentation](https://engineering87.github.io/sibillaos/) - [Releases](https://github.com/engineering87/sibillaos/releases) - [Roadmap](ROADMAP.md) - [Why not just Ollama?](#why-not-just-ollama)
 
 </div>
 
@@ -91,6 +93,8 @@ Where to go next:
 
 ## How it works
 
+<p align="center"><img src="branding/overview.svg" alt="SibillaOS in one picture: your tools reach one authenticated door; behind it, your machine serves a local LLM that fits its hardware, with chat, voice, vision, RAG, guard and org login one command away, on Ubuntu 26.04 LTS. Nothing leaves the machine." width="820"/></p>
+
 The installer detects your hardware and makes the decisions a human would otherwise have to research.
 
 | | |
@@ -106,12 +110,13 @@ The installer detects your hardware and makes the decisions a human would otherw
 | **Chat interface** | `sibilla webui enable` starts Open WebUI on port 3000 as an opt-in container, wired to the local engine; `sibilla oidc enable` puts it behind your organization's OIDC provider (Entra, Keycloak, Google), secret on stdin, API keys untouched. See [docs/oidc.md](docs/oidc.md). |
 | **Editor hookup** | `sibilla connect` prints ready-to-paste configuration for VS Code (Continue, Cline), aider and any OpenAI-compatible client. |
 | **Agent hookup** | `sibilla mcp enable` exposes the local model to MCP clients (Claude Code and other agent frameworks) as `chat` and `list_models` tools, behind the same API keys. See [docs/mcp.md](docs/mcp.md). |
-| **Config as code** | Declare the desired state (model, TLS, metrics, MCP, WebUI, speech) in one profile file; `sibilla apply` converges the machine onto it, idempotently. `apply export` turns a configured machine into a profile; cloud-init drops the file and first boot picks it up. See [docs/configuration.md](docs/configuration.md). |
+| **Config as code** | Declare the desired state (model, TLS, metrics, MCP, WebUI, speech, rerank, guard) in one profile file; `sibilla apply` converges the machine onto it, idempotently. `apply export` turns a configured machine into a profile; cloud-init drops the file and first boot picks it up. See [docs/configuration.md](docs/configuration.md). |
 | **Fleet** | `sibilla fleet apply\|check\|status` pushes the profile and aggregates drift and health across every machine in a plain hosts file, over your own SSH - no agent, no credential store, and profiles carry no secrets by design. See [docs/fleet.md](docs/fleet.md). |
 | **Air-gapped** | Machines with no outbound network install from a companion payload volume: models travel by USB stick, verified against the signed catalog digests on both ends. CI proves it on every push in a network-restricted VM. See [docs/airgap.md](docs/airgap.md). |
 | **Local RAG** | `/v1/embeddings` through the same gateway and keys: pull a catalog embedding model (`sibilla model pull`) and point any OpenAI-compatible RAG framework at this machine. See [docs/embeddings.md](docs/embeddings.md). |
 | **Speech-to-text** | `sibilla speech enable` serves `/v1/audio/transcriptions` (OpenAI shape, srt/vtt included) behind the same keys: whisper.cpp repackaged from its pinned release, model digest-verified from the signed catalog, audio never leaves the machine. See [docs/speech.md](docs/speech.md). |
 | **Reranking** | `sibilla rerank enable` serves `/v1/rerank` behind the same keys: the missing middle of RAG (retrieve wide with embeddings, rerank, hand the model the best few), Qwen3-Reranker-0.6B digest-verified from the signed catalog on a pinned loopback llama.cpp server. See [docs/rerank.md](docs/rerank.md). |
+| **Guard** | `sibilla guard enable` screens chat requests with a loopback verdict model (Qwen3Guard, digest-verified): Unsafe requests get an explicit refusal, everything else reaches the engine untouched, and the guard fails closed. See [docs/guard.md](docs/guard.md). |
 | **Large models** | A dedicated catalog tier for models bigger than your GPU (layers spill to RAM), strictly opt-in: first boot never picks one. `sibilla model list` shows what your machine can hold, `use` refuses anything past the RAM floor before downloading a single byte and states the speed cost when it fits, `status` shows the real GPU/CPU placement and `bench` tells the truth about the speed. See [docs/large-models.md](docs/large-models.md). |
 
 The base install is a headless server; a desktop variant is on the roadmap.
@@ -133,7 +138,7 @@ None of this is a criticism of Ollama, which does its job excellently - it is th
 
 ## Architecture at a glance
 
-<p align="center"><img src="branding/architecture.svg" alt="SibillaOS architecture: clients reach one authenticated gateway on port 8080; Ollama and vLLM stay on loopback; llmd-hw and llmfit pick the engine and model; Ubuntu 24.04 underneath" width="760"/></p>
+<p align="center"><img src="branding/architecture.svg" alt="SibillaOS architecture in detail: clients reach one authenticated gateway on port 8080; the engines, whisper, rerank, the guard, MCP, oauth2-proxy and the WebUI stay on loopback; llmd-hw and llmfit pick the engine and model; Ubuntu 26.04 LTS underneath" width="760"/></p>
 
 The engines never listen off-host: the gateway is the only door in. The full decision log is in [docs/architecture.md](docs/architecture.md).
 
@@ -159,12 +164,12 @@ cloud/        qcow2 cloud image bake (official Ubuntu cloud image + payload)
 packages/     Debian packages: hardware detection, engines, gateway, first boot
 catalog/      curated model list (signed JSON)
 branding/     logo, banner and wallpaper
-docs/         architecture document
+docs/         documentation (published at engineering87.github.io/sibillaos)
 ```
 
 ## Status
 
-Working proof of concept: on every push, CI builds the ISO, boots it under BIOS and UEFI, runs the install end to end and gets a real chat completion through the gateway on first boot. Engine versions are pinned in the installer. Release ISOs walk you through the standard installer screens and you choose your own credentials; only the fully unattended CI images use a fixed test user. The design and decision log live in [docs/architecture.md](docs/architecture.md); where the project is going is in [ROADMAP.md](ROADMAP.md).
+Proven on every push, not promised: CI builds the ISO, boots it under BIOS and UEFI with Secure Boot, runs the install end to end, gets a real chat completion through the gateway on first boot, and upgrades the previous published release in place. Ten releases shipped this way. Engine versions are pinned in the installer. Release ISOs walk you through the standard installer screens and you choose your own credentials; only the fully unattended CI images use a fixed test user. The design and decision log live in [docs/architecture.md](docs/architecture.md); where the project is going is in [ROADMAP.md](ROADMAP.md).
 
 ## Call for GPU testers
 

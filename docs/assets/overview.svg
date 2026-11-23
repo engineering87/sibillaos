@@ -1,0 +1,87 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 620" font-family="'DejaVu Sans','Segoe UI',Arial,sans-serif">
+  <defs>
+    <marker id="oarr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 Z" fill="#3ddc84"/>
+    </marker>
+  </defs>
+  <rect x="0" y="0" width="1200" height="620" rx="14" fill="#081b11"/>
+
+  <!-- your tools -->
+  <text x="190" y="96" font-size="15" fill="#7fbf9a" text-anchor="middle" letter-spacing="3">YOUR TOOLS</text>
+  <g text-anchor="middle" font-size="16" fill="#a8e063">
+    <rect x="80" y="120" width="220" height="44" rx="22" fill="#0e2a1c" stroke="#2e9e63"/>
+    <text x="190" y="148">editors and IDEs</text>
+    <rect x="80" y="180" width="220" height="44" rx="22" fill="#0e2a1c" stroke="#2e9e63"/>
+    <text x="190" y="208">agents and scripts</text>
+    <rect x="80" y="240" width="220" height="44" rx="22" fill="#0e2a1c" stroke="#2e9e63"/>
+    <text x="190" y="268">browsers</text>
+  </g>
+  <text x="190" y="330" font-size="13" fill="#7fbf9a" text-anchor="middle">anything that speaks the</text>
+  <text x="190" y="350" font-size="13" fill="#7fbf9a" text-anchor="middle">OpenAI API, unchanged</text>
+
+  <!-- arrow to the door -->
+  <line x1="310" y1="202" x2="398" y2="202" stroke="#3ddc84" stroke-width="2.5" marker-end="url(#oarr)"/>
+
+  <!-- the one door -->
+  <rect x="404" y="110" width="118" height="230" rx="12" fill="#0e2a1c" stroke="#3ddc84" stroke-width="2"/>
+  <circle cx="463" cy="185" r="17" fill="none" stroke="#f5c542" stroke-width="3.5"/>
+  <rect x="459.5" y="198" width="7" height="26" rx="3" fill="#f5c542"/>
+  <text x="463" y="258" font-size="15" font-weight="bold" fill="#3ddc84" text-anchor="middle">one door</text>
+  <text x="463" y="280" font-size="12" fill="#9fc7b2" text-anchor="middle">API key</text>
+  <text x="463" y="297" font-size="12" fill="#9fc7b2" text-anchor="middle">TLS</text>
+  <text x="463" y="314" font-size="12" fill="#9fc7b2" text-anchor="middle">rate limit</text>
+
+  <!-- arrow into the machine -->
+  <line x1="522" y1="202" x2="586" y2="202" stroke="#3ddc84" stroke-width="2.5" marker-end="url(#oarr)"/>
+
+  <!-- your machine -->
+  <rect x="592" y="70" width="548" height="400" rx="14" fill="#0c1611" stroke="#3ddc84" stroke-width="2"/>
+  <text x="640" y="110" font-size="15" fill="#7fbf9a" letter-spacing="3">YOUR MACHINE</text>
+  <!-- the eye, small -->
+  <g transform="translate(1056,84) scale(0.11)">
+    <path d="M76 256 Q 256 128 436 256 Q 256 384 76 256 Z" fill="#081b11" stroke="#3ddc84" stroke-width="24"/>
+    <circle cx="256" cy="256" r="66" fill="#a8e063"/>
+    <path d="M256 200 Q 272 256 256 312 Q 240 256 256 200 Z" fill="#081b11"/>
+  </g>
+
+  <rect x="624" y="136" width="484" height="76" rx="10" fill="#0e2a1c" stroke="#2e9e63" stroke-width="1.5"/>
+  <text x="866" y="168" font-size="17" font-weight="bold" fill="#a8e063" text-anchor="middle">a local LLM that fits this hardware</text>
+  <text x="866" y="193" font-size="12.5" fill="#9fc7b2" text-anchor="middle">picked at install, downloaded verified, served at first boot</text>
+
+  <text x="640" y="248" font-size="13" fill="#7fbf9a">and, one command each:</text>
+  <g text-anchor="middle" font-size="13.5" fill="#a8e063">
+    <rect x="624" y="262" width="110" height="36" rx="18" fill="#0e2a1c" stroke="#2e9e63"/>
+    <text x="679" y="285">chat UI</text>
+    <rect x="746" y="262" width="110" height="36" rx="18" fill="#0e2a1c" stroke="#2e9e63"/>
+    <text x="801" y="285">voice</text>
+    <rect x="868" y="262" width="110" height="36" rx="18" fill="#0e2a1c" stroke="#2e9e63"/>
+    <text x="923" y="285">vision</text>
+    <rect x="990" y="262" width="118" height="36" rx="18" fill="#0e2a1c" stroke="#2e9e63"/>
+    <text x="1049" y="285">RAG + rerank</text>
+    <rect x="624" y="310" width="110" height="36" rx="18" fill="#0e2a1c" stroke="#2e9e63"/>
+    <text x="679" y="333">guard</text>
+    <rect x="746" y="310" width="110" height="36" rx="18" fill="#0e2a1c" stroke="#2e9e63"/>
+    <text x="801" y="333">org login</text>
+    <rect x="868" y="310" width="110" height="36" rx="18" fill="#0e2a1c" stroke="#2e9e63"/>
+    <text x="923" y="333">agents</text>
+    <rect x="990" y="310" width="118" height="36" rx="18" fill="#0e2a1c" stroke="#2e9e63"/>
+    <text x="1049" y="333">big models</text>
+  </g>
+
+  <rect x="624" y="376" width="484" height="56" rx="10" fill="#0e2a1c" stroke="#f5c542" stroke-width="1.5"/>
+  <text x="866" y="400" font-size="15" font-weight="bold" fill="#f5c542" text-anchor="middle">Ubuntu 26.04 LTS</text>
+  <text x="866" y="421" font-size="12" fill="#9fc7b2" text-anchor="middle">install from ISO, cloud image, or apt on a machine you already have</text>
+
+  <!-- the promise -->
+  <text x="866" y="512" font-size="19" fill="#f5c542" text-anchor="middle" letter-spacing="5">NOTHING LEAVES THE MACHINE</text>
+  <text x="866" y="540" font-size="13" fill="#7fbf9a" text-anchor="middle">prompts, documents, audio, verdicts: everything is served and judged on your own hardware</text>
+
+  <!-- fleet note -->
+  <text x="190" y="520" font-size="13" fill="#7fbf9a" text-anchor="middle">more machines?</text>
+  <text x="190" y="540" font-size="13" fill="#9fc7b2" text-anchor="middle">one profile, your own ssh</text>
+  <text x="190" y="560" font-size="13" fill="#7fbf9a" text-anchor="middle">(sibilla fleet)</text>
+
+  <!-- footer -->
+  <text x="60" y="596" font-size="12.5" fill="#2e9e63">SibillaOS - the oracle on your hardware</text>
+  <text x="1140" y="596" font-size="12.5" fill="#a8e063" text-anchor="end">github.com/engineering87/sibillaos</text>
+</svg>

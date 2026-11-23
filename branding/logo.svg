@@ -16,5 +16,4 @@
   <circle cx="256" cy="256" r="66" fill="#a8e063"/>
   <!-- vertical slit pupil -->
   <path d="M256 200 Q 272 256 256 312 Q 240 256 256 200 Z" fill="#081b11"/>
-  <!-- golden glint: the oracle's spark -->
 </svg>
