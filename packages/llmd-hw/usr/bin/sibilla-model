@@ -51,6 +51,16 @@ context_current() {
   echo "${v:-$CONTEXT_DEFAULT}"
 }
 
+# a deliberate admin command must not be stopped by the unit's own
+# start-limit accounting: two governor commands back to back are a
+# legitimate sequence, not a crash loop (the caddy lesson, adapted to
+# a unit that reads its environment only at start)
+restart_engine() {
+  systemctl daemon-reload
+  systemctl reset-failed ollama.service 2>/dev/null || true
+  systemctl restart ollama.service
+}
+
 WARM_DROPIN=/etc/systemd/system/ollama.service.d/zz-warm.conf
 CACHE_DROPIN=/etc/systemd/system/ollama.service.d/zz-cache.conf
 
@@ -70,15 +80,13 @@ cmd_warm() {
         echo "[Service]"
         echo "Environment=OLLAMA_KEEP_ALIVE=-1"
       } > "$WARM_DROPIN"
-      systemctl daemon-reload
-      systemctl restart ollama.service
+      restart_engine
       echo "warm on: the served model stays resident after idle"
       echo "(the trade: its RAM stays taken while the machine is quiet)"
       ;;
     off)
       rm -f "$WARM_DROPIN"
-      systemctl daemon-reload
-      systemctl restart ollama.service
+      restart_engine
       echo "warm off: the engine unloads idle models again (~5m)"
       ;;
     *) echo "usage: sibilla model warm on|off" >&2; exit 1 ;;
@@ -105,15 +113,13 @@ cmd_cache() {
         echo "Environment=OLLAMA_FLASH_ATTENTION=1"
         echo "Environment=OLLAMA_KV_CACHE_TYPE=q8_0"
       } > "$CACHE_DROPIN"
-      systemctl daemon-reload
-      systemctl restart ollama.service
+      restart_engine
       echo "cache: q8_0 with flash attention - half the context memory,"
       echo "negligible quality cost; revert with: sibilla model cache default"
       ;;
     default|f16)
       rm -f "$CACHE_DROPIN"
-      systemctl daemon-reload
-      systemctl restart ollama.service
+      restart_engine
       echo "cache back to f16 (flash attention back to the engine default)"
       ;;
     *) echo "usage: sibilla model cache q8|default" >&2; exit 1 ;;
@@ -130,8 +136,7 @@ cmd_context() {
   [[ "$ENGINE" == "ollama" ]] || { echo "context is governed on the ollama engine; vllm sizes per request" >&2; exit 1; }
   if [[ "$want" == "default" ]]; then
     rm -f "$CONTEXT_OVERRIDE"
-    systemctl daemon-reload
-    systemctl restart ollama.service
+    restart_engine
     echo "context back to the default ($CONTEXT_DEFAULT tokens)"
     return 0
   fi
@@ -145,8 +150,7 @@ cmd_context() {
     echo "[Service]"
     echo "Environment=OLLAMA_CONTEXT_LENGTH=$want"
   } > "$CONTEXT_OVERRIDE"
-  systemctl daemon-reload
-  systemctl restart ollama.service
+  restart_engine
   echo "context: $want tokens (KV cache grows with it; bigger context, more RAM)"
 }
 
