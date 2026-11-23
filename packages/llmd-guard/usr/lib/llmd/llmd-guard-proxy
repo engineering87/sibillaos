@@ -150,11 +150,18 @@ class Handler(BaseHTTPRequestHandler):
                              "engine_unavailable")
             return
         self.send_response(resp.status)
-        length = resp.getheader("Content-Length")
-        ctype = resp.getheader("Content-Type", "application/json")
+        # headers are re-emitted sanitized, never copied raw: the
+        # upstream is loopback and ours, but a relayed header is an
+        # injection vector on principle (CodeQL: response splitting)
+        try:
+            length = int(resp.getheader("Content-Length", ""))
+        except ValueError:
+            length = None
+        ctype = (resp.getheader("Content-Type") or "application/json")
+        ctype = ctype.replace("\r", "").replace("\n", "")
         self.send_header("Content-Type", ctype)
         if length is not None:
-            self.send_header("Content-Length", length)
+            self.send_header("Content-Length", str(length))
             self.end_headers()
             while True:
                 chunk = resp.read(65536)
