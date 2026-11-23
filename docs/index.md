@@ -20,8 +20,9 @@ plain `apt install llmd` on an existing Ubuntu LTS) serves:
   boxes, consumer GPUs, and unified-memory machines each get honest
   defaults, never a model that cannot run
 - chat (Open WebUI), voice transcription (whisper.cpp), embeddings
-  for RAG, structured outputs, MCP, and organization login via OIDC,
-  each enabled with one command
+  and reranking for RAG, structured outputs, MCP, a guard model in
+  front of chat, and organization login via OIDC, each enabled with
+  one command
 - `sibilla fleet` to manage several of these machines over SSH
 
 Everything runs on loopback behind a single gateway. The only door is

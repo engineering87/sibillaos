@@ -15,7 +15,7 @@ jobs:
   lint:
     runs-on: ubuntu-26.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Shellcheck
         run: |
           sudo apt-get update && sudo apt-get install -y shellcheck
@@ -300,7 +300,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Install build deps
         run: |
           sudo apt-get update
@@ -936,7 +936,7 @@ jobs:
     needs: lint
     runs-on: ubuntu-26.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       # HF rate-limits anonymous requests from shared runner IPs; the
       # cache (keyed on the catalog digests, so it can never go stale
       # silently) lets the job recover through the offline import path
@@ -1047,6 +1047,30 @@ jobs:
           sudo sibilla model context default
           if sudo systemctl show ollama.service -p Environment | grep -q "OLLAMA_CONTEXT_LENGTH=4096"; then
             echo "context default did not remove the override"; RC=1
+          fi
+          # warm: the keep-alive override must land and go away
+          sudo sibilla model warm on
+          sudo systemctl show ollama.service -p Environment | grep -q "OLLAMA_KEEP_ALIVE=-1" \
+            || { echo "warm on did not land"; RC=1; }
+          sudo sibilla model warm off
+          if sudo systemctl show ollama.service -p Environment | grep -q "OLLAMA_KEEP_ALIVE=-1"; then
+            echo "warm off did not remove the override"; RC=1
+          fi
+          # cache: q8 must land both variables, inference must survive
+          # it, and default must remove them
+          sudo sibilla model cache q8
+          ENV=$(sudo systemctl show ollama.service -p Environment)
+          echo "$ENV" | grep -q "OLLAMA_KV_CACHE_TYPE=q8_0" || { echo "kv cache q8 did not land"; RC=1; }
+          echo "$ENV" | grep -q "OLLAMA_FLASH_ATTENTION=1" || { echo "flash attention did not land with the cache"; RC=1; }
+          KEY=$(sudo cat /etc/llmd/apikey); MODEL=$(sudo cat /etc/llmd/model)
+          OUT=$(curl -s -m 300 http://127.0.0.1:8080/v1/chat/completions \
+            -H "Authorization: Bearer $KEY" -H "Content-Type: application/json" \
+            -d "{\"model\": \"$MODEL\", \"messages\": [{\"role\": \"user\", \"content\": \"Say ok.\"}], \"max_tokens\": 40}" || true)
+          echo "$OUT" | jq -e '.choices[0].message | ((.content // "") + (.reasoning // "")) | length > 0' >/dev/null \
+            || { echo "inference broke under the quantized kv cache"; RC=1; }
+          sudo sibilla model cache default
+          if sudo systemctl show ollama.service -p Environment | grep -q "OLLAMA_KV_CACHE_TYPE"; then
+            echo "cache default did not remove the override"; RC=1
           fi
           # good-guest behavior: setup must not act like an appliance
           [ ! -e /etc/llmd/appliance ] || { echo "setup wrongly created the appliance marker"; RC=1; }
@@ -1808,7 +1832,7 @@ jobs:
     runs-on: ubuntu-26.04
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Install the published release, like a user did yesterday
         run: |
           curl -fsSL https://engineering87.github.io/sibillaos/apt/sibillaos-archive-key.asc \
@@ -1893,7 +1917,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Download installed-system inventory
         uses: actions/download-artifact@v4
         with:
@@ -1964,7 +1988,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Install build deps
         run: |
           sudo apt-get update
@@ -2187,7 +2211,7 @@ jobs:
     runs-on: ubuntu-26.04
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Download cloud image
         uses: actions/download-artifact@v4
         with:

@@ -38,7 +38,7 @@ onoff() {
 }
 webui=off; [[ -e /etc/llmd/webui.enabled ]] && webui=on
 services="mcp $(onoff /etc/llmd/mcp), speech $(onoff /etc/llmd/speech), rerank $(onoff /etc/llmd/rerank)"
-services2="webui $webui, oidc $(onoff /etc/llmd/oidc)"
+services2="guard $(onoff /etc/llmd/guard), webui $webui, oidc $(onoff /etc/llmd/oidc)"
 
 # the oracle eye, plain ASCII, padded to a fixed width so the ANSI
 # coloring added at print time cannot break the alignment

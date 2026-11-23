@@ -59,7 +59,7 @@ esac
 
 # --- what the llmd services themselves hold (resident set via systemd)
 s_rule
-for unit in ollama.service vllm.service llmd-speech.service llmd-rerank.service llmd-mcp.service caddy.service; do
+for unit in ollama.service vllm.service llmd-speech.service llmd-rerank.service llmd-guard-model.service llmd-guard-proxy.service llmd-mcp.service caddy.service; do
   cur=$(systemctl show -p MemoryCurrent --value "$unit" 2>/dev/null || true)
   [[ -z "$cur" || "$cur" == "[not set]" || "$cur" == "infinity" ]] && continue
   state=$(systemctl is-active "$unit" 2>/dev/null || true)
